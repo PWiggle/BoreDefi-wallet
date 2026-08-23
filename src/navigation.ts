@@ -16,6 +16,6 @@ export type MainStackParamList = {
   Ledger: undefined;
   Nfts: undefined;
   NftSend: { nft?: NftItem };
-  Browser: undefined;
+  Browser: { url?: string };
   WalletConnect: { uri?: string };
 };

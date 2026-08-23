@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing } from '../theme';
@@ -10,9 +10,11 @@ type Props = {
   children?: ReactNode;
   footer?: ReactNode;
   scroll?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 };
 
-export function Screen({ title, subtitle, children, footer, scroll = true }: Props) {
+export function Screen({ title, subtitle, children, footer, scroll = true, refreshing = false, onRefresh }: Props) {
   const body = (
     <View style={styles.body}>
       {title ? <Text style={styles.title}>{title}</Text> : null}
@@ -28,6 +30,11 @@ export function Screen({ title, subtitle, children, footer, scroll = true }: Pro
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+            ) : undefined
+          }
         >
           {body}
         </ScrollView>

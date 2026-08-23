@@ -87,11 +87,11 @@ function RootNavigator() {
         <MainStack.Screen name="Swap" component={SwapScreen} initialParams={{}} />
         <MainStack.Screen name="Stake" component={StakeScreen} initialParams={{}} />
         <MainStack.Screen name="Bridge" component={BridgeScreen} />
-        <MainStack.Screen name="Discover" component={DiscoverScreen} />
+        <MainStack.Screen name="Discover" component={DiscoverScreen} options={{ title: 'Markets' }} />
         <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="Nfts" component={NftsScreen} options={{ title: 'NFTs' }} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />
-        <MainStack.Screen name="Browser" component={BrowserScreen} />
+        <MainStack.Screen name="Browser" component={BrowserScreen} initialParams={{}} />
         <MainStack.Screen name="WalletConnect" component={WalletConnectScreen} options={{ title: 'WalletConnect' }} />
         <MainStack.Screen name="Activity" component={ActivityScreen} />
         <MainStack.Screen name="Settings" component={SettingsScreen} />

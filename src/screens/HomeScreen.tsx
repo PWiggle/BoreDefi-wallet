@@ -160,7 +160,7 @@ export function HomeScreen() {
         />
       </View>
       <View style={styles.actions}>
-        <Button label="Browser" style={styles.action} onPress={() => navigation.navigate('Browser')} />
+        <Button label="Browser" style={styles.action} onPress={() => navigation.navigate('Browser', {})} />
         <Button
           label="Connect"
           variant="secondary"

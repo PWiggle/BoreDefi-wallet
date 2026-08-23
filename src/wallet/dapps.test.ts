@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { classifyBrowserMethod, normalizeDappUrl, READ_RPC_METHODS, SIGNING_METHODS } from './dapps';
+import { classifyBrowserMethod, DAPP_BOOKMARKS, DEFAULT_BROWSER_URL, normalizeDappUrl, READ_RPC_METHODS, SIGNING_METHODS } from './dapps';
 
 test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(normalizeDappUrl('app.uniswap.org'), 'https://app.uniswap.org');
@@ -19,4 +19,9 @@ test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(classifyBrowserMethod('personal_sign'), 'sign');
   assert.equal(classifyBrowserMethod('wallet_switchEthereumChain'), 'switch');
   assert.equal(classifyBrowserMethod('foo'), 'unsupported');
+  assert.equal(DEFAULT_BROWSER_URL, 'https://app.uniswap.org');
+  assert.equal(
+    DAPP_BOOKMARKS.some((item) => item.name === 'CoinGecko' && item.url === 'https://www.coingecko.com'),
+    true,
+  );
 });

@@ -49,6 +49,33 @@ export function formatTimestamp(seconds: number): string {
   return new Date(seconds * 1000).toLocaleString();
 }
 
+export function formatMarketPrice(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '—';
+  }
+  const abs = Math.abs(value);
+  if (abs >= 1) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+  if (abs >= 0.01) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(value);
+  }
+  if (abs === 0) {
+    return '$0.00';
+  }
+  return `$${value.toPrecision(4)}`;
+}
+
 export function formatUsd(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '—';

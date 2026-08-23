@@ -5,11 +5,14 @@ export type DappBookmark = {
 };
 
 export const DAPP_BOOKMARKS: DappBookmark[] = [
+  { name: 'CoinGecko', url: 'https://www.coingecko.com', blurb: 'Live markets' },
   { name: 'Uniswap', url: 'https://app.uniswap.org', blurb: 'Swap tokens' },
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
   { name: 'Lido', url: 'https://stake.lido.fi', blurb: 'Stake ETH' },
   { name: 'Jumper', url: 'https://jumper.exchange', blurb: 'Bridge and swap' },
 ];
+
+export const DEFAULT_BROWSER_URL = 'https://app.uniswap.org';
 
 export function normalizeDappUrl(raw: string): string {
   const trimmed = raw.trim();
