@@ -19,6 +19,7 @@ export type MainStackParamList = {
   ScanQr: { purpose?: 'payment' | 'walletconnect' };
   Activity: undefined;
   RevealSeed: undefined;
+  ChangePin: undefined;
   ResetWallet: undefined;
   Swap: { fromSymbol?: string };
   Stake: { marketId?: string };

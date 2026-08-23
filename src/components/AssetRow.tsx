@@ -11,15 +11,19 @@ export function AssetRow({
   amount,
   market,
   onPress,
+  hideBalances,
 }: {
   token: TokenConfig;
   amount: bigint;
   market?: MarketCoin;
   onPress: () => void;
+  hideBalances?: boolean;
 }) {
   const usd = usdValueFromUnits(amount, token.decimals, market?.priceUsd);
   const up = (market?.change24h ?? 0) > 0;
   const down = (market?.change24h ?? 0) < 0;
+  const amountLabel = hideBalances ? '••••' : formatTokenAmount(amount, token.decimals);
+  const usdLabel = hideBalances ? '••••' : formatUsd(usd);
   return (
     <Pressable onPress={onPress} style={styles.row}>
       {market?.imageUrl ? (
@@ -34,12 +38,12 @@ export function AssetRow({
           {token.symbol}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {formatTokenAmount(amount, token.decimals)} · {formatMarketPrice(market?.priceUsd)}
+          {amountLabel} · {formatMarketPrice(market?.priceUsd)}
         </Text>
       </View>
       <Sparkline points={market?.sparkline ?? []} />
       <View style={styles.stats}>
-        <Text style={styles.price}>{formatUsd(usd)}</Text>
+        <Text style={styles.price}>{usdLabel}</Text>
         <Text style={[styles.change, up && styles.up, down && styles.down]}>{formatPercent(market?.change24h)}</Text>
       </View>
     </Pressable>

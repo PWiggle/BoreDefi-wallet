@@ -1,10 +1,9 @@
 import * as Crypto from 'expo-crypto';
 
+import { isValidPin } from './pin-policy';
 import { loadPinRecord, savePinRecord, type PinRecord } from './storage';
 
-export function isValidPin(pin: string): boolean {
-  return /^\d{6}$/.test(pin);
-}
+export { clearedPinLockState, isValidPin, lockoutMsAfterFailures, nextPinLockState, remainingLockMs } from './pin-policy';
 
 export async function hashPin(pin: string, salt: string): Promise<string> {
   return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `${salt}:${pin}`);

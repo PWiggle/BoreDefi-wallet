@@ -15,6 +15,7 @@ import { MainTabs } from './src/navigation/MainTabs';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { BackupSeedScreen } from './src/screens/BackupSeedScreen';
 import { BridgeScreen } from './src/screens/BridgeScreen';
+import { ChangePinScreen } from './src/screens/ChangePinScreen';
 import { ImportWalletScreen } from './src/screens/ImportWalletScreen';
 import { LedgerScreen } from './src/screens/LedgerScreen';
 import { NftSendScreen } from './src/screens/NftSendScreen';
@@ -92,6 +93,11 @@ function RootNavigator() {
           name="RevealSeed"
           component={RevealSeedScreen}
           options={{ title: 'Recovery phrase' }}
+        />
+        <MainStack.Screen
+          name="ChangePin"
+          component={ChangePinScreen}
+          options={{ title: 'Change PIN' }}
         />
         <MainStack.Screen
           name="ResetWallet"

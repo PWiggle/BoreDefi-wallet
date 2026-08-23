@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,6 +15,7 @@ import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webvie
 
 import { Button } from '../components/Button';
 import { CoinGeckoWebEmbed } from '../components/CoinGeckoWebEmbed';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { InAppBrowserView } from '../components/InAppBrowserView';
 import { useWalletConnect } from '../context/WalletConnectContext';
@@ -31,17 +31,33 @@ import {
   providerResolveScript,
   providerSyncScript,
 } from '../wallet/injected-provider';
+import { formatNative } from '../wallet/format';
 import { sendRpc } from '../wallet/rpc';
 import { parseSwitchChainId } from '../wallet/wc';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
 
-function confirmAction(title: string, message: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    Alert.alert(title, message, [
-      { text: 'Reject', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'Approve', onPress: () => resolve(true) },
-    ]);
-  });
+type BrowserConfirm = {
+  title: string;
+  network: string;
+  from?: string;
+  to?: string;
+  amount?: string;
+  fee?: string;
+  extra?: { label: string; value: string }[];
+  mode: 'hold' | 'buttons';
+  confirmLabel?: string;
+  resolve: (ok: boolean) => void;
+};
+
+function txAmount(value: unknown, symbol: string): string | undefined {
+  if (typeof value !== 'string' || !value) {
+    return undefined;
+  }
+  try {
+    return `${formatNative(BigInt(value))} ${symbol}`;
+  } catch {
+    return value;
+  }
 }
 
 export function BrowserScreen() {
@@ -54,6 +70,12 @@ export function BrowserScreen() {
   const [url, setUrl] = useState(startUrl);
   const [connectedOrigin, setConnectedOrigin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
+
+  const requestConfirm = (spec: Omit<BrowserConfirm, 'resolve'>): Promise<boolean> =>
+    new Promise((resolve) => {
+      setPendingConfirm({ ...spec, resolve });
+    });
 
   const open = useCallback((raw: string) => {
     setError(null);
@@ -123,10 +145,14 @@ export function BrowserScreen() {
         return;
       }
       if (kind === 'connect') {
-        const approved = await confirmAction(
-          'Connect wallet',
-          `Share ${session.address} with this site? Keys stay on this device.`,
-        );
+        const approved = await requestConfirm({
+          title: 'Connect wallet',
+          network: selectedChain.name,
+          from: session.address,
+          extra: [{ label: 'Site', value: 'Share this public address. Keys stay on this device.' }],
+          mode: 'buttons',
+          confirmLabel: 'Connect',
+        });
         if (!approved) {
           resolve(id, null, 'User rejected.');
           return;
@@ -155,7 +181,13 @@ export function BrowserScreen() {
           resolve(id, null, 'That chain is not supported.');
           return;
         }
-        const approved = await confirmAction('Switch network', `Switch this wallet to chain ${next}?`);
+        const approved = await requestConfirm({
+          title: 'Switch network',
+          network: selectedChain.name,
+          extra: [{ label: 'Next chain', value: String(next) }],
+          mode: 'buttons',
+          confirmLabel: 'Switch',
+        });
         if (!approved) {
           resolve(id, null, 'User rejected.');
           return;
@@ -166,10 +198,19 @@ export function BrowserScreen() {
         return;
       }
       if (kind === 'sign') {
-        const approved = await confirmAction(
-          'Approve request',
-          `${method} from this page. Review it before signing.`,
-        );
+        const tx = params[0] as { from?: string; to?: string; value?: string } | undefined;
+        const isSend = method === 'eth_sendTransaction' || method === 'eth_signTransaction';
+        const approved = await requestConfirm({
+          title: 'Approve request',
+          network: selectedChain.name,
+          from: tx?.from ?? session.address,
+          to: isSend ? tx?.to : undefined,
+          amount: isSend ? txAmount(tx?.value, selectedChain.symbol) ?? method : method,
+          fee: isSend ? 'Network gas (quoted at sign)' : 'None (signature only)',
+          extra: [{ label: 'Method', value: method }],
+          mode: 'hold',
+          confirmLabel: 'Hold to sign',
+        });
         if (!approved) {
           resolve(id, null, 'User rejected.');
           return;
@@ -251,6 +292,26 @@ export function BrowserScreen() {
           onError={(message) => setError(message)}
         />
       )}
+      <ConfirmSheet
+        visible={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title ?? ''}
+        network={pendingConfirm?.network ?? selectedChain.name}
+        from={pendingConfirm?.from}
+        to={pendingConfirm?.to}
+        amount={pendingConfirm?.amount}
+        fee={pendingConfirm?.fee}
+        extra={pendingConfirm?.extra}
+        mode={pendingConfirm?.mode ?? 'hold'}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        onConfirm={() => {
+          pendingConfirm?.resolve(true);
+          setPendingConfirm(null);
+        }}
+        onCancel={() => {
+          pendingConfirm?.resolve(false);
+          setPendingConfirm(null);
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
@@ -38,6 +39,7 @@ export function BridgeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [review, setReview] = useState(false);
 
   useEffect(() => {
     const next = tokensForChain(selectedChain.id);
@@ -122,6 +124,7 @@ export function BridgeScreen() {
         });
       }
       const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id, sendTx);
+      setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bridge failed.');
@@ -192,10 +195,31 @@ export function BridgeScreen() {
           <Text style={styles.meta}>
             Minimum {formatTokenAmount(quote.toAmountMin, toToken.decimals)} {toToken.symbol}
           </Text>
-          <Button label="Confirm bridge" onPress={confirm} loading={busy} />
+          <Button label="Review bridge" onPress={() => setReview(true)} loading={busy} />
         </View>
       ) : null}
       {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
+      <ConfirmSheet
+        visible={review && Boolean(quote)}
+        title="Confirm bridge"
+        network={`${selectedChain.name} → ${CHAIN_LIST.find((chain) => chain.id === toChainId)?.name ?? toChainId}`}
+        from={fromAddress}
+        to={quote?.transactionRequest.to}
+        amount={
+          quote
+            ? `${amount} ${fromToken.symbol} → ${formatTokenAmount(quote.toAmount, toToken.decimals)} ${toToken.symbol}`
+            : undefined
+        }
+        fee={
+          quote?.transactionRequest.gasLimit
+            ? `Gas limit ${quote.transactionRequest.gasLimit.toString()}`
+            : 'Network gas (quoted at broadcast)'
+        }
+        extra={quote ? [{ label: 'Route', value: quote.toolName }] : []}
+        loading={busy}
+        onConfirm={confirm}
+        onCancel={() => setReview(false)}
+      />
     </Screen>
   );
 }

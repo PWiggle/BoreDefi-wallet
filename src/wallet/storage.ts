@@ -2,11 +2,20 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { logger } from '../logger';
-import { DEFAULT_CHAIN_ID, isChainId, type ChainId } from './chains';
+import { DEFAULT_AUTO_LOCK, normalizeAutoLock, type AutoLockMode } from './auto-lock';
+import { DEFAULT_CHAIN_ID, parseChainId, type ChainId } from './chains';
+import {
+  dekToHex,
+  hexToDek,
+  parseStoredVault,
+  type StoredVault,
+  type VaultV2Record,
+} from './vault-crypto';
 
 const VAULT_KEY = 'boredefi.vault.v1';
 const PIN_KEY = 'boredefi.pin.v1';
 const SETTINGS_KEY = 'boredefi.settings.v1';
+const DEK_KEY = 'boredefi.vault.dek';
 
 const secureOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -55,12 +64,6 @@ async function removeItem(key: string): Promise<void> {
   }
 }
 
-export type VaultRecord = {
-  version: 1;
-  address: string;
-  mnemonic: string;
-};
-
 export type PinRecord = {
   salt: string;
   hash: string;
@@ -70,12 +73,20 @@ export type SettingsRecord = {
   biometricsEnabled: boolean;
   selectedChainId: ChainId;
   backupCompleted: boolean;
+  autoLock: AutoLockMode;
+  hideBalances: boolean;
+  pinFailCount: number;
+  pinLockUntil: number;
 };
 
-const defaultSettings: SettingsRecord = {
+export const defaultSettings: SettingsRecord = {
   biometricsEnabled: false,
   selectedChainId: DEFAULT_CHAIN_ID,
   backupCompleted: false,
+  autoLock: DEFAULT_AUTO_LOCK,
+  hideBalances: false,
+  pinFailCount: 0,
+  pinLockUntil: 0,
 };
 
 function parseJson<T>(raw: string | null): T | null {
@@ -90,16 +101,24 @@ function parseJson<T>(raw: string | null): T | null {
   }
 }
 
-export async function loadVault(): Promise<VaultRecord | null> {
-  const raw = await readItem(VAULT_KEY);
-  const vault = parseJson<VaultRecord>(raw);
-  if (!vault || vault.version !== 1 || !vault.address || !vault.mnemonic) {
+export async function loadStoredVault(): Promise<StoredVault | null> {
+  return parseStoredVault(parseJson<unknown>(await readItem(VAULT_KEY)));
+}
+
+/** @deprecated Plaintext v1 only. Use loadStoredVault + decrypt. */
+export async function loadVault(): Promise<{ version: 1; address: string; mnemonic: string } | null> {
+  const vault = await loadStoredVault();
+  if (!vault || vault.version !== 1) {
     return null;
   }
   return vault;
 }
 
-export async function saveVault(vault: VaultRecord): Promise<void> {
+export async function saveEncryptedVault(vault: VaultV2Record): Promise<void> {
+  await writeItem(VAULT_KEY, JSON.stringify(vault));
+}
+
+export async function saveVault(vault: StoredVault): Promise<void> {
   await writeItem(VAULT_KEY, JSON.stringify(vault));
 }
 
@@ -112,18 +131,18 @@ export async function savePinRecord(record: PinRecord): Promise<void> {
 }
 
 export async function loadSettings(): Promise<SettingsRecord> {
-  const stored = parseJson<SettingsRecord>(
-    await readItem(SETTINGS_KEY),
-  );
+  const stored = parseJson<Partial<SettingsRecord>>(await readItem(SETTINGS_KEY));
   if (!stored) {
     return defaultSettings;
   }
   return {
     biometricsEnabled: Boolean(stored.biometricsEnabled),
-    selectedChainId: isChainId(stored.selectedChainId)
-      ? stored.selectedChainId
-      : DEFAULT_CHAIN_ID,
+    selectedChainId: parseChainId(stored.selectedChainId ?? DEFAULT_CHAIN_ID) ?? DEFAULT_CHAIN_ID,
     backupCompleted: Boolean(stored.backupCompleted),
+    autoLock: normalizeAutoLock(stored.autoLock),
+    hideBalances: Boolean(stored.hideBalances),
+    pinFailCount: Number.isFinite(stored.pinFailCount) ? Number(stored.pinFailCount) : 0,
+    pinLockUntil: Number.isFinite(stored.pinLockUntil) ? Number(stored.pinLockUntil) : 0,
   };
 }
 
@@ -131,8 +150,27 @@ export async function saveSettings(settings: SettingsRecord): Promise<void> {
   await writeItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
+export async function saveBiometricDek(dek: Uint8Array): Promise<void> {
+  if (isWebStorage()) {
+    return;
+  }
+  await writeItem(DEK_KEY, dekToHex(dek));
+}
+
+export async function loadBiometricDek(): Promise<Uint8Array | null> {
+  if (isWebStorage()) {
+    return null;
+  }
+  const hex = await readItem(DEK_KEY);
+  return hex ? hexToDek(hex) : null;
+}
+
+export async function clearBiometricDek(): Promise<void> {
+  await removeItem(DEK_KEY);
+}
+
 export async function hasPersistedWallet(): Promise<boolean> {
-  const vault = await loadVault();
+  const vault = await loadStoredVault();
   const pin = await loadPinRecord();
   return Boolean(vault && pin);
 }
@@ -142,6 +180,7 @@ export async function clearAllWalletData(): Promise<void> {
     removeItem(VAULT_KEY),
     removeItem(PIN_KEY),
     removeItem(SETTINGS_KEY),
+    removeItem(DEK_KEY),
   ]);
   logger.info('Local wallet data cleared');
 }

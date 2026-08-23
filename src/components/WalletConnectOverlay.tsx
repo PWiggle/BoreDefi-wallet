@@ -1,26 +1,31 @@
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 
 import { describeRequest, useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, radius, spacing } from '../theme';
+import { CHAINS } from '../wallet/chains';
+import { formatNative } from '../wallet/format';
 import { hexToUtf8, pickSignMessage } from '../wallet/wc';
-import { Button } from './Button';
-import { ErrorBanner } from './ErrorBanner';
-import { useState } from 'react';
+import { ConfirmSheet } from './ConfirmSheet';
+
+function txValue(value: unknown, symbol: string): string | undefined {
+  if (typeof value !== 'string' || !value) {
+    return undefined;
+  }
+  try {
+    return `${formatNative(BigInt(value))} ${symbol}`;
+  } catch {
+    return value;
+  }
+}
 
 export function WalletConnectOverlay() {
-  const { phase } = useWallet();
+  const { phase, session, selectedChain } = useWallet();
   const { pendingProposal, pendingRequest, approveProposal, rejectProposal, approveRequest, rejectRequest } =
     useWalletConnect();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (phase !== 'unlocked') {
-    return null;
-  }
-
-  const visible = Boolean(pendingProposal || pendingRequest);
-  if (!visible) {
     return null;
   }
 
@@ -36,36 +41,54 @@ export function WalletConnectOverlay() {
     }
   };
 
+  if (pendingProposal) {
+    return (
+      <ConfirmSheet
+        visible
+        title={`Connect to ${pendingProposal.name}`}
+        network={selectedChain.name}
+        from={session?.address}
+        extra={[
+          { label: 'dApp', value: pendingProposal.url },
+          { label: 'Access', value: 'Shares your public address. Keys stay on this device. Never auto-sign.' },
+        ]}
+        warnings={error ? [error] : []}
+        mode="buttons"
+        confirmLabel="Connect"
+        loading={busy}
+        onConfirm={() => run(approveProposal)}
+        onCancel={() => run(rejectProposal)}
+      />
+    );
+  }
+
+  if (!pendingRequest) {
+    return null;
+  }
+
+  const tx = pendingRequest.params[0] as { from?: string; to?: string; value?: string } | undefined;
+  const isSend = pendingRequest.method === 'eth_sendTransaction' || pendingRequest.method === 'eth_signTransaction';
+  const preview =
+    pendingRequest.method === 'personal_sign' || pendingRequest.method === 'eth_sign'
+      ? safePreview(pendingRequest.params)
+      : describeRequest(pendingRequest);
+
   return (
-    <Modal transparent animationType="fade" visible>
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <ErrorBanner message={error} />
-          {pendingProposal ? (
-            <>
-              <Text style={styles.title}>Connect to {pendingProposal.name}</Text>
-              <Text style={styles.body}>{pendingProposal.url}</Text>
-              <Text style={styles.body}>
-                This shares your public address and lets the dApp request signatures. Keys stay on this
-                device.
-              </Text>
-              <Button label="Connect" loading={busy} onPress={() => run(approveProposal)} />
-              <Button label="Reject" variant="secondary" onPress={() => run(rejectProposal)} />
-            </>
-          ) : pendingRequest ? (
-            <>
-              <Text style={styles.title}>{pendingRequest.peerName}</Text>
-              <Text style={styles.body}>{describeRequest(pendingRequest)}</Text>
-              {pendingRequest.method === 'personal_sign' || pendingRequest.method === 'eth_sign' ? (
-                <Text style={styles.preview}>{safePreview(pendingRequest.params)}</Text>
-              ) : null}
-              <Button label="Approve" loading={busy} onPress={() => run(approveRequest)} />
-              <Button label="Reject" variant="secondary" onPress={() => run(rejectRequest)} />
-            </>
-          ) : null}
-        </View>
-      </View>
-    </Modal>
+    <ConfirmSheet
+      visible
+      title={pendingRequest.peerName}
+      network={selectedChain.name}
+      from={tx?.from ?? session?.address}
+      to={isSend ? tx?.to : undefined}
+      amount={isSend ? txValue(tx?.value, selectedChain.symbol) ?? pendingRequest.method : pendingRequest.method}
+      fee={isSend ? 'Network gas (quoted at sign)' : 'None (signature only)'}
+      extra={[{ label: 'Request', value: preview }]}
+      warnings={error ? [error] : []}
+      loading={busy}
+      confirmLabel="Hold to approve"
+      onConfirm={() => run(approveRequest)}
+      onCancel={() => run(rejectRequest)}
+    />
   );
 }
 
@@ -76,35 +99,3 @@ function safePreview(params: unknown[]): string {
     return 'Message preview unavailable.';
   }
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  body: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  preview: {
-    color: colors.text,
-    backgroundColor: colors.bg,
-    padding: spacing.md,
-    borderRadius: radius.sm,
-  },
-});

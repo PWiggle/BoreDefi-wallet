@@ -4,6 +4,7 @@ import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
@@ -33,6 +34,7 @@ export function SwapScreen() {
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [review, setReview] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
 
   useEffect(() => {
@@ -114,6 +116,7 @@ export function SwapScreen() {
         });
       }
       const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id, sendTx);
+      setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Swap failed.');
@@ -159,11 +162,32 @@ export function SwapScreen() {
           <Text style={styles.meta}>
             Minimum {formatTokenAmount(quote.toAmountMin, toToken.decimals)} {toToken.symbol}
           </Text>
-          <Button label="Confirm swap" loading={busy} onPress={confirm} />
+          <Button label="Review swap" loading={busy} onPress={() => setReview(true)} />
         </View>
       ) : (
         <Button label="Get best quote" loading={busy} onPress={quoteSwap} />
       )}
+      <ConfirmSheet
+        visible={review && Boolean(quote)}
+        title="Confirm swap"
+        network={selectedChain.name}
+        from={fromAddress}
+        to={quote?.transactionRequest.to}
+        amount={
+          quote
+            ? `${amount} ${fromToken.symbol} → ${formatTokenAmount(quote.toAmount, toToken.decimals)} ${toToken.symbol}`
+            : undefined
+        }
+        fee={
+          quote?.transactionRequest.gasLimit
+            ? `Gas limit ${quote.transactionRequest.gasLimit.toString()}`
+            : 'Network gas (quoted at broadcast)'
+        }
+        extra={quote ? [{ label: 'Route', value: quote.toolName }] : []}
+        loading={busy}
+        onConfirm={confirm}
+        onCancel={() => setReview(false)}
+      />
     </Screen>
   );
 }

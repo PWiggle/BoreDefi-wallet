@@ -4,6 +4,7 @@ import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
@@ -44,6 +45,7 @@ export function StakeScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<'stake' | 'unstake' | 'claim' | null>(null);
 
   useEffect(() => {
     if (route.params?.marketId) {
@@ -96,41 +98,31 @@ export function StakeScreen() {
     );
   }
 
-  const run = async (action: 'stake' | 'unstake') => {
+  const run = async (action: 'stake' | 'unstake' | 'claim') => {
     setBusy(true);
     setError(null);
     try {
-      const value = parseTokenAmount(amount, market.asset.decimals);
       const result =
-        action === 'stake'
-          ? await stake({
-              mnemonic: session.mnemonic,
-              market,
-              owner: session.address,
-              amount: value,
-            })
-          : await unstake({
-              mnemonic: session.mnemonic,
-              market,
-              owner: session.address,
-              amount: value,
-            });
+        action === 'claim'
+          ? await claimLidoRequests(session.mnemonic, session.address)
+          : action === 'stake'
+            ? await stake({
+                mnemonic: session.mnemonic,
+                market,
+                owner: session.address,
+                amount: parseTokenAmount(amount, market.asset.decimals),
+              })
+            : await unstake({
+                mnemonic: session.mnemonic,
+                market,
+                owner: session.address,
+                amount: parseTokenAmount(amount, market.asset.decimals),
+              });
+      setPendingAction(null);
       setTxHash(result.hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Stake action failed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const claim = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await claimLidoRequests(session.mnemonic, session.address);
-      setTxHash(result.hash);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Claim failed.');
+      setPendingAction(null);
     } finally {
       setBusy(false);
     }
@@ -171,8 +163,8 @@ export function StakeScreen() {
         style={styles.input}
       />
       <View style={styles.actions}>
-        <Button label="Stake" onPress={() => run('stake')} loading={busy} />
-        <Button label="Unstake" variant="secondary" onPress={() => run('unstake')} loading={busy} />
+        <Button label="Stake" onPress={() => setPendingAction('stake')} loading={busy} />
+        <Button label="Unstake" variant="secondary" onPress={() => setPendingAction('unstake')} loading={busy} />
       </View>
       {market.protocol === 'lido' && requests.length > 0 ? (
         <View style={styles.box}>
@@ -185,13 +177,36 @@ export function StakeScreen() {
           ))}
           <Button
             label="Claim finalized"
-            onPress={claim}
+            onPress={() => setPendingAction('claim')}
             loading={busy}
             disabled={!requests.some((item) => item.finalized && !item.claimed)}
           />
         </View>
       ) : null}
       {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
+      <ConfirmSheet
+        visible={pendingAction !== null}
+        title={
+          pendingAction === 'claim'
+            ? 'Confirm claim'
+            : pendingAction === 'unstake'
+              ? 'Confirm unstake'
+              : 'Confirm stake'
+        }
+        network={selectedChain.name}
+        from={session.address}
+        to={market.title}
+        amount={
+          pendingAction === 'claim'
+            ? 'Finalized Lido withdrawals'
+            : `${amount || '0'} ${market.asset.symbol}`
+        }
+        fee="Network gas (quoted at broadcast)"
+        extra={[{ label: 'Protocol', value: market.protocol === 'lido' ? 'Lido' : 'Aave V3' }]}
+        loading={busy}
+        onConfirm={() => pendingAction && run(pendingAction)}
+        onCancel={() => setPendingAction(null)}
+      />
     </Screen>
   );
 }

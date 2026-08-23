@@ -10,20 +10,20 @@ import { colors, spacing } from '../theme';
 import { isValidPin } from '../wallet/pin';
 
 export function ResetWalletScreen() {
-  const { resetWallet } = useWallet();
+  const { resetWallet, pinBackoffMs } = useWallet();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const confirm = async () => {
-    if (!isValidPin(pin) || busy) {
+    if (!isValidPin(pin) || busy || pinBackoffMs > 0) {
       return;
     }
     setBusy(true);
     const ok = await resetWallet(pin);
     setBusy(false);
     if (!ok) {
-      setError('Incorrect PIN.');
+      setError(pinBackoffMs > 0 ? 'Too many attempts. Wait, then try again.' : 'Incorrect PIN.');
       setPin('');
     }
   };
@@ -37,6 +37,9 @@ export function ResetWalletScreen() {
       <Text style={styles.warn}>
         If you have not backed up the recovery phrase, funds on this wallet will be unrecoverable.
       </Text>
+      {pinBackoffMs > 0 ? (
+        <Text style={styles.warn}>Wait {Math.ceil(pinBackoffMs / 1000)}s before trying again.</Text>
+      ) : null}
       <ErrorBanner message={error} />
       <PinPad value={pin} onChange={setPin} />
     </Screen>

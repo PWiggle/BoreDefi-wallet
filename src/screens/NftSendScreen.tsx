@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
-import { isAddress } from 'ethers';
+import * as Clipboard from 'expo-clipboard';
+import { getAddress, isAddress } from 'ethers';
 
 import { Button } from '../components/Button';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { chip, colors, field, spacing } from '../theme';
+import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { type NftItem, type NftStandard, sendNft } from '../wallet/nfts';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
@@ -25,6 +28,8 @@ export function NftSendScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [review, setReview] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     if (preset) {
@@ -38,15 +43,32 @@ export function NftSendScreen() {
     return null;
   }
 
-  const confirm = async () => {
+  const prepare = async () => {
     setError(null);
     if (!isAddress(to) || !isAddress(contract) || !tokenId.trim()) {
       setError('Enter a valid recipient, contract, and token id.');
       return;
     }
+    if (standard === 'ERC-1155') {
+      try {
+        if (BigInt(amount || '1') <= 0n) {
+          throw new Error('Amount must be greater than zero.');
+        }
+      } catch {
+        setError('Enter a valid ERC-1155 amount.');
+        return;
+      }
+    }
+    const clipboard = await Clipboard.getStringAsync().catch(() => '');
+    setWarnings(addressWarnings(to, clipboard));
+    setReview(true);
+  };
+
+  const confirm = async () => {
+    setError(null);
     const item: NftItem = {
       chainId: preset?.chainId ?? selectedChain.id,
-      contract,
+      contract: getAddress(contract),
       tokenId: tokenId.trim(),
       standard,
       name: preset?.name ?? `#${tokenId.trim()}`,
@@ -64,13 +86,15 @@ export function NftSendScreen() {
       const tx = await sendNft({
         mnemonic: session.mnemonic,
         owner: session.address,
-        to,
+        to: getAddress(to),
         item,
         amount: quantity,
       });
+      setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'NFT send failed.');
+      setReview(false);
     } finally {
       setBusy(false);
     }
@@ -125,8 +149,25 @@ export function NftSendScreen() {
           style={styles.input}
         />
       ) : null}
-      <Button label="Send NFT" onPress={confirm} loading={busy} />
+      <Button label="Review NFT send" onPress={prepare} loading={busy} />
       {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
+      <ConfirmSheet
+        visible={review}
+        title="Confirm NFT send"
+        network={selectedChain.name}
+        from={session.address}
+        to={checksumAddress(to) ?? to}
+        amount={standard === 'ERC-1155' ? `${amount || '1'} × #${tokenId}` : `#${tokenId}`}
+        fee="Network gas (quoted at broadcast)"
+        extra={[
+          { label: 'Collection', value: preset?.collection ?? contract },
+          { label: 'Standard', value: standard },
+        ]}
+        warnings={warnings}
+        loading={busy}
+        onConfirm={confirm}
+        onCancel={() => setReview(false)}
+      />
     </Screen>
   );
 }

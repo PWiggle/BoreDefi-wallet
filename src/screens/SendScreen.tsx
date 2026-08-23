@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import { getAddress, isAddress } from 'ethers';
 
 import { Button } from '../components/Button';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { card, colors, field, spacing, type } from '../theme';
+import { colors, field, type } from '../theme';
+import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { formatNative, parseAmountToWei } from '../wallet/format';
 import { estimateNativeTransfer, fetchBalance, sendNativeTransfer } from '../wallet/rpc';
 
@@ -24,6 +27,7 @@ export function SendScreen() {
   const [amount, setAmount] = useState(route.params?.amount ?? '');
   const [balance, setBalance] = useState<bigint>(0n);
   const [feeWei, setFeeWei] = useState<bigint | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -69,6 +73,8 @@ export function SendScreen() {
       return;
     }
     try {
+      const clipboard = await Clipboard.getStringAsync().catch(() => '');
+      setWarnings(addressWarnings(to, clipboard));
       const estimate = await estimateNativeTransfer(
         fromAddress,
         getAddress(to),
@@ -104,6 +110,7 @@ export function SendScreen() {
               selectedChain.id,
             )
           ).hash;
+      setReview(false);
       setTxHash(hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Send failed.');
@@ -137,7 +144,6 @@ export function SendScreen() {
         style={styles.input}
         placeholder="0x…"
         placeholderTextColor={colors.muted}
-        editable={!review}
       />
       <Button
         label="Scan QR"
@@ -152,25 +158,22 @@ export function SendScreen() {
         style={styles.input}
         placeholder="0.0"
         placeholderTextColor={colors.muted}
-        editable={!review}
       />
       <Text style={styles.meta}>Balance: {formatNative(balance)} {selectedChain.symbol}</Text>
-      {review ? (
-        <View style={styles.review}>
-          <Text style={styles.reviewTitle}>Confirm</Text>
-          <Text style={styles.meta}>To {getAddress(to)}</Text>
-          <Text style={styles.meta}>
-            Amount {amount} {selectedChain.symbol}
-          </Text>
-          <Text style={styles.meta}>
-            Network fee ≈ {feeWei !== null ? formatNative(feeWei) : '—'} {selectedChain.symbol}
-          </Text>
-          <Button label="Confirm and send" loading={busy} onPress={confirm} />
-          <Button label="Edit" variant="ghost" onPress={() => setReview(false)} />
-        </View>
-      ) : (
-        <Button label="Review" onPress={prepare} />
-      )}
+      <Button label="Review" onPress={prepare} />
+      <ConfirmSheet
+        visible={review}
+        title="Confirm send"
+        network={selectedChain.name}
+        from={fromAddress}
+        to={checksumAddress(to) ?? to}
+        amount={`${amount} ${selectedChain.symbol}`}
+        fee={feeWei !== null ? `${formatNative(feeWei)} ${selectedChain.symbol}` : '—'}
+        warnings={warnings}
+        loading={busy}
+        onConfirm={confirm}
+        onCancel={() => setReview(false)}
+      />
     </Screen>
   );
 }
@@ -179,15 +182,6 @@ const styles = StyleSheet.create({
   label: type.label,
   input: field,
   meta: type.meta,
-  review: {
-    ...card,
-    gap: spacing.sm,
-  },
-  reviewTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
   hash: {
     ...type.meta,
     color: colors.text,

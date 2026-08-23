@@ -10,7 +10,7 @@ import { type } from '../theme';
 import { isValidPin } from '../wallet/pin';
 
 export function UnlockScreen() {
-  const { unlockWithPin, unlockWithBiometrics, settings } = useWallet();
+  const { unlockWithPin, unlockWithBiometrics, settings, pinBackoffMs } = useWallet();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,7 +19,7 @@ export function UnlockScreen() {
     setError(null);
     const ok = await unlockWithBiometrics();
     if (!ok) {
-      setError('Biometric unlock was cancelled or failed. Use your PIN.');
+      setError('Biometric unlock was cancelled or failed. Use your PIN to decrypt the vault.');
     }
   };
 
@@ -32,7 +32,7 @@ export function UnlockScreen() {
   }, []);
 
   useEffect(() => {
-    if (!isValidPin(pin) || busy) {
+    if (!isValidPin(pin) || busy || pinBackoffMs > 0) {
       return;
     }
     setBusy(true);
@@ -44,11 +44,14 @@ export function UnlockScreen() {
         }
       })
       .finally(() => setBusy(false));
-  }, [busy, pin, unlockWithPin]);
+  }, [busy, pin, pinBackoffMs, unlockWithPin]);
 
   return (
     <Screen title="Unlock" subtitle="BoreDefi Wallet" scroll={false}>
-      <Text style={styles.hint}>Enter your PIN to decrypt keys on this device.</Text>
+      <Text style={styles.hint}>Enter your PIN to decrypt keys into memory on this device.</Text>
+      {pinBackoffMs > 0 ? (
+        <Text style={styles.wait}>Too many attempts. Wait {Math.ceil(pinBackoffMs / 1000)}s.</Text>
+      ) : null}
       <ErrorBanner message={error} />
       <PinPad value={pin} onChange={setPin} />
       {settings.biometricsEnabled ? (
@@ -60,6 +63,10 @@ export function UnlockScreen() {
 
 const styles = StyleSheet.create({
   hint: {
+    ...type.subtitle,
+    textAlign: 'center',
+  },
+  wait: {
     ...type.subtitle,
     textAlign: 'center',
   },

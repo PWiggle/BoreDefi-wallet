@@ -17,9 +17,9 @@ No fiat on-ramp, Apple Pay, or bank rails. There is no backend that holds keys.
 ## Security model
 
 - Keys are generated and stored only on the device.
-- The BIP39 phrase is written to [Expo SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/) (Android Keystore / iOS Keychain) and is never logged or transmitted.
+- The BIP39 phrase is encrypted at rest with a PIN-derived PBKDF2-SHA256 key and AES-256-GCM. Salt and nonce sit beside the ciphertext. Unlock decrypts into memory only; lock drops the plaintext. Native storage is still [Expo SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/) (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`). Web uses localStorage for ciphertext only — the TEST-ONLY banner stays; web is not a Keystore. Existing plaintext v1 vaults migrate on the next PIN unlock.
 - A new wallet is held in memory until the user writes the phrase down **and** re-enters three of the words. There is no skip control.
-- Unlock is a 6-digit PIN. Biometrics are an optional convenience unlock.
+- Unlock is a 6-digit PIN (the PIN itself is never stored). Failed attempts back off (5 → 30s, 10 → longer). Change PIN in Settings re-wraps the vault. Biometrics are an optional native convenience after a PIN unlock (unwrap key in SecureStore). Auto-lock default is 1 minute (immediate / 1 min / 5 min). Reveal phrase requires PIN or biometrics and blocks screenshots. Sends, swaps, stakes, bridges, NFT sends, and dApp signatures use a hold-to-confirm sheet. dApps never auto-sign.
 - Swap and bridge quotes go to LI.FI as public HTTP. NFT lists go to public Blockscout APIs. The seed is never sent. The signed transaction stays on-device.
 - WalletConnect sessions and the in-app browser share only the public address and signatures the user approves.
 - Optional RPC / WalletConnect project ID overrides belong in a local `.env` (see `.env.example`). Do not put a seed, private key, or privileged API key in the repo.
@@ -200,12 +200,12 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 2. Leave the acknowledge box unchecked; **Continue** stays disabled.
 3. Check the box, continue, and fail verification with a wrong word. Confirm you cannot proceed.
 4. Enter the correct three words, set a PIN, enable biometrics if the device has them.
-5. Background the app and return. Confirm the lock screen. Unlock with PIN and with biometrics.
+5. Background the app and return. Default auto-lock is 1 minute (Settings can set immediate / 5 min). Unlock with PIN (decrypts the vault into memory). On native, biometrics can unwrap after the first PIN unlock.
 6. On Home, switch networks and confirm the address is the same and balances load or show a connection error (no crash).
 7. Receive: QR encodes `ethereum:<address>@<chainId>`. Copy address.
-8. Send: scan a QR or paste a recipient, review fee, reject an amount larger than balance + fee.
+8. Send: scan a QR or paste a recipient, review the confirm sheet (network, from, checksum to, amount, fee), hold to confirm. Non-checksum / lookalike / clipboard-mismatch pastes warn. Reject an amount larger than balance + fee.
 9. On a funded test account, send a small amount and confirm the hash appears in Activity.
-10. Settings → reveal phrase requires PIN. Delete wallet requires PIN and returns to Welcome.
+10. Settings → reveal phrase requires PIN or biometrics and blocks screenshots. Change PIN requires the old PIN and re-wraps the vault. Hide balances masks Home amounts. Delete wallet requires PIN and returns to Welcome.
 11. Import the same phrase and confirm the same address.
 
 ### Phase 2

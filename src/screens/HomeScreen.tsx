@@ -37,7 +37,7 @@ type TokenRow = {
 
 export function HomeScreen() {
   const navigation = useNavigation<MainNavigation>();
-  const { session, selectedChain, setSelectedChain } = useWallet();
+  const { session, selectedChain, setSelectedChain, settings, setHideBalances } = useWallet();
   const [balance, setBalance] = useState<bigint | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -128,10 +128,15 @@ export function HomeScreen() {
     >
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
       <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Available</Text>
-        <Text style={styles.heroUsd}>{formatUsd(usdTotal)}</Text>
+        <View style={styles.heroTop}>
+          <Text style={styles.heroLabel}>Available</Text>
+          <Pressable onPress={() => setHideBalances(!settings.hideBalances)}>
+            <Text style={styles.hide}>{settings.hideBalances ? 'Show' : 'Hide'}</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.heroUsd}>{settings.hideBalances ? '••••' : formatUsd(usdTotal)}</Text>
         <Text style={styles.heroNative}>
-          {balance === null ? '—' : formatNative(balance)} {selectedChain.symbol}
+          {settings.hideBalances ? '••••' : balance === null ? '—' : formatNative(balance)} {selectedChain.symbol}
         </Text>
         <Pressable onPress={copy}>
           <Text style={styles.address}>{copied ? 'Copied' : shortenAddress(session.address)}</Text>
@@ -157,6 +162,7 @@ export function HomeScreen() {
               token={row.token}
               amount={row.amount}
               market={row.market}
+              hideBalances={settings.hideBalances}
               onPress={() =>
                 row.token.native
                   ? navigation.navigate('Send', {})
@@ -196,7 +202,7 @@ export function HomeScreen() {
               <Text style={styles.txDir}>{item.inbound ? 'Received' : 'Sent'}</Text>
               <Text style={styles.txAmt}>
                 {item.inbound ? '+' : '−'}
-                {formatNative(item.valueWei)} {selectedChain.symbol}
+                {settings.hideBalances ? '••••' : formatNative(item.valueWei)} {selectedChain.symbol}
               </Text>
               <Text style={styles.txMeta}>{formatTimestamp(item.timestamp)}</Text>
             </Pressable>
@@ -213,6 +219,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     gap: spacing.xs,
     padding: spacing.lg,
+  },
+  heroTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  hide: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
   },
   heroLabel: type.label,
   heroUsd: {
