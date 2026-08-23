@@ -1,0 +1,74 @@
+{
+  "expo": {
+    "name": "BoreDefi Wallet",
+    "slug": "boredefi-wallet",
+    "scheme": "boredefi",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.boredefi.wallet",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan a recipient address QR code to send funds.",
+        "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID."
+      }
+    },
+    "android": {
+      "package": "com.boredefi.wallet",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0F14",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "plugins": [
+      "expo-system-ui",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Unlock BoreDefi Wallet with Face ID."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan a recipient address QR code to send funds.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0F14",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "36.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ]
+    ]
+  }
+}
