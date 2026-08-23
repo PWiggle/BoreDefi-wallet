@@ -8,6 +8,16 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png",
+      "name": "BoreDefi Wallet",
+      "shortName": "BoreDefi"
+    },
+    "experiments": {
+      "baseUrl": "/BoreDefi-wallet"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.boredefi.wallet",

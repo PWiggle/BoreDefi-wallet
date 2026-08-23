@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { WalletConnectOverlay } from './src/components/WalletConnectOverlay';
+import { WebTestBanner } from './src/components/WebTestBanner';
 import { LedgerProvider } from './src/context/LedgerContext';
 import { WalletConnectProvider } from './src/context/WalletConnectContext';
 import { WalletProvider, useWallet } from './src/context/WalletContext';
@@ -162,6 +163,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
+        <WebTestBanner />
         <WalletProvider>
           <LedgerProvider>
             <WalletConnectProvider>

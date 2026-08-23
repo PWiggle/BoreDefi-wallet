@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 import { logger } from '../logger';
 import { DEFAULT_CHAIN_ID, isChainId, type ChainId } from './chains';
@@ -10,6 +11,49 @@ const SETTINGS_KEY = 'boredefi.settings.v1';
 const secureOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
+
+const webMemory = new Map<string, string>();
+
+function isWebStorage(): boolean {
+  return Platform.OS === 'web';
+}
+
+async function readItem(key: string): Promise<string | null> {
+  if (!isWebStorage()) {
+    return SecureStore.getItemAsync(key, secureOptions);
+  }
+  try {
+    return globalThis.localStorage?.getItem(key) ?? webMemory.get(key) ?? null;
+  } catch {
+    return webMemory.get(key) ?? null;
+  }
+}
+
+async function writeItem(key: string, value: string): Promise<void> {
+  if (!isWebStorage()) {
+    await SecureStore.setItemAsync(key, value, secureOptions);
+    return;
+  }
+  webMemory.set(key, value);
+  try {
+    globalThis.localStorage?.setItem(key, value);
+  } catch {
+    // Private-mode browsers can block localStorage. Memory still works for the tab.
+  }
+}
+
+async function removeItem(key: string): Promise<void> {
+  if (!isWebStorage()) {
+    await SecureStore.deleteItemAsync(key, secureOptions);
+    return;
+  }
+  webMemory.delete(key);
+  try {
+    globalThis.localStorage?.removeItem(key);
+  } catch {
+    // Ignore quota / privacy errors.
+  }
+}
 
 export type VaultRecord = {
   version: 1;
@@ -47,7 +91,7 @@ function parseJson<T>(raw: string | null): T | null {
 }
 
 export async function loadVault(): Promise<VaultRecord | null> {
-  const raw = await SecureStore.getItemAsync(VAULT_KEY, secureOptions);
+  const raw = await readItem(VAULT_KEY);
   const vault = parseJson<VaultRecord>(raw);
   if (!vault || vault.version !== 1 || !vault.address || !vault.mnemonic) {
     return null;
@@ -56,20 +100,20 @@ export async function loadVault(): Promise<VaultRecord | null> {
 }
 
 export async function saveVault(vault: VaultRecord): Promise<void> {
-  await SecureStore.setItemAsync(VAULT_KEY, JSON.stringify(vault), secureOptions);
+  await writeItem(VAULT_KEY, JSON.stringify(vault));
 }
 
 export async function loadPinRecord(): Promise<PinRecord | null> {
-  return parseJson<PinRecord>(await SecureStore.getItemAsync(PIN_KEY, secureOptions));
+  return parseJson<PinRecord>(await readItem(PIN_KEY));
 }
 
 export async function savePinRecord(record: PinRecord): Promise<void> {
-  await SecureStore.setItemAsync(PIN_KEY, JSON.stringify(record), secureOptions);
+  await writeItem(PIN_KEY, JSON.stringify(record));
 }
 
 export async function loadSettings(): Promise<SettingsRecord> {
   const stored = parseJson<SettingsRecord>(
-    await SecureStore.getItemAsync(SETTINGS_KEY, secureOptions),
+    await readItem(SETTINGS_KEY),
   );
   if (!stored) {
     return defaultSettings;
@@ -84,7 +128,7 @@ export async function loadSettings(): Promise<SettingsRecord> {
 }
 
 export async function saveSettings(settings: SettingsRecord): Promise<void> {
-  await SecureStore.setItemAsync(SETTINGS_KEY, JSON.stringify(settings), secureOptions);
+  await writeItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export async function hasPersistedWallet(): Promise<boolean> {
@@ -95,9 +139,9 @@ export async function hasPersistedWallet(): Promise<boolean> {
 
 export async function clearAllWalletData(): Promise<void> {
   await Promise.all([
-    SecureStore.deleteItemAsync(VAULT_KEY, secureOptions),
-    SecureStore.deleteItemAsync(PIN_KEY, secureOptions),
-    SecureStore.deleteItemAsync(SETTINGS_KEY, secureOptions),
+    removeItem(VAULT_KEY),
+    removeItem(PIN_KEY),
+    removeItem(SETTINGS_KEY),
   ]);
   logger.info('Local wallet data cleared');
 }

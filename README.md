@@ -137,6 +137,22 @@ Then in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** �
 
 Details: [`extension/README.md`](extension/README.md).
 
+## Public web test (phone)
+
+One HTTPS URL for Phases 1–4:
+
+**https://pwiggle.github.io/BoreDefi-wallet/**
+
+This is an Expo web export hosted on GitHub Pages (`experiments.baseUrl` is `/BoreDefi-wallet`). A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) builds `npx expo export --platform web` and publishes the `gh-pages` branch on pushes to `main` or `cursor/phase1-wallet-61ec`.
+
+If that URL 404s the first time, enable Pages once: repo **Settings → Pages → Deploy from a branch → `gh-pages` / root**. The API cannot enable Pages from this agent.
+
+The web build shows a **TEST-ONLY** banner. Never enter a real recovery phrase or use real funds. Vault data on web is local to that browser profile (`localStorage`), not Android Keystore / iOS Keychain.
+
+```bash
+npm run export:web   # writes dist/ (gitignored)
+```
+
 ### Android identifiers
 
 | Setting | Value |
@@ -156,6 +172,7 @@ npm run typecheck            # TypeScript
 npm test                     # Wallet unit tests (no device required)
 npm run check:android-config # package name + SDK 36
 npm run extension:build      # Chrome unpacked bundle
+npm run export:web           # static site for GitHub Pages
 npm run prebuild:android
 ```
 
@@ -217,6 +234,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 27. Chrome: load `extension/unpacked`. Create a wallet — no skip on backup; wrong verify words fail. Set PIN, unlock, see a balance or RPC error, send with an invalid address/amount fails. On a dApp page, `window.ethereum.isBoreDefi` is true after unlock; reject by locking first.
 28. **Ledger** on Android: the screen explains WebHID is unavailable and points at the extension. On Chrome (extension or Expo web) with a Nano + Ethereum app: Connect shows the device address; a small send/swap/bridge asks for a device confirmation. Unplug → disconnect.
 29. Confirm logs and the extension service worker never print the recovery phrase or private key. No fiat UI exists.
+30. Open **https://pwiggle.github.io/BoreDefi-wallet/** on a phone. Confirm the TEST-ONLY banner. Do not use a real seed or real funds. Walk through create/backup/PIN, Home, Discover, Swap/Stake screens, and (optional) Ledger on a desktop Chrome tab.
 
 ## License
 
