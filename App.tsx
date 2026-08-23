@@ -18,6 +18,7 @@ import { BridgeScreen } from './src/screens/BridgeScreen';
 import { ChangePinScreen } from './src/screens/ChangePinScreen';
 import { ImportWalletScreen } from './src/screens/ImportWalletScreen';
 import { LedgerScreen } from './src/screens/LedgerScreen';
+import { NftImportScreen } from './src/screens/NftImportScreen';
 import { NftSendScreen } from './src/screens/NftSendScreen';
 import { ReceiveScreen } from './src/screens/ReceiveScreen';
 import { ResetWalletScreen } from './src/screens/ResetWalletScreen';
@@ -87,6 +88,7 @@ function RootNavigator() {
         <MainStack.Screen name="Bridge" component={BridgeScreen} />
         <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />
+        <MainStack.Screen name="NftImport" component={NftImportScreen} options={{ title: 'Import NFT' }} />
         <MainStack.Screen name="WalletConnect" component={WalletConnectScreen} options={{ title: 'WalletConnect' }} />
         <MainStack.Screen name="Activity" component={ActivityScreen} />
         <MainStack.Screen

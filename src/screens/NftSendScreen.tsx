@@ -10,9 +10,9 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { chip, colors, field, spacing } from '../theme';
+import { chip, colors, field, spacing, type } from '../theme';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
-import { type NftItem, type NftStandard, sendNft } from '../wallet/nfts';
+import { type NftItem, type NftStandard, sendNft, verifyNftOwnership } from '../wallet/nfts';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
@@ -43,15 +43,26 @@ export function NftSendScreen() {
     return null;
   }
 
+  const buildItem = (): NftItem => ({
+    chainId: preset?.chainId ?? selectedChain.id,
+    contract: getAddress(contract),
+    tokenId: tokenId.trim(),
+    standard,
+    name: preset?.name ?? `#${tokenId.trim()}`,
+    collection: preset?.collection ?? 'NFT',
+  });
+
   const prepare = async () => {
     setError(null);
     if (!isAddress(to) || !isAddress(contract) || !tokenId.trim()) {
       setError('Enter a valid recipient, contract, and token id.');
       return;
     }
+    let quantity = 1n;
     if (standard === 'ERC-1155') {
       try {
-        if (BigInt(amount || '1') <= 0n) {
+        quantity = BigInt(amount || '1');
+        if (quantity <= 0n) {
           throw new Error('Amount must be greater than zero.');
         }
       } catch {
@@ -59,21 +70,22 @@ export function NftSendScreen() {
         return;
       }
     }
+    try {
+      await verifyNftOwnership(session.address, buildItem(), quantity);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Owner check failed.');
+      return;
+    }
     const clipboard = await Clipboard.getStringAsync().catch(() => '');
-    setWarnings(addressWarnings(to, clipboard));
+    setWarnings([
+      ...addressWarnings(to, clipboard),
+      'This cannot be undone. The NFT leaves this wallet when the transaction confirms.',
+    ]);
     setReview(true);
   };
 
   const confirm = async () => {
     setError(null);
-    const item: NftItem = {
-      chainId: preset?.chainId ?? selectedChain.id,
-      contract: getAddress(contract),
-      tokenId: tokenId.trim(),
-      standard,
-      name: preset?.name ?? `#${tokenId.trim()}`,
-      collection: preset?.collection ?? 'NFT',
-    };
     let quantity: bigint | undefined;
     try {
       quantity = standard === 'ERC-1155' ? BigInt(amount || '1') : undefined;
@@ -87,7 +99,7 @@ export function NftSendScreen() {
         mnemonic: session.mnemonic,
         owner: session.address,
         to: getAddress(to),
-        item,
+        item: buildItem(),
         amount: quantity,
       });
       setReview(false);
@@ -102,6 +114,9 @@ export function NftSendScreen() {
 
   return (
     <Screen title="Send NFT" subtitle={selectedChain.name}>
+      <Text style={styles.copy}>
+        Owner is checked on-chain before broadcast. No claim or marketplace flow.
+      </Text>
       {error ? <ErrorBanner message={error} /> : null}
       <TextInput
         value={to}
@@ -120,6 +135,7 @@ export function NftSendScreen() {
         placeholder="NFT contract"
         placeholderTextColor={colors.muted}
         style={styles.input}
+        editable={!preset}
       />
       <TextInput
         value={tokenId}
@@ -127,12 +143,17 @@ export function NftSendScreen() {
         placeholder="Token id"
         placeholderTextColor={colors.muted}
         style={styles.input}
+        editable={!preset}
       />
       <View style={styles.row}>
         {STANDARDS.map((item) => (
           <Pressable
             key={item}
-            onPress={() => setStandard(item)}
+            onPress={() => {
+              if (!preset) {
+                setStandard(item);
+              }
+            }}
             style={[styles.chip, standard === item && styles.chipOn]}
           >
             <Text style={styles.chipText}>{item}</Text>
@@ -160,8 +181,12 @@ export function NftSendScreen() {
         amount={standard === 'ERC-1155' ? `${amount || '1'} × #${tokenId}` : `#${tokenId}`}
         fee="Network gas (quoted at broadcast)"
         extra={[
-          { label: 'Collection', value: preset?.collection ?? contract },
+          { label: 'Collection', value: preset?.collection ?? 'Unknown collection' },
           { label: 'Standard', value: standard },
+          { label: 'Contract', value: checksumAddress(contract) ?? contract },
+          { label: 'Token id', value: tokenId },
+          { label: 'Recipient', value: checksumAddress(to) ?? to },
+          { label: 'Chain', value: selectedChain.name },
         ]}
         warnings={warnings}
         loading={busy}
@@ -173,6 +198,7 @@ export function NftSendScreen() {
 }
 
 const styles = StyleSheet.create({
+  copy: type.subtitle,
   input: field,
   row: { flexDirection: 'row', gap: spacing.sm },
   chip,

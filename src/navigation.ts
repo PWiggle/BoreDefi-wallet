@@ -26,6 +26,7 @@ export type MainStackParamList = {
   Bridge: undefined;
   Ledger: undefined;
   NftSend: { nft?: NftItem };
+  NftImport: undefined;
   WalletConnect: { uri?: string };
 };
 

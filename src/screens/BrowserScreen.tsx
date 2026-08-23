@@ -31,6 +31,7 @@ import {
   providerResolveScript,
   providerSyncScript,
 } from '../wallet/injected-provider';
+import { inspectDappApproval } from '../wallet/approval-risk';
 import { formatNative } from '../wallet/format';
 import { sendRpc } from '../wallet/rpc';
 import { parseSwitchChainId } from '../wallet/wc';
@@ -46,6 +47,9 @@ type BrowserConfirm = {
   extra?: { label: string; value: string }[];
   mode: 'hold' | 'buttons';
   confirmLabel?: string;
+  cancelLabel?: string;
+  warnings?: string[];
+  danger?: boolean;
   resolve: (ok: boolean) => void;
 };
 
@@ -198,18 +202,30 @@ export function BrowserScreen() {
         return;
       }
       if (kind === 'sign') {
-        const tx = params[0] as { from?: string; to?: string; value?: string } | undefined;
+        const tx = params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
         const isSend = method === 'eth_sendTransaction' || method === 'eth_signTransaction';
+        const risk = inspectDappApproval(method, params);
         const approved = await requestConfirm({
-          title: 'Approve request',
+          title: risk?.danger ? 'Danger: collection-wide approval' : 'Approve request',
           network: selectedChain.name,
           from: tx?.from ?? session.address,
           to: isSend ? tx?.to : undefined,
-          amount: isSend ? txAmount(tx?.value, selectedChain.symbol) ?? method : method,
+          amount: risk?.danger
+            ? risk.summary
+            : isSend
+              ? txAmount(tx?.value, selectedChain.symbol) ?? method
+              : method,
           fee: isSend ? 'Network gas (quoted at sign)' : 'None (signature only)',
-          extra: [{ label: 'Method', value: method }],
+          extra: [
+            { label: 'Method', value: method },
+            ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
+            ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
+          ],
+          warnings: risk?.warnings,
+          danger: Boolean(risk?.danger),
           mode: 'hold',
-          confirmLabel: 'Hold to sign',
+          confirmLabel: risk?.danger ? 'Hold to approve anyway' : 'Hold to sign',
+          cancelLabel: 'Reject',
         });
         if (!approved) {
           resolve(id, null, 'User rejected.');
@@ -301,8 +317,11 @@ export function BrowserScreen() {
         amount={pendingConfirm?.amount}
         fee={pendingConfirm?.fee}
         extra={pendingConfirm?.extra}
+        warnings={pendingConfirm?.warnings}
+        variant={pendingConfirm?.danger ? 'danger' : 'default'}
         mode={pendingConfirm?.mode ?? 'hold'}
         confirmLabel={pendingConfirm?.confirmLabel}
+        cancelLabel={pendingConfirm?.cancelLabel}
         onConfirm={() => {
           pendingConfirm?.resolve(true);
           setPendingConfirm(null);

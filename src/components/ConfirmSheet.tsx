@@ -22,7 +22,9 @@ type Props = {
   warnings?: string[];
   loading?: boolean;
   mode?: 'hold' | 'buttons';
+  variant?: 'default' | 'danger';
   confirmLabel?: string;
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -48,10 +50,14 @@ export function ConfirmSheet({
   warnings = [],
   loading,
   mode = 'hold',
+  variant = 'default',
   confirmLabel = 'Hold to confirm',
+  cancelLabel,
   onConfirm,
   onCancel,
 }: Props) {
+  const danger = variant === 'danger';
+  const rejectLabel = cancelLabel ?? (danger ? 'Reject' : 'Cancel');
   const [held, setHeld] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const fired = useRef(false);
@@ -100,8 +106,8 @@ export function ConfirmSheet({
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
+        <View style={[styles.card, danger && styles.cardDanger]}>
+          <Text style={[styles.title, danger && styles.titleDanger]}>{title}</Text>
           {rows.map((row) => (
             <View key={`${row.label}-${row.value}`} style={styles.row}>
               <Text style={styles.label}>{row.label}</Text>
@@ -111,27 +117,36 @@ export function ConfirmSheet({
             </View>
           ))}
           {warnings.map((warning) => (
-            <Text key={warning} style={styles.warn}>
+            <Text key={warning} style={[styles.warn, danger && styles.warnDanger]}>
               {warning}
             </Text>
           ))}
-          {mode === 'hold' ? (
+          {danger || mode === 'hold' ? (
             <>
+              {danger ? <Button label={rejectLabel} onPress={onCancel} /> : null}
               <Pressable
                 disabled={loading}
                 onPressIn={startHold}
                 onPressOut={stopHold}
-                style={[styles.hold, loading && styles.holdDisabled]}
+                style={[styles.hold, danger && styles.holdDanger, loading && styles.holdDisabled]}
               >
-                <View style={[styles.holdFill, { width: `${Math.round(held * 100)}%` }]} />
-                <Text style={styles.holdLabel}>{loading ? 'Submitting…' : confirmLabel}</Text>
+                <View
+                  style={[
+                    styles.holdFill,
+                    danger ? styles.holdFillDanger : null,
+                    { width: `${Math.round(held * 100)}%` },
+                  ]}
+                />
+                <Text style={[styles.holdLabel, danger && styles.holdLabelDanger]}>
+                  {loading ? 'Submitting…' : confirmLabel}
+                </Text>
               </Pressable>
-              <Button label="Cancel" variant="ghost" onPress={onCancel} />
+              {danger ? null : <Button label={rejectLabel} variant="ghost" onPress={onCancel} />}
             </>
           ) : (
             <>
               <Button label={confirmLabel} loading={loading} onPress={onConfirm} />
-              <Button label="Reject" variant="secondary" onPress={onCancel} />
+              <Button label={rejectLabel} variant="secondary" onPress={onCancel} />
             </>
           )}
         </View>
@@ -196,5 +211,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     zIndex: 1,
+  },
+  cardDanger: {
+    borderColor: colors.danger,
+  },
+  titleDanger: {
+    color: colors.danger,
+  },
+  warnDanger: {
+    color: colors.danger,
+  },
+  holdDanger: {
+    backgroundColor: '#4A0B18',
+  },
+  holdFillDanger: {
+    backgroundColor: colors.danger,
+  },
+  holdLabelDanger: {
+    color: '#2A0610',
   },
 });

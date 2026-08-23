@@ -2,7 +2,7 @@ import { Contract, getAddress, isAddress, type TransactionResponse } from 'ether
 
 import { logger } from '../logger';
 import { CHAINS, type ChainId } from './chains';
-import { connectedWallet } from './rpc';
+import { connectedWallet, getProvider } from './rpc';
 
 const ERC721_ABI = [
   'function safeTransferFrom(address from, address to, uint256 tokenId)',
@@ -50,6 +50,39 @@ export function normalizeNftStandard(value: string | undefined): NftStandard | n
   return null;
 }
 
+export function nftItemKey(item: Pick<NftItem, 'chainId' | 'contract' | 'tokenId'>): string {
+  return `${item.chainId}:${item.contract.toLowerCase()}:${item.tokenId}`;
+}
+
+export function mergeNftLists(fetched: NftItem[], imported: NftItem[]): NftItem[] {
+  const map = new Map<string, NftItem>();
+  for (const item of imported) {
+    map.set(nftItemKey(item), item);
+  }
+  for (const item of fetched) {
+    map.set(nftItemKey(item), item);
+  }
+  return [...map.values()];
+}
+
+export function groupNftsByCollection<T extends { item: NftItem }>(entries: T[]): { collection: string; contract: string; entries: T[] }[] {
+  const groups = new Map<string, { collection: string; contract: string; entries: T[] }>();
+  for (const entry of entries) {
+    const key = `${entry.item.chainId}:${entry.item.contract.toLowerCase()}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.entries.push(entry);
+    } else {
+      groups.set(key, {
+        collection: entry.item.collection.trim() || 'Collection',
+        contract: entry.item.contract,
+        entries: [entry],
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
 export function parseBlockscoutNfts(items: BlockscoutNft[], chainId: ChainId): NftItem[] {
   const parsed: NftItem[] = [];
   for (const item of items) {
@@ -94,6 +127,28 @@ export async function fetchNfts(owner: string, chainId: ChainId): Promise<NftIte
   }
 }
 
+export async function verifyNftOwnership(
+  owner: string,
+  item: NftItem,
+  amount: bigint = 1n,
+): Promise<void> {
+  const provider = getProvider(item.chainId);
+  const ownerAddress = getAddress(owner);
+  if (item.standard === 'ERC-721') {
+    const nft = new Contract(item.contract, ERC721_ABI, provider);
+    const current = getAddress(await nft.ownerOf(BigInt(item.tokenId)));
+    if (current !== ownerAddress) {
+      throw new Error('This wallet is not the on-chain owner of that NFT. Send blocked.');
+    }
+    return;
+  }
+  const nft = new Contract(item.contract, ERC1155_ABI, provider);
+  const balance = (await nft.balanceOf(ownerAddress, BigInt(item.tokenId))) as bigint;
+  if (balance < amount) {
+    throw new Error('This wallet does not hold that ERC-1155 amount. Send blocked.');
+  }
+}
+
 export async function sendNft(input: {
   mnemonic: string;
   owner: string;
@@ -102,6 +157,7 @@ export async function sendNft(input: {
   amount?: bigint;
 }): Promise<TransactionResponse> {
   const to = getAddress(input.to);
+  await verifyNftOwnership(input.owner, input.item, input.amount ?? 1n);
   const wallet = connectedWallet(input.mnemonic, input.item.chainId);
   logger.info('NFT send', {
     chainId: input.item.chainId,

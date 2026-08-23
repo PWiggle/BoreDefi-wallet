@@ -77,7 +77,9 @@ Verified: LI.FI `GET https://li.quest/v1/quote` accepts `fromChain !== toChain` 
 
 ### NFTs
 
-Public Blockscout v2 `GET {nftApi}/addresses/{addr}/nft?type=ERC-721,ERC-1155` on Ethereum, Base, Arbitrum, Optimism, Polygon, and BNB Chain. No API key. Avalanche has no Blockscout catalog here — the list is empty and send is manual (contract + token id). Transfers use `safeTransferFrom` for both ERC-721 and ERC-1155.
+Public Blockscout v2 `GET {nftApi}/addresses/{addr}/nft?type=ERC-721,ERC-1155` on Ethereum, Base, Arbitrum, Optimism, Polygon, and BNB Chain. No API key. Avalanche has no Blockscout catalog here — the list is empty. There is no marketplace, claim, or mint.
+
+The NFTs tab is a Collectibles-style **2-column image grid**, grouped by collection, with the network picker on top. Autodetect uses the public Blockscout catalog (Avalanche has none). Empty state is **No NFTs yet** plus **Import**. Tap a tile opens a **detail** sheet (large image, name, collection, token id, checksum contract, network) — not Send. Primary action on detail is **View**. Send is secondary. **Hide NFT** is per item. Unsolicited airdrops stay in a collapsed Hidden / possible spam section (unknown collection, no https image, famous-name impersonation, first-seen drop). **Import NFT** asks for collectible contract + token id + standard and warns not to paste a wallet address. Images render only from `https` or an https IPFS gateway — no scripts, HTML/SVG documents, claim buttons, or marketplace. Send checks `ownerOf` / `balanceOf` and uses the hold-to-confirm sheet. dApp / WalletConnect `setApprovalForAll`, unlimited `approve`, and `increaseAllowance` show a red danger confirm with Reject emphasized; they never auto-sign.
 
 ### dApp browser
 
@@ -223,7 +225,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 19. **Stake** on Ethereum: Lido ETH market appears. Amount larger than wallet ETH fails. Funded account: stake a small amount → stETH balance rises. Unstake creates a withdrawal-queue request. When finalized, **Claim finalized** returns ETH.
 20. **Stake** on Base (or Arbitrum / Optimism / Polygon / Avalanche): Aave V3 USDC appears. Supply a small USDC amount, then withdraw. BNB Chain shows no market.
 21. **Bridge**: from and to chains must differ. Amount larger than balance fails. Quote names the LI.FI tool and a minimum received amount. Confirming without funds fails cleanly. Funded account: bridge a small native amount and confirm the source-chain hash.
-22. **NFTs**: on Ethereum / Base / etc., the list loads from Blockscout or is empty without crashing. Avalanche explains there is no catalog. **Send NFT manually** with an invalid address is rejected. Funded account: send an ERC-721 (and an ERC-1155 amount if you hold one).
+22. **NFTs**: 2-column collectibles grid grouped by collection. Tap opens detail (View primary, Send secondary, Hide NFT). Empty state shows No NFTs yet + Import. Import warns to paste the collectible contract, not a wallet. Hidden / possible spam is collapsed. Invalid recipient is rejected. Send is blocked if `ownerOf` / `balanceOf` does not match this wallet. Funded throwaway only: send an ERC-721 you own. In Browser / WalletConnect, a `setApprovalForAll` request is a red danger sheet with Reject first.
 23. **Browser**: open Uniswap / Aave / Lido / Jumper from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
 24. Confirm logs still never print the recovery phrase or private key.
 

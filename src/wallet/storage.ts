@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { logger } from '../logger';
 import { DEFAULT_AUTO_LOCK, normalizeAutoLock, type AutoLockMode } from './auto-lock';
 import { DEFAULT_CHAIN_ID, parseChainId, type ChainId } from './chains';
+import { type NftItem } from './nfts';
 import {
   dekToHex,
   hexToDek,
@@ -16,6 +17,9 @@ const VAULT_KEY = 'boredefi.vault.v1';
 const PIN_KEY = 'boredefi.pin.v1';
 const SETTINGS_KEY = 'boredefi.settings.v1';
 const DEK_KEY = 'boredefi.vault.dek';
+const NFT_REVEAL_KEY = 'boredefi.nft.revealed.v1';
+const NFT_HIDDEN_KEY = 'boredefi.nft.hidden.v1';
+const NFT_IMPORT_KEY = 'boredefi.nft.imported.v1';
 
 const secureOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -175,12 +179,42 @@ export async function hasPersistedWallet(): Promise<boolean> {
   return Boolean(vault && pin);
 }
 
+export async function loadRevealedNfts(): Promise<string[]> {
+  const stored = parseJson<string[]>(await readItem(NFT_REVEAL_KEY));
+  return Array.isArray(stored) ? stored.filter((item) => typeof item === 'string') : [];
+}
+
+export async function saveRevealedNfts(keys: string[]): Promise<void> {
+  await writeItem(NFT_REVEAL_KEY, JSON.stringify([...new Set(keys)]));
+}
+
+export async function loadHiddenNfts(): Promise<string[]> {
+  const stored = parseJson<string[]>(await readItem(NFT_HIDDEN_KEY));
+  return Array.isArray(stored) ? stored.filter((item) => typeof item === 'string') : [];
+}
+
+export async function saveHiddenNfts(keys: string[]): Promise<void> {
+  await writeItem(NFT_HIDDEN_KEY, JSON.stringify([...new Set(keys)]));
+}
+
+export async function loadImportedNfts(): Promise<NftItem[]> {
+  const stored = parseJson<NftItem[]>(await readItem(NFT_IMPORT_KEY));
+  return Array.isArray(stored) ? stored : [];
+}
+
+export async function saveImportedNfts(items: NftItem[]): Promise<void> {
+  await writeItem(NFT_IMPORT_KEY, JSON.stringify(items));
+}
+
 export async function clearAllWalletData(): Promise<void> {
   await Promise.all([
     removeItem(VAULT_KEY),
     removeItem(PIN_KEY),
     removeItem(SETTINGS_KEY),
     removeItem(DEK_KEY),
+    removeItem(NFT_REVEAL_KEY),
+    removeItem(NFT_HIDDEN_KEY),
+    removeItem(NFT_IMPORT_KEY),
   ]);
   logger.info('Local wallet data cleared');
 }

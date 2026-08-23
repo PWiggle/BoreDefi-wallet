@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { describeRequest, useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
+import { inspectDappApproval } from '../wallet/approval-risk';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
 import { hexToUtf8, pickSignMessage } from '../wallet/wc';
@@ -66,8 +67,9 @@ export function WalletConnectOverlay() {
     return null;
   }
 
-  const tx = pendingRequest.params[0] as { from?: string; to?: string; value?: string } | undefined;
+  const tx = pendingRequest.params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
   const isSend = pendingRequest.method === 'eth_sendTransaction' || pendingRequest.method === 'eth_signTransaction';
+  const risk = inspectDappApproval(pendingRequest.method, pendingRequest.params);
   const preview =
     pendingRequest.method === 'personal_sign' || pendingRequest.method === 'eth_sign'
       ? safePreview(pendingRequest.params)
@@ -76,16 +78,29 @@ export function WalletConnectOverlay() {
   return (
     <ConfirmSheet
       visible
-      title={pendingRequest.peerName}
-      network={selectedChain.name}
+      title={risk?.danger ? 'Danger: collection-wide approval' : pendingRequest.peerName}
+      network={CHAINS[pendingRequest.chainId].name}
       from={tx?.from ?? session?.address}
       to={isSend ? tx?.to : undefined}
-      amount={isSend ? txValue(tx?.value, selectedChain.symbol) ?? pendingRequest.method : pendingRequest.method}
+      amount={
+        risk?.danger
+          ? risk.summary
+          : isSend
+            ? txValue(tx?.value, selectedChain.symbol) ?? pendingRequest.method
+            : pendingRequest.method
+      }
       fee={isSend ? 'Network gas (quoted at sign)' : 'None (signature only)'}
-      extra={[{ label: 'Request', value: preview }]}
-      warnings={error ? [error] : []}
+      extra={[
+        { label: 'Request', value: preview },
+        ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
+        ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
+        { label: 'dApp', value: pendingRequest.peerName },
+      ]}
+      warnings={[...(risk?.warnings ?? []), ...(error ? [error] : [])]}
+      variant={risk?.danger ? 'danger' : 'default'}
       loading={busy}
-      confirmLabel="Hold to approve"
+      confirmLabel={risk?.danger ? 'Hold to approve anyway' : 'Hold to approve'}
+      cancelLabel="Reject"
       onConfirm={() => run(approveRequest)}
       onCancel={() => run(rejectRequest)}
     />
