@@ -7,6 +7,7 @@ import { getAddress, isAddress } from 'ethers';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useLedger } from '../context/LedgerContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { colors, radius, spacing } from '../theme';
@@ -17,6 +18,8 @@ export function SendScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'Send'>>();
   const { session, selectedChain } = useWallet();
+  const ledger = useLedger();
+  const fromAddress = ledger.account?.address ?? session?.address ?? '';
   const [to, setTo] = useState(route.params?.to ?? '');
   const [amount, setAmount] = useState(route.params?.amount ?? '');
   const [balance, setBalance] = useState<bigint>(0n);
@@ -39,10 +42,10 @@ export function SendScreen() {
     if (!session) {
       return;
     }
-    fetchBalance(session.address, selectedChain.id)
+    fetchBalance(fromAddress, selectedChain.id)
       .then(setBalance)
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load balance.'));
-  }, [selectedChain.id, session]);
+  }, [fromAddress, selectedChain.id, session]);
 
   if (!session) {
     return null;
@@ -67,7 +70,7 @@ export function SendScreen() {
     }
     try {
       const estimate = await estimateNativeTransfer(
-        session.address,
+        fromAddress,
         getAddress(to),
         amountWei,
         selectedChain.id,
@@ -87,13 +90,21 @@ export function SendScreen() {
     setBusy(true);
     setError(null);
     try {
-      const response = await sendNativeTransfer(
-        session.mnemonic,
-        getAddress(to),
-        parseAmountToWei(amount),
-        selectedChain.id,
-      );
-      setTxHash(response.hash);
+      const hash = ledger.account
+        ? await ledger.signAndSend({
+            to: getAddress(to),
+            value: parseAmountToWei(amount),
+            chainId: selectedChain.id,
+          })
+        : (
+            await sendNativeTransfer(
+              session.mnemonic,
+              getAddress(to),
+              parseAmountToWei(amount),
+              selectedChain.id,
+            )
+          ).hash;
+      setTxHash(hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Send failed.');
       setReview(false);
@@ -112,7 +123,10 @@ export function SendScreen() {
   }
 
   return (
-    <Screen title={`Send ${selectedChain.symbol}`} subtitle={selectedChain.name}>
+    <Screen
+      title={`Send ${selectedChain.symbol}`}
+      subtitle={ledger.account ? `Ledger ${fromAddress}` : selectedChain.name}
+    >
       <ErrorBanner message={error} />
       <Text style={styles.label}>To</Text>
       <TextInput

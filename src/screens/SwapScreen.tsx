@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useLedger } from '../context/LedgerContext';
 import { useWallet } from '../context/WalletContext';
+import type { MainStackParamList } from '../navigation';
 import { colors, radius, spacing } from '../theme';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
@@ -18,7 +21,10 @@ import {
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 
 export function SwapScreen() {
+  const route = useRoute<RouteProp<MainStackParamList, 'Swap'>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
+  const ledger = useLedger();
+  const fromAddress = ledger.account?.address ?? session?.address ?? '';
   const tokens = useMemo(() => tokensForChain(selectedChain.id), [selectedChain.id]);
   const [fromToken, setFromToken] = useState<TokenConfig>(tokens[0]!);
   const [toToken, setToToken] = useState<TokenConfig>(tokens[1] ?? tokens[0]!);
@@ -32,19 +38,23 @@ export function SwapScreen() {
   useEffect(() => {
     const next = tokensForChain(selectedChain.id);
     setFromToken(next[0]!);
-    setToToken(next.find((token) => !token.native) ?? next[1] ?? next[0]!);
+    const hinted = route.params?.fromSymbol
+      ? next.find((token) => token.symbol.toLowerCase() === route.params.fromSymbol?.toLowerCase())
+      : undefined;
+    setFromToken(hinted ?? next[0]!);
+    setToToken(next.find((token) => token.address !== (hinted ?? next[0]!).address) ?? next[1] ?? next[0]!);
     setQuote(null);
     setTxHash(null);
-  }, [selectedChain.id]);
+  }, [route.params?.fromSymbol, selectedChain.id]);
 
   useEffect(() => {
     if (!session) {
       return;
     }
-    fetchTokenBalance(session.address, fromToken, selectedChain.id)
+    fetchTokenBalance(fromAddress, fromToken, selectedChain.id)
       .then(setBalance)
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load balance.'));
-  }, [fromToken, selectedChain.id, session]);
+  }, [fromAddress, fromToken, selectedChain.id, session]);
 
   if (!session) {
     return null;
@@ -64,7 +74,7 @@ export function SwapScreen() {
           fromToken,
           toToken,
           fromAmount,
-          fromAddress: session.address,
+          fromAddress,
         }),
       );
     } catch (err) {
@@ -82,17 +92,28 @@ export function SwapScreen() {
     setBusy(true);
     setError(null);
     try {
+      const sendTx = ledger.account
+        ? (tx: { to?: string; data?: string; value?: bigint; gasLimit?: bigint; chainId: number }) =>
+            ledger.signAndSend({
+              to: tx.to,
+              data: tx.data,
+              value: tx.value,
+              gasLimit: tx.gasLimit,
+              chainId: selectedChain.id,
+            })
+        : undefined;
       if (quote.approvalAddress) {
         await ensureSpendAllowance({
           mnemonic: session.mnemonic,
           token: fromToken,
-          owner: session.address,
+          owner: fromAddress,
           spender: quote.approvalAddress,
           amount: quote.fromAmount,
           chainId: selectedChain.id,
+          sendTx,
         });
       }
-      const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id);
+      const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id, sendTx);
       setTxHash(tx.hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Swap failed.');

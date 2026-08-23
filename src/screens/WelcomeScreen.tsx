@@ -20,11 +20,10 @@ export function WelcomeScreen() {
       }
     >
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Phase 3</Text>
+        <Text style={styles.cardTitle}>Phase 4</Text>
         <Text style={styles.cardBody}>
-          Create or import a BIP39 wallet, back up the seed, then send, receive, swap, stake,
-          bridge, view NFTs, and open WalletConnect-compatible dApps on Ethereum, Base, Arbitrum,
-          Optimism, Polygon, BNB Chain, and Avalanche.
+          Non-custodial wallet with send, swap, stake, bridge, NFTs, Discover/Market, an in-app
+          dApp browser, a Chrome extension, and Ledger signing over WebHID. No fiat on-ramp.
         </Text>
       </View>
     </Screen>

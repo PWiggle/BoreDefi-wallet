@@ -48,3 +48,37 @@ export function formatTimestamp(seconds: number): string {
   }
   return new Date(seconds * 1000).toLocaleString();
 }
+
+export function formatCompactUsd(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '—';
+  }
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  const format = (amount: number, suffix: string) =>
+    `${sign}$${amount.toLocaleString('en-US', { maximumFractionDigits: amount >= 100 ? 0 : 2 })}${suffix}`;
+  if (abs >= 1e12) {
+    return format(abs / 1e12, 'T');
+  }
+  if (abs >= 1e9) {
+    return format(abs / 1e9, 'B');
+  }
+  if (abs >= 1e6) {
+    return format(abs / 1e6, 'M');
+  }
+  if (abs >= 1e3) {
+    return format(abs / 1e3, 'K');
+  }
+  if (abs >= 1) {
+    return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  }
+  return `${sign}$${abs.toPrecision(3)}`;
+}
+
+export function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '—';
+  }
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}

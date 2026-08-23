@@ -32,6 +32,12 @@ export function SettingsScreen() {
         />
       </View>
       <Button
+        label="Discover / Market"
+        variant="secondary"
+        onPress={() => navigation.navigate('Discover')}
+      />
+      <Button label="Ledger" variant="secondary" onPress={() => navigation.navigate('Ledger')} />
+      <Button
         label="WalletConnect sessions"
         variant="secondary"
         onPress={() => navigation.navigate('WalletConnect', {})}
@@ -42,8 +48,8 @@ export function SettingsScreen() {
         onPress={() => navigation.navigate('RevealSeed')}
       />
       <Text style={styles.note}>
-        Phase 3 adds stake, bridge, NFT view/send, and an in-app dApp browser. Fiat on-ramps, a
-        Chrome extension, and Ledger are later phases.
+        Phase 4 adds Discover/Market, a Chrome extension, and Ledger over WebHID. There is still no
+        fiat on-ramp.
       </Text>
       <Button
         label="Delete wallet from device"

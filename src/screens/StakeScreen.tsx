@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
+import type { MainStackParamList } from '../navigation';
 import { colors, radius, spacing } from '../theme';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
@@ -25,12 +27,16 @@ function stakedLabel(market: StakeMarket): string {
 }
 
 export function StakeScreen() {
+  const route = useRoute<RouteProp<MainStackParamList, 'Stake'>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const markets = useMemo(
     () => listStakeMarkets().filter((item) => item.chainId === selectedChain.id),
     [selectedChain.id],
   );
-  const [market, setMarket] = useState<StakeMarket | undefined>(markets[0]);
+  const hinted = route.params?.marketId
+    ? listStakeMarkets().find((item) => item.id === route.params.marketId)
+    : undefined;
+  const [market, setMarket] = useState<StakeMarket | undefined>(hinted ?? markets[0]);
   const [amount, setAmount] = useState('');
   const [walletBalance, setWalletBalance] = useState(0n);
   const [stakedBalance, setStakedBalance] = useState(0n);
@@ -40,12 +46,22 @@ export function StakeScreen() {
   const [txHash, setTxHash] = useState<string | null>(null);
 
   useEffect(() => {
+    if (route.params?.marketId) {
+      const found = listStakeMarkets().find((item) => item.id === route.params.marketId);
+      if (found) {
+        if (found.chainId !== selectedChain.id) {
+          void setSelectedChain(found.chainId);
+        }
+        setMarket(found);
+        return;
+      }
+    }
     const next = listStakeMarkets().filter((item) => item.chainId === selectedChain.id);
     setMarket(next[0]);
     setAmount('');
     setTxHash(null);
     setRequests([]);
-  }, [selectedChain.id]);
+  }, [route.params?.marketId, selectedChain.id, setSelectedChain]);
 
   useEffect(() => {
     if (!session || !market) {

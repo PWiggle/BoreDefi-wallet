@@ -8,9 +8,11 @@ Non-custodial React Native wallet. Android is the first target; the same codebas
 
 **Phase 3** adds stake / unstake, cross-chain bridge, NFT view / send, and an in-app dApp browser.
 
-## What is not included yet
+**Phase 4** adds Discover / Market (CoinGecko), a Chrome companion extension, and Ledger signing over WebHID.
 
-No fiat on-ramp, Chrome extension, or Ledger hardware wallet. Those are later phases. There is no backend that holds keys.
+## What is not included
+
+No fiat on-ramp, Apple Pay, or bank rails. There is no backend that holds keys.
 
 ## Security model
 
@@ -21,6 +23,9 @@ No fiat on-ramp, Chrome extension, or Ledger hardware wallet. Those are later ph
 - Swap and bridge quotes go to LI.FI as public HTTP. NFT lists go to public Blockscout APIs. The seed is never sent. The signed transaction stays on-device.
 - WalletConnect sessions and the in-app browser share only the public address and signatures the user approves.
 - Optional RPC / WalletConnect project ID overrides belong in a local `.env` (see `.env.example`). Do not put a seed, private key, or privileged API key in the repo.
+- Discover uses the public CoinGecko API (no key). Market data is public; it never includes the seed.
+- The Chrome extension encrypts the phrase with a PIN-derived AES-GCM key in `chrome.storage.local`. The mobile vault and the extension vault are separate — import the same phrase if you want the same address.
+- Ledger: the seed stays on the device. This app only receives an address and signatures.
 
 ## Stack
 
@@ -36,7 +41,24 @@ WalletConnect is **Reown WalletKit** (`@reown/walletkit`) plus `@walletconnect/r
 
 That ID is a client identifier, not a key that can move funds.
 
-The in-app browser uses `react-native-webview` plus an injected EIP-1193 `window.ethereum` (`isBoreDefi` and `isMetaMask` for site compatibility). Signing reuses the same on-device path as WalletConnect. This is not a Chrome extension.
+The in-app browser uses `react-native-webview` plus an injected EIP-1193 `window.ethereum` (`isBoreDefi` and `isMetaMask` for site compatibility). Signing reuses the same on-device path as WalletConnect.
+
+A companion **Chrome extension** lives in `extension/` (see [Load the Chrome extension](#load-the-chrome-extension)). It injects the same style of provider into https pages.
+
+### Discover / Market
+
+Home and **Discover** load trending tokens plus market cap / 24h volume / price from the public CoinGecko API (`/search/trending`, `/coins/markets`, `/search`). No API key. Search and token rows deep-link into existing Send / Swap / Stake when the asset is on the in-app list (ETH → Lido, USDC → Aave V3, natives → send, listed symbols → swap).
+
+### Ledger
+
+Attempted path:
+
+| Runtime | Transport | Status |
+| --- | --- | --- |
+| Chrome extension / Expo web | `@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-eth` | Implemented. Unlock the device, open the Ethereum app, confirm on hardware. Send / swap / bridge sign EIP-1559 txs at `44'/60'/0'/0/0`. |
+| Expo/React Native Android or iOS | USB HID or BLE | **Not shipped.** `@ledgerhq/react-native-hid` is unmaintained and is not wired for this Expo SDK 57 New Architecture prebuild. `@ledgerhq/react-native-hw-transport-ble` needs `react-native-ble-plx`, extra Bluetooth/location permissions, and a custom JSC that this project does not use. |
+
+The signing helpers (`buildUnsignedLedgerTx`, `applyLedgerSignature`) are shared and covered by unit tests. On a phone, **Settings → Ledger** explains the gap and points at the extension / Expo web WebHID path. Stake, NFTs, WalletConnect, and the in-app browser still use the software key when a Ledger is not connected.
 
 ## Phase 3 protocol choices
 
@@ -104,6 +126,17 @@ This environment produced `app-debug.apk` with package `com.boredefi.wallet`, `c
 
 The `android/` folder is generated and gitignored. Re-run prebuild after changing native plugins in `app.json`. After adding WalletConnect native peers or `react-native-webview`, run prebuild again.
 
+## Load the Chrome extension
+
+```bash
+npm install
+npm run extension:build
+```
+
+Then in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** → select `extension/unpacked`.
+
+Details: [`extension/README.md`](extension/README.md).
+
 ### Android identifiers
 
 | Setting | Value |
@@ -122,6 +155,7 @@ npm start                    # Metro bundler
 npm run typecheck            # TypeScript
 npm test                     # Wallet unit tests (no device required)
 npm run check:android-config # package name + SDK 36
+npm run extension:build      # Chrome unpacked bundle
 npm run prebuild:android
 ```
 
@@ -175,6 +209,14 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 22. **NFTs**: on Ethereum / Base / etc., the list loads from Blockscout or is empty without crashing. Avalanche explains there is no catalog. **Send NFT manually** with an invalid address is rejected. Funded account: send an ERC-721 (and an ERC-1155 amount if you hold one).
 23. **Browser**: open Uniswap / Aave / Lido / Jumper from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
 24. Confirm logs still never print the recovery phrase or private key.
+
+### Phase 4
+
+25. Home **Discover** shows trending rows (or a rate-limit empty state without crashing). Open Discover: search “eth”, tap Ethereum, confirm price / cap / volume, then **Send** / **Swap** / **Stake** land on those screens (ETH stake is Lido on Ethereum).
+26. USDC search → Stake opens Aave on a supported chain. A token not on the in-app list shows stats only.
+27. Chrome: load `extension/unpacked`. Create a wallet — no skip on backup; wrong verify words fail. Set PIN, unlock, see a balance or RPC error, send with an invalid address/amount fails. On a dApp page, `window.ethereum.isBoreDefi` is true after unlock; reject by locking first.
+28. **Ledger** on Android: the screen explains WebHID is unavailable and points at the extension. On Chrome (extension or Expo web) with a Nano + Ethereum app: Connect shows the device address; a small send/swap/bridge asks for a device confirmation. Unplug → disconnect.
+29. Confirm logs and the extension service worker never print the recovery phrase or private key. No fiat UI exists.
 
 ## License
 

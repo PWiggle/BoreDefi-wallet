@@ -5,6 +5,7 @@ import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useLedger } from '../context/LedgerContext';
 import { useWallet } from '../context/WalletContext';
 import { colors, radius, spacing } from '../theme';
 import { CHAIN_LIST, type ChainId } from '../wallet/chains';
@@ -24,6 +25,8 @@ function otherChainId(current: ChainId): ChainId {
 
 export function BridgeScreen() {
   const { session, selectedChain, setSelectedChain } = useWallet();
+  const ledger = useLedger();
+  const fromAddress = ledger.account?.address ?? session?.address ?? '';
   const [toChainId, setToChainId] = useState(otherChainId(selectedChain.id));
   const fromTokens = useMemo(() => tokensForChain(selectedChain.id), [selectedChain.id]);
   const toTokens = useMemo(() => tokensForChain(toChainId), [toChainId]);
@@ -55,10 +58,10 @@ export function BridgeScreen() {
     if (!session) {
       return;
     }
-    fetchTokenBalance(session.address, fromToken, selectedChain.id)
+    fetchTokenBalance(fromAddress, fromToken, selectedChain.id)
       .then(setBalance)
       .catch((err) => setError(err instanceof Error ? err.message : 'Balance failed.'));
-  }, [fromToken, selectedChain.id, session]);
+  }, [fromAddress, fromToken, selectedChain.id, session]);
 
   if (!session) {
     return null;
@@ -79,7 +82,7 @@ export function BridgeScreen() {
           fromToken,
           toToken,
           fromAmount,
-          fromAddress: session.address,
+          fromAddress,
         }),
       );
     } catch (err) {
@@ -97,17 +100,28 @@ export function BridgeScreen() {
     setBusy(true);
     setError(null);
     try {
+      const sendTx = ledger.account
+        ? (tx: { to?: string; data?: string; value?: bigint; gasLimit?: bigint; chainId: number }) =>
+            ledger.signAndSend({
+              to: tx.to,
+              data: tx.data,
+              value: tx.value,
+              gasLimit: tx.gasLimit,
+              chainId: selectedChain.id,
+            })
+        : undefined;
       if (quote.approvalAddress) {
         await ensureSpendAllowance({
           mnemonic: session.mnemonic,
           token: fromToken,
-          owner: session.address,
+          owner: fromAddress,
           spender: quote.approvalAddress,
           amount: quote.fromAmount,
           chainId: selectedChain.id,
+          sendTx,
         });
       }
-      const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id);
+      const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id, sendTx);
       setTxHash(tx.hash);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bridge failed.');

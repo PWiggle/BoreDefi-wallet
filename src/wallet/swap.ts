@@ -1,4 +1,4 @@
-import { Contract, type TransactionResponse } from 'ethers';
+import { Contract, Interface, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
 import { type ChainId } from './chains';
@@ -158,6 +158,14 @@ export async function fetchTokenBalance(
   return contract.balanceOf(owner) as Promise<bigint>;
 }
 
+export type ExternalTxSender = (tx: {
+  to?: string;
+  data?: string;
+  value?: bigint;
+  gasLimit?: bigint;
+  chainId: ChainId;
+}) => Promise<string>;
+
 export async function ensureSpendAllowance(input: {
   mnemonic: string;
   token: TokenConfig;
@@ -165,17 +173,30 @@ export async function ensureSpendAllowance(input: {
   spender: string;
   amount: bigint;
   chainId: ChainId;
+  sendTx?: ExternalTxSender;
 }): Promise<TransactionResponse | null> {
   if (input.token.native || isNativeTokenAddress(input.token.address)) {
     return null;
   }
-  const wallet = connectedWallet(input.mnemonic, input.chainId);
-  const contract = new Contract(input.token.address, ERC20_ABI, wallet);
-  const allowance = (await contract.allowance(input.owner, input.spender)) as bigint;
+  const reader = new Contract(input.token.address, ERC20_ABI, getProvider(input.chainId));
+  const allowance = (await reader.allowance(input.owner, input.spender)) as bigint;
   if (allowance >= input.amount) {
     return null;
   }
   logger.info('Submitting token approval', { chainId: input.chainId, spender: input.spender });
+  if (input.sendTx) {
+    const data = new Interface(ERC20_ABI).encodeFunctionData('approve', [input.spender, input.amount]);
+    const hash = await input.sendTx({
+      to: input.token.address,
+      data,
+      value: 0n,
+      chainId: input.chainId,
+    });
+    await getProvider(input.chainId).waitForTransaction(hash);
+    return null;
+  }
+  const wallet = connectedWallet(input.mnemonic, input.chainId);
+  const contract = new Contract(input.token.address, ERC20_ABI, wallet);
   const tx = (await contract.approve(input.spender, input.amount)) as TransactionResponse;
   await tx.wait();
   return tx;
@@ -185,9 +206,20 @@ export async function sendSwapTransaction(
   mnemonic: string,
   quote: SwapQuote,
   chainId: ChainId,
-): Promise<TransactionResponse> {
-  const wallet = connectedWallet(mnemonic, chainId);
+  sendTx?: ExternalTxSender,
+): Promise<{ hash: string }> {
   try {
+    if (sendTx) {
+      const hash = await sendTx({
+        to: quote.transactionRequest.to,
+        data: quote.transactionRequest.data,
+        value: quote.transactionRequest.value,
+        gasLimit: quote.transactionRequest.gasLimit,
+        chainId,
+      });
+      return { hash };
+    }
+    const wallet = connectedWallet(mnemonic, chainId);
     return await wallet.sendTransaction({
       to: quote.transactionRequest.to,
       data: quote.transactionRequest.data,

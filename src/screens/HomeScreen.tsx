@@ -11,8 +11,9 @@ import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { colors, radius, spacing } from '../theme';
-import { formatNative, formatTimestamp, shortenAddress } from '../wallet/format';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
+import { formatCompactUsd, formatNative, formatTimestamp, shortenAddress } from '../wallet/format';
+import { fetchTrendingCoins, type MarketCoin } from '../wallet/markets';
 import { fetchBalance } from '../wallet/rpc';
 
 export function HomeScreen() {
@@ -23,6 +24,7 @@ export function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [trending, setTrending] = useState<MarketCoin[]>([]);
 
   const load = useCallback(async () => {
     if (!session) {
@@ -30,12 +32,14 @@ export function HomeScreen() {
     }
     setError(null);
     try {
-      const [nextBalance, nextActivity] = await Promise.all([
+      const [nextBalance, nextActivity, nextTrending] = await Promise.all([
         fetchBalance(session.address, selectedChain.id),
         fetchActivity(session.address, selectedChain.id, 5),
+        fetchTrendingCoins().catch(() => [] as MarketCoin[]),
       ]);
       setBalance(nextBalance);
       setActivity(nextActivity);
+      setTrending(nextTrending.slice(0, 4));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not refresh wallet.');
     }
@@ -84,7 +88,7 @@ export function HomeScreen() {
         />
       </View>
       <View style={styles.actions}>
-        <Button label="Swap" style={styles.action} onPress={() => navigation.navigate('Swap')} />
+        <Button label="Swap" style={styles.action} onPress={() => navigation.navigate('Swap', {})} />
         <Button
           label="Bridge"
           variant="secondary"
@@ -93,7 +97,7 @@ export function HomeScreen() {
         />
       </View>
       <View style={styles.actions}>
-        <Button label="Stake" style={styles.action} onPress={() => navigation.navigate('Stake')} />
+        <Button label="Stake" style={styles.action} onPress={() => navigation.navigate('Stake', {})} />
         <Button
           label="NFTs"
           variant="secondary"
@@ -110,7 +114,31 @@ export function HomeScreen() {
           onPress={() => navigation.navigate('WalletConnect', {})}
         />
       </View>
+      <View style={styles.actions}>
+        <Button label="Discover" style={styles.action} onPress={() => navigation.navigate('Discover')} />
+        <Button
+          label="Ledger"
+          variant="secondary"
+          style={styles.action}
+          onPress={() => navigation.navigate('Ledger')}
+        />
+      </View>
       <Button label="Activity" variant="secondary" onPress={() => navigation.navigate('Activity')} />
+      <View style={styles.recent}>
+        <Text style={styles.recentTitle}>Discover</Text>
+        {trending.length === 0 ? (
+          <Text style={styles.empty}>Market data is offline or rate-limited.</Text>
+        ) : (
+          trending.map((coin) => (
+            <Pressable key={coin.id} onPress={() => navigation.navigate('Discover')} style={styles.tx}>
+              <Text style={styles.txDir}>{coin.symbol}</Text>
+              <Text style={styles.txAmt}>
+                {formatCompactUsd(coin.priceUsd)} {coin.name}
+              </Text>
+            </Pressable>
+          ))
+        )}
+      </View>
       <Button label="Refresh" variant="ghost" loading={refreshing} onPress={async () => {
         setRefreshing(true);
         await load();

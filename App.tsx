@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { WalletConnectOverlay } from './src/components/WalletConnectOverlay';
+import { LedgerProvider } from './src/context/LedgerContext';
 import { WalletConnectProvider } from './src/context/WalletConnectContext';
 import { WalletProvider, useWallet } from './src/context/WalletContext';
 import type { MainStackParamList } from './src/navigation';
@@ -13,7 +14,9 @@ import { ActivityScreen } from './src/screens/ActivityScreen';
 import { BackupSeedScreen } from './src/screens/BackupSeedScreen';
 import { BridgeScreen } from './src/screens/BridgeScreen';
 import { BrowserScreen } from './src/screens/BrowserScreen';
+import { DiscoverScreen } from './src/screens/DiscoverScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { LedgerScreen } from './src/screens/LedgerScreen';
 import { ImportWalletScreen } from './src/screens/ImportWalletScreen';
 import { NftSendScreen } from './src/screens/NftSendScreen';
 import { NftsScreen } from './src/screens/NftsScreen';
@@ -80,9 +83,11 @@ function RootNavigator() {
         <MainStack.Screen name="Receive" component={ReceiveScreen} />
         <MainStack.Screen name="Send" component={SendScreen} initialParams={{}} />
         <MainStack.Screen name="ScanQr" component={ScanQrScreen} options={{ title: 'Scan QR' }} />
-        <MainStack.Screen name="Swap" component={SwapScreen} />
-        <MainStack.Screen name="Stake" component={StakeScreen} />
+        <MainStack.Screen name="Swap" component={SwapScreen} initialParams={{}} />
+        <MainStack.Screen name="Stake" component={StakeScreen} initialParams={{}} />
         <MainStack.Screen name="Bridge" component={BridgeScreen} />
+        <MainStack.Screen name="Discover" component={DiscoverScreen} />
+        <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="Nfts" component={NftsScreen} options={{ title: 'NFTs' }} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />
         <MainStack.Screen name="Browser" component={BrowserScreen} />
@@ -158,13 +163,15 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <WalletProvider>
-          <WalletConnectProvider>
-            <NavigationContainer theme={navTheme}>
-              <StatusBar style="light" />
-              <RootNavigator />
-              <WalletConnectOverlay />
-            </NavigationContainer>
-          </WalletConnectProvider>
+          <LedgerProvider>
+            <WalletConnectProvider>
+              <NavigationContainer theme={navTheme}>
+                <StatusBar style="light" />
+                <RootNavigator />
+                <WalletConnectOverlay />
+              </NavigationContainer>
+            </WalletConnectProvider>
+          </LedgerProvider>
         </WalletProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

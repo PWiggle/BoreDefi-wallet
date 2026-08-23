@@ -1,6 +1,6 @@
 {
   "name": "boredefi-wallet",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -12,10 +12,13 @@
     "prebuild:android": "expo prebuild --platform android",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/logger.test.ts src/wallet/*.test.ts",
-    "check:android-config": "node scripts/check-android-config.mjs"
+    "check:android-config": "node scripts/check-android-config.mjs",
+    "extension:build": "node scripts/build-extension.mjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
+    "@ledgerhq/hw-app-eth": "^7.8.15",
+    "@ledgerhq/hw-transport-webhid": "^6.36.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "@react-navigation/native": "^7.3.17",
@@ -48,6 +51,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "esbuild": "^0.28.2",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3"
   }

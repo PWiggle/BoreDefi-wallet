@@ -9,9 +9,11 @@ export type MainStackParamList = {
   Settings: undefined;
   RevealSeed: undefined;
   ResetWallet: undefined;
-  Swap: undefined;
-  Stake: undefined;
+  Swap: { fromSymbol?: string };
+  Stake: { marketId?: string };
   Bridge: undefined;
+  Discover: undefined;
+  Ledger: undefined;
   Nfts: undefined;
   NftSend: { nft?: NftItem };
   Browser: undefined;
