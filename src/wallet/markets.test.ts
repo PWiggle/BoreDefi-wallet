@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { actionsForMarket, parseMarkets, parseSearch, parseTrending } from './markets';
+import {
+  actionsForMarket,
+  COINGECKO_HEADERS,
+  geckoIdForNative,
+  geckoIdForToken,
+  parseMarkets,
+  parseSearch,
+  parseTrending,
+  portfolioTokensForChain,
+  usdValueFromUnits,
+} from './markets';
+import { tokensForChain } from './tokens';
 
 test('parses CoinGecko trending, markets, and search payloads', () => {
   const trending = parseTrending({
@@ -66,4 +77,34 @@ test('maps known coins onto send, swap, and stake', () => {
   assert.equal(dog.send, false);
   assert.equal(dog.swap, false);
   assert.equal(dog.stake, false);
+});
+
+test('does not set a custom User-Agent for CoinGecko browser fetch', () => {
+  assert.deepEqual(COINGECKO_HEADERS, { Accept: 'application/json' });
+  assert.equal('User-Agent' in COINGECKO_HEADERS, false);
+});
+
+test('maps native and stables onto CoinGecko ids and portfolio rows', () => {
+  assert.equal(geckoIdForNative(1), 'ethereum');
+  assert.equal(geckoIdForNative(8453), 'ethereum');
+  assert.equal(geckoIdForNative(137), 'matic-network');
+  assert.equal(geckoIdForNative(56), 'binancecoin');
+  assert.equal(geckoIdForNative(43114), 'avalanche-2');
+
+  const eth = tokensForChain(1).find((item) => item.native);
+  const usdc = tokensForChain(1).find((item) => item.symbol === 'USDC');
+  const usdt = tokensForChain(8453).find((item) => item.symbol === 'USDT');
+  assert.equal(eth && geckoIdForToken(eth), 'ethereum');
+  assert.equal(usdc && geckoIdForToken(usdc), 'usd-coin');
+  assert.equal(usdt && geckoIdForToken(usdt), 'tether');
+
+  const rows = portfolioTokensForChain(1);
+  assert.deepEqual(
+    rows.map((item) => item.symbol),
+    ['ETH', 'USDC', 'USDT'],
+  );
+  assert.equal(usdValueFromUnits(0n, 18, 3500), 0);
+  assert.equal(usdValueFromUnits(500000n, 6, 1), 0.5);
+  assert.equal(usdValueFromUnits(1000000000000000000n, 18, 3500), 3500);
+  assert.equal(usdValueFromUnits(0n, 18, null), null);
 });

@@ -1,8 +1,10 @@
 import { logger } from '../logger';
 import { type ChainId } from './chains';
+import { type TokenConfig, tokensForChain } from './tokens';
 
 const BASE = 'https://api.coingecko.com/api/v3';
-const HEADERS = { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.4' };
+/** Browser fetch forbids a custom User-Agent; only Accept is set. */
+export const COINGECKO_HEADERS = { Accept: 'application/json' } as const;
 
 export type MarketCoin = {
   id: string;
@@ -169,8 +171,62 @@ export function actionsForMarket(coin: MarketCoin, selectedChainId: ChainId): Ma
   };
 }
 
+export function geckoIdForNative(chainId: ChainId): string {
+  switch (chainId) {
+    case 137:
+      return 'matic-network';
+    case 56:
+      return 'binancecoin';
+    case 43114:
+      return 'avalanche-2';
+    default:
+      return 'ethereum';
+  }
+}
+
+export function geckoIdForToken(token: TokenConfig): string | null {
+  if (token.native) {
+    return geckoIdForNative(token.chainId);
+  }
+  switch (token.symbol.toUpperCase()) {
+    case 'USDC':
+      return 'usd-coin';
+    case 'USDT':
+      return 'tether';
+    case 'WETH':
+      return 'weth';
+    case 'WBNB':
+      return 'binancecoin';
+    case 'WAVAX':
+      return 'avalanche-2';
+    case 'STETH':
+      return 'staked-ether';
+    default:
+      return null;
+  }
+}
+
+export function portfolioTokensForChain(chainId: ChainId): TokenConfig[] {
+  return tokensForChain(chainId).filter((item) => item.native || item.symbol === 'USDC' || item.symbol === 'USDT');
+}
+
+export function usdValueFromUnits(raw: bigint, decimals: number, priceUsd: number | null | undefined): number | null {
+  if (priceUsd === null || priceUsd === undefined || !Number.isFinite(priceUsd)) {
+    return null;
+  }
+  const amount = Number(raw) / 10 ** decimals;
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+  return amount * priceUsd;
+}
+
+export function indexMarketsById(markets: MarketCoin[]): Map<string, MarketCoin> {
+  return new Map(markets.map((item) => [item.id, item]));
+}
+
 async function gecko<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { headers: HEADERS });
+  const response = await fetch(`${BASE}${path}`, { headers: COINGECKO_HEADERS });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }

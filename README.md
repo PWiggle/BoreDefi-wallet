@@ -47,7 +47,7 @@ A companion **Chrome extension** lives in `extension/` (see [Load the Chrome ext
 
 ### Discover / Market
 
-Home and **Discover** load trending tokens plus market cap / 24h volume / price from the public CoinGecko API (`/search/trending`, `/coins/markets`, `/search`). No API key. Search and token rows deep-link into existing Send / Swap / Stake when the asset is on the in-app list (ETH → Lido, USDC → Aave V3, natives → send, listed symbols → swap).
+Home shows a live USD total (native balance × CoinGecko price, including `$0.00`), native + USDC/USDT rows with live price and 24h change, and a short top-market strip. **Discover** loads public CoinGecko top markets by default (`/coins/markets`), with trending as a secondary strip and a Retry button if the request fails. No API key and no custom browser `User-Agent`. Search and token rows deep-link into existing Send / Swap / Stake when the asset is on the in-app list (ETH → Lido, USDC → Aave V3, natives → send, listed symbols → swap).
 
 ### Ledger
 
@@ -229,7 +229,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 
 ### Phase 4
 
-25. Home **Discover** shows trending rows (or a rate-limit empty state without crashing). Open Discover: search “eth”, tap Ethereum, confirm price / cap / volume, then **Send** / **Swap** / **Stake** land on those screens (ETH stake is Lido on Ethereum).
+25. Home shows a USD total and token rows (ETH/native + USDC/USDT) with live CoinGecko prices, plus a Markets strip. Open Discover: top markets load by default (or a clear error + Retry). Search “eth”, tap Ethereum, confirm price / cap / volume, then **Send** / **Swap** / **Stake** land on those screens (ETH stake is Lido on Ethereum).
 26. USDC search → Stake opens Aave on a supported chain. A token not on the in-app list shows stats only.
 27. Chrome: load `extension/unpacked`. Create a wallet — no skip on backup; wrong verify words fail. Set PIN, unlock, see a balance or RPC error, send with an invalid address/amount fails. On a dApp page, `window.ethereum.isBoreDefi` is true after unlock; reject by locking first.
 28. **Ledger** on Android: the screen explains WebHID is unavailable and points at the extension. On Chrome (extension or Expo web) with a Nano + Ethereum app: Connect shows the device address; a small send/swap/bridge asks for a device confirmation. Unplug → disconnect.

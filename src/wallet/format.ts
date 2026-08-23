@@ -49,6 +49,22 @@ export function formatTimestamp(seconds: number): string {
   return new Date(seconds * 1000).toLocaleString();
 }
 
+export function formatUsd(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '—';
+  }
+  const abs = Math.abs(value);
+  if (abs > 0 && abs < 0.01) {
+    return value < 0 ? '-<$0.01' : '<$0.01';
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export function formatCompactUsd(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '—';

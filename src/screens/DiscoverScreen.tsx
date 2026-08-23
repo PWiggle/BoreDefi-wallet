@@ -35,11 +35,17 @@ export function DiscoverScreen() {
     setBusy(true);
     setError(null);
     try {
-      const [nextTrending, nextMarkets] = await Promise.all([fetchTrendingCoins(), fetchTopMarkets()]);
-      setTrending(nextTrending);
+      const nextMarkets = await fetchTopMarkets();
       setMarkets(nextMarkets);
+      const nextTrending = await fetchTrendingCoins().catch(() => [] as MarketCoin[]);
+      setTrending(nextTrending);
+      if (nextMarkets.length === 0) {
+        setError('CoinGecko returned no markets. Tap Retry.');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Markets failed.');
+      setMarkets([]);
+      setTrending([]);
+      setError(err instanceof Error ? err.message : 'Could not load CoinGecko markets.');
     } finally {
       setBusy(false);
     }
@@ -97,11 +103,13 @@ export function DiscoverScreen() {
     }
   };
 
-  const list = query.trim() && results.length > 0 ? results : null;
+  const searching = Boolean(query.trim() && results.length > 0);
+  const list = searching ? results : markets;
 
   return (
     <Screen title="Discover" subtitle="Public CoinGecko stats. No API key.">
       <ErrorBanner message={error} />
+      {error ? <Button label="Retry" onPress={load} loading={busy} /> : null}
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -114,29 +122,37 @@ export function DiscoverScreen() {
       />
       <Button label="Search" onPress={runSearch} loading={busy} />
       {selected ? <CoinCard coin={selected} chainId={selectedChain.id} onAction={go} /> : null}
-      <Text style={styles.heading}>{list ? 'Search' : 'Trending'}</Text>
-      {(list ?? trending).slice(0, 8).map((coin) => (
+      <Text style={styles.heading}>{searching ? 'Search' : 'Top markets'}</Text>
+      {list.length === 0 && !busy && !searching ? (
+        <Text style={styles.empty}>No live markets loaded. Tap Retry.</Text>
+      ) : null}
+      {list.map((coin) => (
         <Pressable key={coin.id} onPress={() => open(coin)} style={styles.row}>
           <View style={styles.rowCopy}>
-            <Text style={styles.symbol}>{coin.symbol}</Text>
-            <Text style={styles.name}>{coin.name}</Text>
+            <Text style={styles.symbol}>
+              {coin.rank ? `#${coin.rank} ` : ''}
+              {coin.symbol}
+            </Text>
+            <Text style={styles.name}>
+              {searching
+                ? coin.name
+                : `Cap ${formatCompactUsd(coin.marketCap)} · Vol ${formatCompactUsd(coin.volume24h)}`}
+            </Text>
           </View>
-          <Text style={styles.price}>{formatCompactUsd(coin.priceUsd)}</Text>
+          <View>
+            <Text style={styles.price}>{formatCompactUsd(coin.priceUsd)}</Text>
+            <Text style={styles.change}>{formatPercent(coin.change24h)}</Text>
+          </View>
         </Pressable>
       ))}
-      {!list ? (
+      {!searching && trending.length > 0 ? (
         <>
-          <Text style={styles.heading}>Top market cap</Text>
-          {markets.map((coin) => (
-            <Pressable key={coin.id} onPress={() => open(coin)} style={styles.row}>
+          <Text style={styles.heading}>Trending</Text>
+          {trending.slice(0, 6).map((coin) => (
+            <Pressable key={`trend-${coin.id}`} onPress={() => open(coin)} style={styles.row}>
               <View style={styles.rowCopy}>
-                <Text style={styles.symbol}>
-                  {coin.rank ? `#${coin.rank} ` : ''}
-                  {coin.symbol}
-                </Text>
-                <Text style={styles.name}>
-                  Cap {formatCompactUsd(coin.marketCap)} · Vol {formatCompactUsd(coin.volume24h)}
-                </Text>
+                <Text style={styles.symbol}>{coin.symbol}</Text>
+                <Text style={styles.name}>{coin.name}</Text>
               </View>
               <View>
                 <Text style={styles.price}>{formatCompactUsd(coin.priceUsd)}</Text>
@@ -202,6 +218,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   heading: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  empty: { color: colors.muted },
   row: {
     alignItems: 'center',
     backgroundColor: colors.surface,
