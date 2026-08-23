@@ -41,6 +41,8 @@ export async function handleWalletConnectRequest(input: {
     case 'eth_accounts':
     case 'eth_requestAccounts':
       return { kind: 'accounts', value: [address] };
+    case 'wallet_revokePermissions':
+      return { kind: 'switched', value: true };
     case 'personal_sign': {
       const message = pickSignMessage(params);
       const signature = await wallet.signMessage(hexToUtf8(message));

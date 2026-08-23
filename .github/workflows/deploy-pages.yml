@@ -30,9 +30,7 @@ jobs:
       - name: Export Expo web
         run: npx expo export --platform web
       - name: GitHub Pages static files
-        run: |
-          touch dist/.nojekyll
-          cp dist/index.html dist/404.html
+        run: node scripts/prepare-pages.mjs
       - name: Publish gh-pages branch
         uses: JamesIves/github-pages-deploy-action@v4
         with:

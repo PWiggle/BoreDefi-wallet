@@ -211,6 +211,12 @@ export function BrowserScreen() {
         );
         return;
       }
+      if (kind === 'disconnect') {
+        setConnectedOrigin(null);
+        webRef.current?.injectJavaScript(providerEmitScript('accountsChanged', []));
+        resolve(id, null);
+        return;
+      }
       if (kind === 'read') {
         const result = await sendRpc(selectedChain.id, method, params);
         resolve(id, result);

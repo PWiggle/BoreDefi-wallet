@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -43,6 +43,7 @@ export function WalletConnectScreen() {
   const [uri, setUri] = useState(route.params?.uri ?? '');
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const autoPaired = useRef<string | null>(null);
 
   const connect = async (value = uri) => {
     setBusy(true);
@@ -56,6 +57,18 @@ export function WalletConnectScreen() {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    const incoming = route.params?.uri;
+    if (!incoming || !ready || !projectId || autoPaired.current === incoming) {
+      return;
+    }
+    autoPaired.current = incoming;
+    setUri(incoming);
+    void connect(incoming);
+    // Pair once per incoming URI after the relay is ready.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, ready, route.params?.uri]);
 
   return (
     <Screen title="WalletConnect" subtitle="Pair a dApp with this wallet. Browser tab can also open wc: links.">

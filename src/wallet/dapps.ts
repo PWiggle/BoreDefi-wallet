@@ -4,7 +4,10 @@ export type DappBookmark = {
   blurb: string;
 };
 
+export const CONNECT_DEMO_URL = 'https://pwiggle.github.io/BoreDefi-wallet/connect/';
+
 export const DAPP_BOOKMARKS: DappBookmark[] = [
+  { name: 'Connect', url: CONNECT_DEMO_URL, blurb: 'BoreDefi Connect demo' },
   { name: 'CoinGecko', url: 'https://www.coingecko.com', blurb: 'Live markets' },
   { name: 'Uniswap', url: 'https://app.uniswap.org', blurb: 'Swap tokens' },
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
@@ -60,9 +63,12 @@ export const SIGNING_METHODS = new Set([
 
 export const CONNECT_METHODS = new Set(['eth_requestAccounts', 'wallet_requestPermissions']);
 
+export const DISCONNECT_METHODS = new Set(['wallet_revokePermissions']);
+
 export type BrowserMethodKind =
   | 'accounts'
   | 'connect'
+  | 'disconnect'
   | 'local'
   | 'read'
   | 'sign'
@@ -75,6 +81,9 @@ export function classifyBrowserMethod(method: string): BrowserMethodKind {
   }
   if (CONNECT_METHODS.has(method)) {
     return 'connect';
+  }
+  if (DISCONNECT_METHODS.has(method)) {
+    return 'disconnect';
   }
   if (method === 'wallet_switchEthereumChain') {
     return 'switch';

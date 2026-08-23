@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/logger.test.ts src/web-test.test.ts src/theme.test.ts src/wallet/*.test.ts",
     "export:web": "expo export --platform web",
+    "pages:prepare": "node scripts/prepare-pages.mjs",
+    "export:pages": "npm run export:web && npm run pages:prepare",
     "check:android-config": "node scripts/check-android-config.mjs",
     "extension:build": "node scripts/build-extension.mjs"
   },

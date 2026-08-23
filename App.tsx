@@ -1,8 +1,8 @@
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { ActivityIndicator, Linking, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -36,9 +36,39 @@ import { VerifySeedScreen } from './src/screens/VerifySeedScreen';
 import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { phoneWidth } from './src/theme';
+import { extractWalletConnectUri } from './src/wallet/wc';
 
 const OnboardingStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
+const navigationRef = createNavigationContainerRef<MainStackParamList>();
+
+function WalletConnectDeepLink() {
+  const { phase } = useWallet();
+  const pendingRef = useRef<string | null>(null);
+  useEffect(() => {
+    const tryNavigate = (uri: string) => {
+      if (phase !== 'unlocked' || !navigationRef.isReady()) {
+        pendingRef.current = uri;
+        return;
+      }
+      navigationRef.navigate('WalletConnect', { uri });
+      pendingRef.current = null;
+    };
+    if (pendingRef.current) {
+      tryNavigate(pendingRef.current);
+    }
+    const open = (url: string | null) => {
+      const uri = url ? extractWalletConnectUri(url) : null;
+      if (uri) {
+        tryNavigate(uri);
+      }
+    };
+    const sub = Linking.addEventListener('url', ({ url }) => open(url));
+    void Linking.getInitialURL().then(open);
+    return () => sub.remove();
+  }, [phase]);
+  return null;
+}
 
 function useStackScreenOptions() {
   const { colors } = useTheme();
@@ -195,9 +225,10 @@ function ThemedApp() {
         <View style={styles.phone}>
           <SafeAreaProvider>
             <WebTestBanner />
-            <NavigationContainer theme={navTheme}>
+            <NavigationContainer ref={navigationRef} theme={navTheme}>
               <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
               <RootNavigator />
+              <WalletConnectDeepLink />
               <WalletConnectOverlay />
             </NavigationContainer>
           </SafeAreaProvider>

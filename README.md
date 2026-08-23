@@ -33,13 +33,9 @@ Expo SDK 57 + React Native 0.86, with **ethers v6** for BIP39 / BIP44 (`m/44'/60
 
 Swaps and bridges use the public [LI.FI](https://docs.li.fi/) quote API. Same-chain quotes stay on **Swap** (`fromChain === toChain`). Cross-chain quotes are **Bridge** (`fromChain !== toChain`). LI.FI aggregates 1inch, 0x, Kyber, Paraswap, LayerSwap, and others. 0x and 1inch direct APIs now require API keys, which we will not put in this public repo.
 
-WalletConnect is **Reown WalletKit** (`@reown/walletkit`) plus `@walletconnect/react-native-compat`. This is the wallet-side SDK (the app is the wallet, not a dApp). Pairing uses a `wc:` URI from QR, paste, or the in-app browser. A public Cloud project ID is required for the relay:
+WalletConnect is **Reown WalletKit** (`@reown/walletkit`) plus `@walletconnect/react-native-compat`. This is the wallet-side SDK (the app is the wallet, not a dApp). Pairing uses a `wc:` URI from QR, paste, a `boredefi://wc?uri=` deep link, or the in-app browser. A public Cloud project ID is a client identifier, not a key that can move funds. Override it with `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` in a local `.env`, or use the documented TEST-ONLY fallback so the public demo can pair.
 
-1. Create a project at [dashboard.reown.com](https://dashboard.reown.com)
-2. Set `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` in a local `.env`
-3. Restart Metro (`npx expo start`)
-
-That ID is a client identifier, not a key that can move funds.
+The in-app browser and Chrome extension announce **EIP-6963** (`rdns: com.boredefi.wallet`, `isBoreDefi`) so a dApp can prefer BoreDefi over other injected wallets.
 
 The in-app browser uses `react-native-webview` plus an injected EIP-1193 `window.ethereum` (`isBoreDefi` and `isMetaMask` for site compatibility). Signing reuses the same on-device path as WalletConnect.
 
@@ -145,7 +141,19 @@ One HTTPS URL for Phases 1–4:
 
 **https://pwiggle.github.io/BoreDefi-wallet/**
 
-This is an Expo web export hosted on GitHub Pages (`experiments.baseUrl` is `/BoreDefi-wallet`). A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) builds `npx expo export --platform web` and publishes the `gh-pages` branch on pushes to `main` or `cursor/phase1-wallet-61ec`.
+Connect demo (static dApp, no backend):
+
+**https://pwiggle.github.io/BoreDefi-wallet/connect/**
+
+This is an Expo web export hosted on GitHub Pages (`experiments.baseUrl` is `/BoreDefi-wallet`). The Connect page is copied into `dist/connect/` after export (`npm run export:pages`). A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) publishes the `gh-pages` branch on pushes to `main` or `cursor/phase1-wallet-61ec`. The wallet preview stays at the site root; `/connect/` is a separate static page.
+
+### How to connect
+
+1. **In-app Browser (native):** unlock BoreDefi → Browser tab → **Connect** bookmark → **Connect BoreDefi** → approve the in-app prompt. The page sees `window.ethereum.isBoreDefi` / EIP-6963.
+2. **WalletConnect QR:** open the Connect page on a desktop or phone browser → **WalletConnect QR** → in BoreDefi, Settings → WalletConnect → Scan QR (or paste the `wc:` URI). Optional: **Open in BoreDefi** uses `boredefi://wc?uri=…`.
+3. **Chrome extension:** load `extension/unpacked`, unlock the popup, open the Connect page over https → **Connect BoreDefi**.
+
+Do not require MetaMask. If another injected wallet is present, the page still labels BoreDefi as the intended target.
 
 If that URL 404s the first time, enable Pages once: repo **Settings → Pages → Deploy from a branch → `gh-pages` / root**. The API cannot enable Pages from this agent.
 
@@ -174,7 +182,9 @@ npm run typecheck            # TypeScript
 npm test                     # Wallet unit tests (no device required)
 npm run check:android-config # package name + SDK 36
 npm run extension:build      # Chrome unpacked bundle
-npm run export:web           # static site for GitHub Pages
+npm run export:web           # Expo web export to dist/
+npm run pages:prepare        # add .nojekyll, 404.html, and dist/connect/
+npm run export:pages         # export:web + pages:prepare
 npm run prebuild:android
 ```
 
@@ -216,8 +226,8 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 13. **Swap**: pick a chain, from/to tokens, amount larger than balance → error. Valid amount → quote shows a route name (for example 1inch) and a minimum received amount. Confirming without funds fails cleanly.
 14. On a funded account, swap a small amount of native → USDC (or the reverse). If an ERC-20 spend is required, an approval is sent first. Confirm the hash.
 15. Confirm a quote that would be cross-chain is not offered (same-chain only). Use **Bridge** instead.
-16. **Connect** without `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID`: the screen explains how to set a Reown project ID.
-17. With a project ID: on [react-app.walletconnect.com](https://react-app.walletconnect.com) (or any WC v2 dApp) copy/scan the `wc:` URI, approve the session, then reject a `personal_sign` and approve a later one. Disconnect from Settings or the Connect screen.
+16. WalletConnect uses the documented public TEST-ONLY project ID unless `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` is set.
+17. On [https://pwiggle.github.io/BoreDefi-wallet/connect/](https://pwiggle.github.io/BoreDefi-wallet/connect/) or [react-app.walletconnect.com](https://react-app.walletconnect.com): copy/scan the `wc:` URI, approve the session, then reject a `personal_sign` and approve a later one. Disconnect from Settings or the Connect page.
 18. Confirm logs never print the recovery phrase or private key.
 
 ### Phase 3
@@ -226,7 +236,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 20. **Stake** on Base (or Arbitrum / Optimism / Polygon / Avalanche): Aave V3 USDC appears. Supply a small USDC amount, then withdraw. BNB Chain shows no market.
 21. **Bridge**: from and to chains must differ. Amount larger than balance fails. Quote names the LI.FI tool and a minimum received amount. Confirming without funds fails cleanly. Funded account: bridge a small native amount and confirm the source-chain hash.
 22. **NFTs**: 2-column collectibles grid grouped by collection. Tap opens detail (View primary, Send secondary, Hide NFT). Empty state shows No NFTs yet + Import. Import warns to paste the collectible contract, not a wallet. Hidden / possible spam is collapsed. Invalid recipient is rejected. Send is blocked if `ownerOf` / `balanceOf` does not match this wallet. Funded throwaway only: send an ERC-721 you own. In Browser / WalletConnect, a `setApprovalForAll` request is a red danger sheet with Reject first.
-23. **Browser**: open Uniswap / Aave / Lido / Jumper from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
+23. **Browser**: open **Connect** / Uniswap / Aave / Lido / Jumper from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
 24. Confirm logs still never print the recovery phrase or private key.
 
 ### Phase 4
@@ -237,6 +247,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 28. **Ledger** on Android: the screen explains WebHID is unavailable and points at the extension. On Chrome (extension or Expo web) with a Nano + Ethereum app: Connect shows the device address; a small send/swap/bridge asks for a device confirmation. Unplug → disconnect.
 29. Confirm logs and the extension service worker never print the recovery phrase or private key. No fiat UI exists.
 30. Open **https://pwiggle.github.io/BoreDefi-wallet/** on a phone. Confirm the TEST-ONLY banner. Do not use a real seed or real funds. Walk through create/backup/PIN, Wallet tab, Markets tab, Swap/Stake stack screens, and (optional) Ledger from Settings.
+31. Open **https://pwiggle.github.io/BoreDefi-wallet/connect/**. Confirm the ape mark, TEST-ONLY copy, and no backend. From the native Browser tab tap Connect BoreDefi and approve. From a desktop browser, scan the WalletConnect QR in BoreDefi. After connect: address, network, native balance, Sign test message (`Hello from BoreDefi`), Disconnect. The wallet root preview and lock/PIN cover stay unchanged.
 
 ## License
 

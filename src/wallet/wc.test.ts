@@ -5,10 +5,12 @@ import { isChainId } from './chains';
 import {
   caipAccount,
   extractWalletConnectUri,
+  getWalletConnectProjectId,
   hexToUtf8,
   parseCaipChainId,
   parseSwitchChainId,
   pickSignMessage,
+  PUBLIC_TEST_WALLETCONNECT_PROJECT_ID,
   supportedCaipAccounts,
 } from './wc';
 
@@ -40,4 +42,9 @@ test('builds CAIP identifiers and decodes hex messages', () => {
   assert.equal(pickSignMessage(['0x68656c6c6f', '0x9858EfFD232B4033E47d90003D41EC34EcaEda94']), '0x68656c6c6f');
   assert.equal(parseSwitchChainId([{ chainId: '0x2105' }]), 8453);
   assert.equal(supportedCaipAccounts('0xabc').length, 7);
+});
+
+test('falls back to the public TEST-ONLY WalletConnect project ID', () => {
+  assert.equal(getWalletConnectProjectId(), PUBLIC_TEST_WALLETCONNECT_PROJECT_ID);
+  assert.match(PUBLIC_TEST_WALLETCONNECT_PROJECT_ID, /^[a-f0-9]{32}$/);
 });

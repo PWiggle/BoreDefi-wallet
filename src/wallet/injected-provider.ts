@@ -67,10 +67,23 @@ export const INJECTED_PROVIDER_SOURCE = `
     if (event === 'connect' || event === 'chainChanged') {
       provider.chainId = typeof data === 'string' ? data : (data && data.chainId) || provider.chainId;
     }
-    if (event === 'accountsChanged' && data && data[0]) {
-      provider.selectedAddress = data[0];
+    if (event === 'accountsChanged') {
+      provider.selectedAddress = data && data[0] ? data[0] : null;
     }
   };
+  var info = {
+    uuid: '7d3f8c2a-1e4b-4a9c-9f21-6b8e0d5c4a11',
+    name: 'BoreDefi',
+    icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#000000"/><circle cx="32" cy="32" r="22" fill="#2EE59D"/></svg>'),
+    rdns: 'com.boredefi.wallet'
+  };
+  function announce() {
+    window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+      detail: Object.freeze({ info: Object.freeze(info), provider: provider })
+    }));
+  }
+  window.addEventListener('eip6963:requestProvider', announce);
+  announce();
   window.ethereum = provider;
   window.dispatchEvent(new Event('ethereum#initialized'));
 })();

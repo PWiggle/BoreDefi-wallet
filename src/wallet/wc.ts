@@ -12,13 +12,17 @@ export const WALLETCONNECT_METHODS = [
   'eth_signTypedData_v4',
   'wallet_switchEthereumChain',
   'wallet_getCapabilities',
+  'wallet_revokePermissions',
 ] as const;
+
+/** Public Reown Cloud client ID for the TEST-ONLY Connect demo. Not a secret. */
+export const PUBLIC_TEST_WALLETCONNECT_PROJECT_ID = 'b56e18d47c72ab683b10814fe9495694';
 
 export const WALLETCONNECT_EVENTS = ['accountsChanged', 'chainChanged', 'disconnect'] as const;
 
 export function getWalletConnectProjectId(): string | null {
   const value = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
-  return value ? value : null;
+  return value ? value : PUBLIC_TEST_WALLETCONNECT_PROJECT_ID;
 }
 
 export function caipChainId(chainId: ChainId): string {

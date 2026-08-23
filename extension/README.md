@@ -2,7 +2,7 @@
 
 Companion to the mobile app. Same non-custodial model: create or import BIP39, forced backup + three-word verify, 6-digit PIN, encrypted vault in `chrome.storage.local` (AES-GCM, PIN-derived key). The seed is decrypted into the service worker only while unlocked.
 
-This is a **Phase 1 / 2** desktop wallet: portfolio, send/receive, and an injected EIP-1193 provider (`window.ethereum` with `isBoreDefi` / `isMetaMask`). Sites talk to this profile’s wallet. There is no custodial backend and no fiat on-ramp.
+This is a **Phase 1 / 2** desktop wallet: portfolio, send/receive, and an injected EIP-1193 provider (`window.ethereum` with `isBoreDefi` / `isMetaMask`, plus EIP-6963 `rdns: com.boredefi.wallet`). Sites talk to this profile’s wallet. There is no custodial backend and no fiat on-ramp. The public Connect demo is [https://pwiggle.github.io/BoreDefi-wallet/connect/](https://pwiggle.github.io/BoreDefi-wallet/connect/).
 
 Keys are **not** synced with the Android app. Import the same recovery phrase if you want the same address.
 
@@ -24,7 +24,7 @@ Rebuild after changing extension sources: `npm run extension:build`
 - Backup cannot be skipped; three words must match
 - PIN encrypts the phrase on this Chrome profile
 - Balances and send/receive on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche
-- Injected provider for WalletConnect-compatible / MetaMask-detecting dApps (unlock the popup first)
+- Injected provider + EIP-6963 announce for WalletConnect-compatible / MetaMask-detecting dApps (unlock the popup first)
 - Optional Ledger connect for the popup (WebHID)
 
 ## What it does not do

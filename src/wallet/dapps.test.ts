@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { classifyBrowserMethod, DAPP_BOOKMARKS, DEFAULT_BROWSER_URL, normalizeDappUrl, READ_RPC_METHODS, SIGNING_METHODS } from './dapps';
+import {
+  classifyBrowserMethod,
+  CONNECT_DEMO_URL,
+  DAPP_BOOKMARKS,
+  DEFAULT_BROWSER_URL,
+  normalizeDappUrl,
+  READ_RPC_METHODS,
+  SIGNING_METHODS,
+} from './dapps';
 
 test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(normalizeDappUrl('app.uniswap.org'), 'https://app.uniswap.org');
@@ -18,8 +26,14 @@ test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(classifyBrowserMethod('eth_call'), 'read');
   assert.equal(classifyBrowserMethod('personal_sign'), 'sign');
   assert.equal(classifyBrowserMethod('wallet_switchEthereumChain'), 'switch');
+  assert.equal(classifyBrowserMethod('wallet_revokePermissions'), 'disconnect');
   assert.equal(classifyBrowserMethod('foo'), 'unsupported');
   assert.equal(DEFAULT_BROWSER_URL, 'https://app.uniswap.org');
+  assert.equal(CONNECT_DEMO_URL, 'https://pwiggle.github.io/BoreDefi-wallet/connect/');
+  assert.equal(
+    DAPP_BOOKMARKS.some((item) => item.name === 'Connect' && item.url === CONNECT_DEMO_URL),
+    true,
+  );
   assert.equal(
     DAPP_BOOKMARKS.some((item) => item.name === 'CoinGecko' && item.url === 'https://www.coingecko.com'),
     true,

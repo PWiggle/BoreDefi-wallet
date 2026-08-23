@@ -190,6 +190,9 @@ async function handleProvider(payload) {
     }
     return method === 'wallet_requestPermissions' ? [{ parentCapability: 'eth_accounts' }] : [state.address];
   }
+  if (method === 'wallet_revokePermissions') {
+    return null;
+  }
   if (method === 'wallet_switchEthereumChain') {
     const raw = params[0]?.chainId;
     const next = raw?.startsWith('0x') ? Number.parseInt(raw, 16) : Number(raw);
