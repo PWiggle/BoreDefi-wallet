@@ -6,7 +6,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
-import { colors } from '../theme';
+import { type } from '../theme';
 import { isValidPin } from '../wallet/pin';
 
 export function UnlockScreen() {
@@ -60,7 +60,7 @@ export function UnlockScreen() {
 
 const styles = StyleSheet.create({
   hint: {
-    color: colors.muted,
+    ...type.subtitle,
     textAlign: 'center',
   },
 });

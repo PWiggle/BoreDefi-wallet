@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '../theme';
+import { colors, spacing, type } from '../theme';
 
 type Props = {
   title?: string;
@@ -12,9 +12,19 @@ type Props = {
   scroll?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
+  inset?: 'tab' | 'stack';
 };
 
-export function Screen({ title, subtitle, children, footer, scroll = true, refreshing = false, onRefresh }: Props) {
+export function Screen({
+  title,
+  subtitle,
+  children,
+  footer,
+  scroll = true,
+  refreshing = false,
+  onRefresh,
+  inset = 'stack',
+}: Props) {
   const body = (
     <View style={styles.body}>
       {title ? <Text style={styles.title}>{title}</Text> : null}
@@ -24,7 +34,7 @@ export function Screen({ title, subtitle, children, footer, scroll = true, refre
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={inset === 'tab' ? ['top'] : ['top', 'bottom']}>
       {scroll ? (
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -39,7 +49,7 @@ export function Screen({ title, subtitle, children, footer, scroll = true, refre
           {body}
         </ScrollView>
       ) : (
-        body
+        <View style={styles.scroll}>{body}</View>
       )}
       {footer ? <View style={styles.footer}>{footer}</View> : null}
     </SafeAreaView>
@@ -53,26 +63,19 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   body: {
     flexGrow: 1,
     gap: spacing.md,
   },
-  title: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 16,
-    lineHeight: 22,
-  },
+  title: type.title,
+  subtitle: type.subtitle,
   footer: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
     gap: spacing.sm,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.md,
   },
 });

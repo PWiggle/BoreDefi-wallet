@@ -10,7 +10,7 @@ import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import { card, colors, field, spacing, type } from '../theme';
 import { formatNative, parseAmountToWei } from '../wallet/format';
 import { estimateNativeTransfer, fetchBalance, sendNativeTransfer } from '../wallet/rpc';
 
@@ -117,7 +117,7 @@ export function SendScreen() {
     return (
       <Screen title="Sent" subtitle={selectedChain.name}>
         <Text style={styles.hash}>{txHash}</Text>
-        <Button label="Done" onPress={() => navigation.navigate('Home')} />
+        <Button label="Done" onPress={() => navigation.navigate('Tabs', { screen: 'Wallet' })} />
       </Screen>
     );
   }
@@ -176,39 +176,20 @@ export function SendScreen() {
 }
 
 const styles = StyleSheet.create({
-  label: {
-    color: colors.muted,
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    color: colors.text,
-    paddingHorizontal: spacing.md,
-    minHeight: 52,
-    fontSize: 16,
-  },
-  meta: {
-    color: colors.muted,
-  },
+  label: type.label,
+  input: field,
+  meta: type.meta,
   review: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    ...card,
     gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   reviewTitle: {
     color: colors.text,
-    fontWeight: '700',
     fontSize: 18,
+    fontWeight: '700',
   },
   hash: {
+    ...type.meta,
     color: colors.text,
-    fontSize: 13,
-    lineHeight: 20,
   },
 });

@@ -1,18 +1,19 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 
-import { Button } from '../components/Button';
+import { AssetRow } from '../components/AssetRow';
 import { ChainPicker } from '../components/ChainPicker';
+import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { MarketRow } from '../components/MarketRow';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
-import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import type { MainNavigation } from '../navigation';
+import { card, colors, radius, spacing, type } from '../theme';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
-import { formatCompactUsd, formatNative, formatPercent, formatTokenAmount, formatTimestamp, formatUsd, shortenAddress } from '../wallet/format';
+import { formatNative, formatTimestamp, formatUsd, shortenAddress } from '../wallet/format';
 import {
   fetchMarketDetails,
   fetchTopMarkets,
@@ -35,7 +36,7 @@ type TokenRow = {
 };
 
 export function HomeScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const navigation = useNavigation<MainNavigation>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const [balance, setBalance] = useState<bigint | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -115,268 +116,153 @@ export function HomeScreen() {
 
   return (
     <Screen
-      scroll
+      inset="tab"
       title="Wallet"
       subtitle={selectedChain.name}
+      refreshing={refreshing}
+      onRefresh={async () => {
+        setRefreshing(true);
+        await load();
+        setRefreshing(false);
+      }}
     >
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>Available</Text>
+      <View style={styles.hero}>
+        <Text style={styles.heroLabel}>Available</Text>
         <Text style={styles.heroUsd}>{formatUsd(usdTotal)}</Text>
-        <Text style={styles.balance}>
+        <Text style={styles.heroNative}>
           {balance === null ? '—' : formatNative(balance)} {selectedChain.symbol}
         </Text>
         <Pressable onPress={copy}>
           <Text style={styles.address}>{copied ? 'Copied' : shortenAddress(session.address)}</Text>
         </Pressable>
       </View>
+      <View style={styles.rail}>
+        <CircleAction label="Send" name="send" onPress={() => navigation.navigate('Send', {})} />
+        <CircleAction label="Receive" name="receive" onPress={() => navigation.navigate('Receive')} />
+        <CircleAction label="Swap" name="swap" onPress={() => navigation.navigate('Swap', {})} />
+        <CircleAction label="Stake" name="stake" onPress={() => navigation.navigate('Stake', {})} />
+        <CircleAction label="Bridge" name="bridge" onPress={() => navigation.navigate('Bridge')} />
+      </View>
       <ErrorBanner message={error} />
       <ErrorBanner message={marketsError} />
-      <View style={styles.actions}>
-        <Button label="Send" style={styles.action} onPress={() => navigation.navigate('Send', {})} />
-        <Button
-          label="Receive"
-          variant="secondary"
-          style={styles.action}
-          onPress={() => navigation.navigate('Receive')}
-        />
-      </View>
-      <View style={styles.actions}>
-        <Button label="Swap" style={styles.action} onPress={() => navigation.navigate('Swap', {})} />
-        <Button
-          label="Bridge"
-          variant="secondary"
-          style={styles.action}
-          onPress={() => navigation.navigate('Bridge')}
-        />
-      </View>
-      <View style={styles.actions}>
-        <Button label="Stake" style={styles.action} onPress={() => navigation.navigate('Stake', {})} />
-        <Button
-          label="NFTs"
-          variant="secondary"
-          style={styles.action}
-          onPress={() => navigation.navigate('Nfts')}
-        />
-      </View>
-      <View style={styles.actions}>
-        <Button label="Browser" style={styles.action} onPress={() => navigation.navigate('Browser', {})} />
-        <Button
-          label="Connect"
-          variant="secondary"
-          style={styles.action}
-          onPress={() => navigation.navigate('WalletConnect', {})}
-        />
-      </View>
-      <View style={styles.actions}>
-        <Button label="Discover" style={styles.action} onPress={() => navigation.navigate('Discover')} />
-        <Button
-          label="Ledger"
-          variant="secondary"
-          style={styles.action}
-          onPress={() => navigation.navigate('Ledger')}
-        />
-      </View>
-      <Button label="Activity" variant="secondary" onPress={() => navigation.navigate('Activity')} />
-      <View style={styles.recent}>
-        <Text style={styles.recentTitle}>Tokens</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Tokens</Text>
         {tokens.length === 0 ? (
           <Text style={styles.empty}>Loading token prices…</Text>
         ) : (
           tokens.map((row) => (
-            <Pressable
+            <AssetRow
               key={`${row.token.chainId}-${row.token.address}-${row.token.symbol}`}
+              token={row.token}
+              amount={row.amount}
+              market={row.market}
               onPress={() =>
                 row.token.native
                   ? navigation.navigate('Send', {})
                   : navigation.navigate('Swap', { fromSymbol: row.token.symbol })
               }
-              style={styles.tokenRow}
-            >
-              <View style={styles.tokenCopy}>
-                <Text style={styles.tokenSymbol}>{row.token.symbol}</Text>
-                <Text style={styles.tokenName}>{row.token.name}</Text>
-                <Text style={styles.tokenAmt}>
-                  {formatTokenAmount(row.amount, row.token.decimals)} {row.token.symbol}
-                </Text>
-              </View>
-              <View style={styles.tokenStats}>
-                <Text style={styles.tokenPrice}>{formatUsd(row.market?.priceUsd)}</Text>
-                <Text style={[styles.tokenChange, changeStyle(row.market?.change24h)]}>
-                  {formatPercent(row.market?.change24h)}
-                </Text>
-              </View>
-            </Pressable>
+            />
           ))
         )}
       </View>
-      <View style={styles.recent}>
-        <Text style={styles.recentTitle}>Markets</Text>
+      <View style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Markets</Text>
+          <Pressable onPress={() => navigation.navigate('Markets')}>
+            <Text style={styles.link}>See all</Text>
+          </Pressable>
+        </View>
         {strip.length === 0 ? (
           <Text style={styles.empty}>Live CoinGecko markets are offline or rate-limited.</Text>
         ) : (
           strip.map((coin) => (
-            <Pressable key={coin.id} onPress={() => navigation.navigate('Discover')} style={styles.tokenRow}>
-              <View style={styles.tokenCopy}>
-                <Text style={styles.tokenSymbol}>
-                  {coin.rank ? `#${coin.rank} ` : ''}
-                  {coin.symbol}
-                </Text>
-                <Text style={styles.tokenName}>{coin.name}</Text>
-              </View>
-              <View style={styles.tokenStats}>
-                <Text style={styles.tokenPrice}>{formatCompactUsd(coin.priceUsd)}</Text>
-                <Text style={[styles.tokenChange, changeStyle(coin.change24h)]}>{formatPercent(coin.change24h)}</Text>
-              </View>
-            </Pressable>
+            <MarketRow key={coin.id} coin={coin} onPress={() => navigation.navigate('Markets')} />
           ))
         )}
       </View>
-      <Button label="Refresh" variant="ghost" loading={refreshing} onPress={async () => {
-        setRefreshing(true);
-        await load();
-        setRefreshing(false);
-      }} />
-      <View style={styles.recent}>
-        <Text style={styles.recentTitle}>Recent</Text>
+      <View style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Recent</Text>
+          <Pressable onPress={() => navigation.navigate('Activity')}>
+            <Text style={styles.link}>Activity</Text>
+          </Pressable>
+        </View>
         {activity.length === 0 ? (
           <Text style={styles.empty}>No transactions on {selectedChain.name} yet.</Text>
         ) : (
-          activity.map((item) => (
-            <View key={item.hash} style={styles.tx}>
+          activity.slice(0, 3).map((item) => (
+            <Pressable key={item.hash} onPress={() => navigation.navigate('Activity')} style={styles.tx}>
               <Text style={styles.txDir}>{item.inbound ? 'Received' : 'Sent'}</Text>
               <Text style={styles.txAmt}>
                 {item.inbound ? '+' : '−'}
                 {formatNative(item.valueWei)} {selectedChain.symbol}
               </Text>
               <Text style={styles.txMeta}>{formatTimestamp(item.timestamp)}</Text>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
-      <Button label="Settings" variant="ghost" onPress={() => navigation.navigate('Settings')} />
     </Screen>
   );
 }
 
-function changeStyle(value: number | null | undefined) {
-  if (value === null || value === undefined || !Number.isFinite(value) || value === 0) {
-    return styles.changeFlat;
-  }
-  return value > 0 ? styles.changeUp : styles.changeDown;
-}
-
 const styles = StyleSheet.create({
-  balanceCard: {
-    backgroundColor: colors.surface,
+  hero: {
+    ...card,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.xs,
     padding: spacing.lg,
-    gap: spacing.sm,
   },
-  balanceLabel: {
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    fontSize: 12,
-  },
+  heroLabel: type.label,
   heroUsd: {
     color: colors.text,
     fontSize: 36,
     fontWeight: '800',
+    letterSpacing: -0.8,
   },
-  balance: {
+  heroNative: {
     color: colors.muted,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   address: {
     color: colors.accent,
-    fontWeight: '600',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  action: {
-    flex: 1,
-  },
-  recent: {
-    gap: spacing.sm,
-  },
-  recentTitle: {
-    color: colors.text,
     fontWeight: '700',
+  },
+  rail: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  sectionHead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    color: colors.text,
     fontSize: 18,
+    fontWeight: '700',
+  },
+  link: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
   },
   empty: {
     color: colors.muted,
   },
-  tokenRow: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: spacing.md,
-  },
-  tokenCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  tokenSymbol: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  tokenName: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  tokenAmt: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  tokenStats: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  tokenPrice: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  tokenChange: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  changeUp: {
-    color: colors.accent,
-  },
-  changeDown: {
-    color: colors.danger,
-  },
-  changeFlat: {
-    color: colors.muted,
-  },
   tx: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    gap: 4,
+    ...card,
+    gap: 2,
   },
-  txDir: {
-    color: colors.muted,
-    fontSize: 12,
-    textTransform: 'uppercase',
-  },
+  txDir: type.label,
   txAmt: {
     color: colors.text,
     fontWeight: '700',
   },
-  txMeta: {
-    color: colors.muted,
-    fontSize: 12,
-  },
+  txMeta: type.meta,
 });

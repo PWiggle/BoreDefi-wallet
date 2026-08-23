@@ -1,19 +1,19 @@
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
+import { SettingsRow } from '../components/SettingsRow';
 import { useWallet } from '../context/WalletContext';
-import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import type { MainNavigation } from '../navigation';
+import { card, colors, spacing, type } from '../theme';
+import { shortenAddress } from '../wallet/format';
 
 export function SettingsScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const navigation = useNavigation<MainNavigation>();
   const { session, settings, biometricsReady, setBiometricsEnabled } = useWallet();
 
   return (
-    <Screen title="Settings" subtitle={session?.address}>
+    <Screen inset="tab" title="Settings" subtitle={session ? shortenAddress(session.address) : undefined}>
       <View style={styles.row}>
         <View style={styles.copy}>
           <Text style={styles.label}>Biometric unlock</Text>
@@ -31,29 +31,24 @@ export function SettingsScreen() {
           thumbColor={settings.biometricsEnabled ? colors.accent : colors.muted}
         />
       </View>
-      <Button
-        label="Discover / Market"
-        variant="secondary"
-        onPress={() => navigation.navigate('Discover')}
-      />
-      <Button label="Ledger" variant="secondary" onPress={() => navigation.navigate('Ledger')} />
-      <Button
-        label="WalletConnect sessions"
-        variant="secondary"
+      <SettingsRow label="Activity" detail="Recent transactions" onPress={() => navigation.navigate('Activity')} />
+      <SettingsRow
+        label="WalletConnect"
+        detail="Sessions and pairing"
         onPress={() => navigation.navigate('WalletConnect', {})}
       />
-      <Button
-        label="Reveal recovery phrase"
-        variant="secondary"
+      <SettingsRow label="Ledger" detail="Hardware signing" onPress={() => navigation.navigate('Ledger')} />
+      <SettingsRow
+        label="Recovery phrase"
+        detail="Reveal words stored on this device"
         onPress={() => navigation.navigate('RevealSeed')}
       />
       <Text style={styles.note}>
-        Phase 4 adds Discover/Market, a Chrome extension, and Ledger over WebHID. There is still no
-        fiat on-ramp.
+        Keys stay on this device. There is no fiat on-ramp. Markets data is public CoinGecko.
       </Text>
-      <Button
+      <SettingsRow
         label="Delete wallet from device"
-        variant="danger"
+        danger
         onPress={() => navigation.navigate('ResetWallet')}
       />
     </Screen>
@@ -62,15 +57,11 @@ export function SettingsScreen() {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
+    ...card,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row',
     gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    justifyContent: 'space-between',
   },
   copy: {
     flex: 1,
@@ -80,13 +71,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '700',
   },
-  help: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  note: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
+  help: type.meta,
+  note: type.subtitle,
 });

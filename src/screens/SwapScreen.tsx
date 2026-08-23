@@ -9,7 +9,7 @@ import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import { card, chip, colors, field, spacing } from '../theme';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
   ensureSpendAllowance,
@@ -199,16 +199,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: '700',
   },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    color: colors.text,
-    paddingHorizontal: spacing.md,
-    minHeight: 52,
-    fontSize: 16,
-  },
+  input: field,
   meta: {
     color: colors.muted,
   },
@@ -217,14 +208,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  token: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
+  token: chip,
   tokenOn: {
     borderColor: colors.accent,
     backgroundColor: colors.accentDim,
@@ -237,11 +221,7 @@ const styles = StyleSheet.create({
     color: colors.accent,
   },
   quote: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+    ...card,
     gap: spacing.sm,
   },
   quoteTitle: {

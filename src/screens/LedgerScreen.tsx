@@ -4,7 +4,7 @@ import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
-import { colors, radius, spacing } from '../theme';
+import { card, colors, spacing, type } from '../theme';
 import { LEDGER_ETH_PATH } from '../wallet/ledger';
 
 export function LedgerScreen() {
@@ -49,15 +49,11 @@ export function LedgerScreen() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
+    ...card,
     gap: spacing.sm,
-    padding: spacing.md,
   },
-  label: { color: colors.muted, fontSize: 12, textTransform: 'uppercase' },
+  label: type.label,
   value: { color: colors.text, fontWeight: '700' },
-  help: { color: colors.muted, lineHeight: 20 },
+  help: type.subtitle,
   gap: { color: colors.warning, lineHeight: 20 },
 });

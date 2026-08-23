@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { WebView } from 'react-native-webview';
@@ -19,8 +20,8 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { InAppBrowserView } from '../components/InAppBrowserView';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
-import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import type { MainTabParamList } from '../navigation';
+import { colors, field, radius, spacing, type } from '../theme';
 import { classifyBrowserMethod, DAPP_BOOKMARKS, DEFAULT_BROWSER_URL, normalizeDappUrl } from '../wallet/dapps';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
@@ -44,7 +45,7 @@ function confirmAction(title: string, message: string): Promise<boolean> {
 }
 
 export function BrowserScreen() {
-  const route = useRoute<RouteProp<MainStackParamList, 'Browser'>>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Browser'>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const { pair } = useWalletConnect();
   const webRef = useRef<WebView>(null);
@@ -208,12 +209,9 @@ export function BrowserScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <Text style={styles.title}>Browser</Text>
-      <Text style={styles.copy}>
-        Injected EIP-1193 provider for WalletConnect-compatible dApps. This is not a Chrome
-        extension.
-      </Text>
+      <Text style={styles.copy}>dApps stay in-app. Injected EIP-1193 provider. Not a Chrome extension.</Text>
       {error ? <ErrorBanner message={error} /> : null}
       <View style={styles.bar}>
         <TextInput
@@ -253,7 +251,7 @@ export function BrowserScreen() {
           onError={(message) => setError(message)}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -262,19 +260,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     flex: 1,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
   },
-  title: { color: colors.text, fontSize: 28, fontWeight: '800' },
-  copy: { color: colors.muted, marginBottom: spacing.sm, marginTop: spacing.xs },
+  title: type.title,
+  copy: { ...type.subtitle, marginBottom: spacing.sm },
   bar: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    color: colors.text,
+    ...field,
     flex: 1,
-    paddingHorizontal: spacing.md,
   },
   go: { minWidth: 72 },
   bookmarks: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },

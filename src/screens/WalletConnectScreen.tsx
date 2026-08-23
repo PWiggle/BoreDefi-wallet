@@ -8,7 +8,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import { card, colors, field, spacing } from '../theme';
 
 export function WalletConnectScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
@@ -32,7 +32,7 @@ export function WalletConnectScreen() {
   };
 
   return (
-    <Screen title="WalletConnect" subtitle="Connect this wallet to a dApp. There is no in-app browser in Phase 2.">
+    <Screen title="WalletConnect" subtitle="Pair a dApp with this wallet. Browser tab can also open wc: links.">
       <ErrorBanner message={localError ?? error} />
       {!projectId ? (
         <Text style={styles.help}>
@@ -82,15 +82,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
   },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    color: colors.text,
-    paddingHorizontal: spacing.md,
-    minHeight: 52,
-  },
+  input: field,
   section: {
     color: colors.text,
     fontWeight: '700',
@@ -98,12 +90,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   session: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    ...card,
     gap: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   name: {
     color: colors.text,

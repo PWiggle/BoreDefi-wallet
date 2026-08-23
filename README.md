@@ -47,7 +47,7 @@ A companion **Chrome extension** lives in `extension/` (see [Load the Chrome ext
 
 ### Discover / Market
 
-Home shows a live USD total (native balance × CoinGecko price, including `$0.00`), native + USDC/USDT rows with live price and 24h change, and a short top-market strip. **Discover** is a full in-app CoinGecko Markets screen: rank, logo, name, symbol, live USD, 24h change, market cap, and 7d sparkline from public `/coins/markets?vs_currency=usd&sparkline=true&price_change_percentage=24h` (100 coins). Tabs: All / Trending / Gainers. Search uses CoinGecko search + details. Pull-to-refresh and Retry on failure. Tapping a coin (or **Open CoinGecko**) loads `www.coingecko.com` in the in-app Browser WebView — not Safari. On Expo web, CoinGecko blocks iframes (`X-Frame-Options: SAMEORIGIN`), so the Browser shows a live CoinGecko embed from the same public API. No API key and no custom browser `User-Agent`.
+Home shows a live USD total (native balance × CoinGecko price, including `$0.00`), a compact Send / Receive / Swap / Stake / Bridge action row, native + USDC/USDT rows in the Discover MarketRow style, and a short top-market strip. Bottom tabs: Wallet, Markets, Browser, NFTs, Settings. Ledger, WalletConnect, and Activity live under Settings. **Markets** is a full in-app CoinGecko screen: rank, logo, name, symbol, live USD, 24h change, market cap, and 7d sparkline from public `/coins/markets?vs_currency=usd&sparkline=true&price_change_percentage=24h` (100 coins). Tabs: All / Trending / Gainers. Search uses CoinGecko search + details. Pull-to-refresh and Retry on failure. Tapping a coin (or **Open CoinGecko**) loads `www.coingecko.com` in the in-app Browser WebView — not Safari. On Expo web, CoinGecko blocks iframes (`X-Frame-Options: SAMEORIGIN`), so the Browser shows a live CoinGecko embed from the same public API. No API key and no custom browser `User-Agent`.
 
 ### Ledger
 
@@ -229,12 +229,12 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 
 ### Phase 4
 
-25. Home shows a USD total and token rows (ETH/native + USDC/USDT) with live CoinGecko prices, plus a Markets strip. Open Discover: a CoinGecko-style list (rank / logo / price / 24h / cap / sparkline) loads at least 50–100 top markets, with All / Trending / Gainers. Search “eth”, tap Ethereum — the in-app Browser opens `https://www.coingecko.com/en/coins/ethereum` (on web, the live CoinGecko embed). **Open CoinGecko** loads www.coingecko.com in Browser. Pull-to-refresh or Retry if the public API fails.
+25. Home shows a USD total, a circular action row (not a button dump), and token rows like Markets. Bottom tabs: Wallet / Markets / Browser / NFTs / Settings. Markets: CoinGecko-style list (rank / logo / price / 24h / cap / sparkline), All / Trending / Gainers. Search “eth”, tap Ethereum — the in-app Browser tab opens the CoinGecko coin page (on web, the live embed). **Open CoinGecko** loads www.coingecko.com in Browser. Ledger / WalletConnect / Activity are under Settings.
 26. Browser bookmarks include CoinGecko. A dApp page still uses the injected provider. CoinGecko itself is read-only market data.
 27. Chrome: load `extension/unpacked`. Create a wallet — no skip on backup; wrong verify words fail. Set PIN, unlock, see a balance or RPC error, send with an invalid address/amount fails. On a dApp page, `window.ethereum.isBoreDefi` is true after unlock; reject by locking first.
 28. **Ledger** on Android: the screen explains WebHID is unavailable and points at the extension. On Chrome (extension or Expo web) with a Nano + Ethereum app: Connect shows the device address; a small send/swap/bridge asks for a device confirmation. Unplug → disconnect.
 29. Confirm logs and the extension service worker never print the recovery phrase or private key. No fiat UI exists.
-30. Open **https://pwiggle.github.io/BoreDefi-wallet/** on a phone. Confirm the TEST-ONLY banner. Do not use a real seed or real funds. Walk through create/backup/PIN, Home, Discover, Swap/Stake screens, and (optional) Ledger on a desktop Chrome tab.
+30. Open **https://pwiggle.github.io/BoreDefi-wallet/** on a phone. Confirm the TEST-ONLY banner. Do not use a real seed or real funds. Walk through create/backup/PIN, Wallet tab, Markets tab, Swap/Stake stack screens, and (optional) Ledger from Settings.
 
 ## License
 

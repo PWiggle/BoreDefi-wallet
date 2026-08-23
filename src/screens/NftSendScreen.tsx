@@ -8,7 +8,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import { chip, colors, field, spacing } from '../theme';
 import { type NftItem, type NftStandard, sendNft } from '../wallet/nfts';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
@@ -132,22 +132,9 @@ export function NftSendScreen() {
 }
 
 const styles = StyleSheet.create({
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    color: colors.text,
-    padding: spacing.md,
-  },
+  input: field,
   row: { flexDirection: 'row', gap: spacing.sm },
-  chip: {
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
+  chip,
   chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
   chipText: { color: colors.text, fontWeight: '700' },
   hash: { color: colors.accent },

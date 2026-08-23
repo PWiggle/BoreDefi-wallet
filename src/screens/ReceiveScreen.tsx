@@ -5,7 +5,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
-import { colors, radius, spacing } from '../theme';
+import { card, colors, radius, spacing, type } from '../theme';
 import { buildReceiveUri } from '../wallet/qr';
 
 export function ReceiveScreen() {
@@ -39,20 +39,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
   },
-  addrBox: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  addr: {
-    color: colors.text,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  hint: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
+  addrBox: card,
+  addr: type.body,
+  hint: type.subtitle,
 });

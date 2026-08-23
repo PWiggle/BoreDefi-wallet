@@ -5,7 +5,7 @@ import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
-import { colors, radius, spacing } from '../theme';
+import { colors, field } from '../theme';
 
 export function ImportWalletScreen() {
   const { importMnemonic, cancelOnboarding } = useWallet();
@@ -52,14 +52,9 @@ export function ImportWalletScreen() {
 
 const styles = StyleSheet.create({
   input: {
-    minHeight: 180,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    color: colors.text,
-    padding: spacing.md,
-    fontSize: 16,
+    ...field,
     lineHeight: 24,
+    minHeight: 180,
+    paddingVertical: 14,
   },
 });

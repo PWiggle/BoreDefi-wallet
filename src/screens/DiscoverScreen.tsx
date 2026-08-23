@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { MarketRow } from '../components/MarketRow';
 import { Screen } from '../components/Screen';
-import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import type { MainNavigation } from '../navigation';
+import { colors, field, radius, spacing } from '../theme';
 import {
   COINGECKO_SITE,
   coinGeckoUrl,
@@ -24,7 +23,7 @@ import {
 type Tab = 'all' | 'trending' | 'gainers';
 
 export function DiscoverScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const navigation = useNavigation<MainNavigation>();
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<Tab>('all');
   const [markets, setMarkets] = useState<MarketCoin[]>([]);
@@ -94,6 +93,7 @@ export function DiscoverScreen() {
 
   return (
     <Screen
+      inset="tab"
       title="Markets"
       subtitle="CoinGecko inside BoreDefi. Live public data, no API key."
       refreshing={busy}
@@ -114,7 +114,7 @@ export function DiscoverScreen() {
         autoCorrect={false}
         placeholder="Search CoinGecko"
         placeholderTextColor={colors.muted}
-        style={styles.input}
+        style={styles.search}
         onSubmitEditing={runSearch}
       />
       <Button label="Search" onPress={runSearch} loading={busy} variant="secondary" />
@@ -147,13 +147,8 @@ export function DiscoverScreen() {
 }
 
 const styles = StyleSheet.create({
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    color: colors.text,
-    padding: spacing.md,
+  search: {
+    ...field,
   },
   tabs: {
     flexDirection: 'row',

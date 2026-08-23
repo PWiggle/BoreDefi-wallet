@@ -1,21 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
-import type { MainStackParamList } from '../navigation';
-import { colors, radius, spacing } from '../theme';
+import type { MainNavigation } from '../navigation';
+import { card, colors, spacing, type } from '../theme';
 import { CHAINS } from '../wallet/chains';
 import { fetchNfts, type NftItem } from '../wallet/nfts';
 
 export function NftsScreen() {
   const { session, selectedChain, setSelectedChain } = useWallet();
-  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const navigation = useNavigation<MainNavigation>();
   const [items, setItems] = useState<NftItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,7 +36,7 @@ export function NftsScreen() {
   }
 
   return (
-    <Screen title="NFTs" subtitle={selectedChain.name}>
+    <Screen inset="tab" title="NFTs" subtitle={selectedChain.name}>
       <Text style={styles.copy}>
         ERC-721 and ERC-1155 from Blockscout. Avalanche has no public NFT index here — send by
         contract and token id.
@@ -68,15 +67,11 @@ export function NftsScreen() {
 }
 
 const styles = StyleSheet.create({
-  copy: { color: colors.muted },
-  meta: { color: colors.muted },
+  copy: type.subtitle,
+  meta: type.meta,
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
+    ...card,
     gap: spacing.xs,
-    padding: spacing.md,
   },
   name: { color: colors.text, fontWeight: '700' },
   contract: { color: colors.muted, fontFamily: 'monospace', fontSize: 12 },

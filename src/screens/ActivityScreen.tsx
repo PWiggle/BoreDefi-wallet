@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
-import { colors, radius, spacing } from '../theme';
+import { card, colors, spacing, type } from '../theme';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
 import { formatNative, formatTimestamp, shortenAddress } from '../wallet/format';
 
@@ -62,16 +62,10 @@ export function ActivityScreen() {
 }
 
 const styles = StyleSheet.create({
-  empty: {
-    color: colors.muted,
-  },
+  empty: type.meta,
   row: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    ...card,
     gap: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   rowTop: {
     flexDirection: 'row',
