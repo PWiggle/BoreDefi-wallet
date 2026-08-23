@@ -51,6 +51,16 @@ npx expo run:android
 
 `npm run android` is the same as `expo run:android`.
 
+To compile a debug APK without installing it (requires the Android SDK above):
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+cd android
+./gradlew assembleDebug
+```
+
+This environment produced `app-debug.apk` with package `com.boredefi.wallet`, `compileSdk` 36, and `targetSdk` 36.
+
 The `android/` folder is generated and gitignored. Re-run prebuild after changing native plugins in `app.json`.
 
 ### Android identifiers
@@ -67,9 +77,10 @@ These are pinned with `expo-build-properties` in `app.json`.
 ## Other commands
 
 ```bash
-npm start              # Metro bundler
-npm run typecheck      # TypeScript
-npm test               # Wallet unit tests (no device required)
+npm start                    # Metro bundler
+npm run typecheck            # TypeScript
+npm test                     # Wallet unit tests (no device required)
+npm run check:android-config # package name + SDK 36
 npm run prebuild:android
 ```
 
