@@ -5,6 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
+import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SafeNftImage } from '../components/SafeNftImage';
 import { Screen } from '../components/Screen';
@@ -40,6 +41,7 @@ export function NftsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<GalleryItem | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -122,6 +124,33 @@ export function NftsScreen() {
     );
   };
 
+  const openSend = (item: NftItem) => {
+    setSelected(null);
+    setPickerOpen(false);
+    navigation.navigate('NftSend', { nft: item });
+  };
+
+  const startSend = () => {
+    const selectedVisible = selected && !selected.risk.hidden ? selected : null;
+    if (selectedVisible) {
+      openSend(selectedVisible.item);
+      return;
+    }
+    const onlyVisible = visible[0];
+    if (visible.length === 1 && onlyVisible) {
+      openSend(onlyVisible.item);
+      return;
+    }
+    if (visible.length === 0) {
+      setError(
+        'No visible NFTs to send. Receive or import one you own. Hidden / possible spam cannot be sent until you Show anyway.',
+      );
+      return;
+    }
+    setError(null);
+    setPickerOpen(true);
+  };
+
   const hideNft = async (item: NftItem) => {
     const key = nftStorageKey(item);
     const nextRevealed = new Set(revealed);
@@ -133,18 +162,31 @@ export function NftsScreen() {
   };
 
   return (
-    <Screen inset="tab" title="NFTs" subtitle={selectedChain.name}>
+    <Screen
+      inset="tab"
+      title="NFTs"
+      subtitle={selectedChain.name}
+      refreshing={busy}
+      onRefresh={() => void load()}
+    >
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
+      <View style={styles.rail}>
+        <CircleAction label="Receive" name="receive" onPress={() => navigation.navigate('NftReceive')} />
+        <CircleAction label="Send" name="send" onPress={startSend} />
+      </View>
       <View style={styles.toolbar}>
         <Text style={styles.autodetect}>
           {CHAINS[selectedChain.id].nftApi
-            ? 'Autodetect is on · public Blockscout catalog'
+            ? 'Autodetect is on · public Blockscout catalog. Pull down or tap Refresh after you receive.'
             : 'No catalog on Avalanche · import a collectible you own'}
         </Text>
-        <Pressable onPress={() => navigation.navigate('NftImport')}>
-          <Text style={styles.importLink}>Import</Text>
+        <Pressable onPress={() => void load()}>
+          <Text style={styles.importLink}>Refresh</Text>
         </Pressable>
       </View>
+      <Pressable onPress={() => navigation.navigate('NftImport')}>
+        <Text style={styles.advanced}>Import is advanced · paste a collectible contract you already own</Text>
+      </Pressable>
       {error ? <ErrorBanner message={error} /> : null}
       {busy ? <Text style={styles.meta}>Loading…</Text> : null}
       {visible.length === 0 && !busy ? (
@@ -152,9 +194,10 @@ export function NftsScreen() {
           <Text style={styles.emptyTitle}>No NFTs yet</Text>
           <Text style={styles.meta}>
             {hidden.length > 0
-              ? 'Unsolicited airdrops are in Hidden / possible spam below. Import a collectible you own, or show one after you read the warnings.'
-              : 'Nothing from autodetect on this network. Import a collectible you already own.'}
+              ? 'Unsolicited airdrops are in Hidden / possible spam below. Receive an NFT you expect, then pull to refresh. Or Show anyway after you read the warnings.'
+              : 'Nothing from autodetect on this network. Receive an NFT on this chain, then pull to refresh. Import only a collectible you already own.'}
           </Text>
+          <Button label="Receive" onPress={() => navigation.navigate('NftReceive')} />
           <Button label="Import" variant="secondary" onPress={() => navigation.navigate('NftImport')} />
         </View>
       ) : null}
@@ -199,6 +242,36 @@ export function NftsScreen() {
             ))
           : null}
       </View>
+      <Modal transparent animationType="fade" visible={pickerOpen} onRequestClose={() => setPickerOpen(false)}>
+        <View style={styles.backdrop}>
+          <View style={styles.sheet}>
+            <ScrollView contentContainerStyle={styles.sheetBody}>
+              <Text style={styles.name}>Send which NFT?</Text>
+              <Text style={styles.meta}>
+                Only visible collectibles. Hidden / possible spam is not listed until you Show anyway.
+              </Text>
+              {visible.map((entry) => (
+                <Pressable
+                  key={nftStorageKey(entry.item)}
+                  onPress={() => openSend(entry.item)}
+                  style={styles.pickerRow}
+                >
+                  <SafeNftImage url={entry.item.imageUrl} style={styles.pickerThumb} />
+                  <View style={styles.pickerCopy}>
+                    <Text numberOfLines={1} style={styles.tileName}>
+                      {entry.item.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.meta}>
+                      {entry.item.collection} · #{entry.item.tokenId}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+              <Button label="Cancel" variant="ghost" onPress={() => setPickerOpen(false)} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       <Modal transparent animationType="fade" visible={Boolean(selected)} onRequestClose={() => setSelected(null)}>
         <View style={styles.backdrop}>
           <View style={styles.sheet}>
@@ -230,19 +303,21 @@ export function NftsScreen() {
                   ]}
                 />
                 <Button label="View" onPress={() => setSelected(null)} />
-                <Button
-                  label="Send"
-                  variant="secondary"
-                  onPress={() => {
-                    const nft = selected.item;
-                    setSelected(null);
-                    navigation.navigate('NftSend', { nft });
-                  }}
-                />
                 {selected.risk.hidden ? (
-                  <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
+                  <>
+                    <WarningBanner
+                      title="Show anyway before send"
+                      lines={[
+                        'This is in Hidden / possible spam. Show anyway first. Do not send a hidden airdrop until you confirm you own it.',
+                      ]}
+                    />
+                    <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
+                  </>
                 ) : (
-                  <Button label="Hide NFT" variant="ghost" onPress={() => void hideNft(selected.item)} />
+                  <>
+                    <Button label="Send" variant="secondary" onPress={() => openSend(selected.item)} />
+                    <Button label="Hide NFT" variant="ghost" onPress={() => void hideNft(selected.item)} />
+                  </>
                 )}
               </ScrollView>
             ) : null}
@@ -276,11 +351,20 @@ function NftTile({
 }
 
 const styles = StyleSheet.create({
+  rail: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   toolbar: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  advanced: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
   },
   autodetect: {
     ...type.meta,
@@ -331,6 +415,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tileMeta: type.meta,
+  pickerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  pickerThumb: {
+    borderRadius: radius.sm,
+    height: 56,
+    width: 56,
+  },
+  pickerCopy: {
+    flex: 1,
+    gap: 2,
+  },
   hiddenBox: {
     ...card,
     gap: spacing.sm,

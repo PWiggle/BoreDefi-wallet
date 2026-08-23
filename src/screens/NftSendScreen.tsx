@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { getAddress, isAddress } from 'ethers';
 
@@ -11,17 +12,18 @@ import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { chip, colors, field, spacing } from '../theme';
+import { chip, colors, field, spacing, type } from '../theme';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { type NftItem, type NftStandard, sendNft, verifyNftOwnership } from '../wallet/nfts';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
 export function NftSendScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'NftSend'>>();
   const { session, selectedChain } = useWallet();
   const preset = route.params?.nft;
-  const [to, setTo] = useState('');
+  const [to, setTo] = useState(route.params?.to ?? '');
   const [contract, setContract] = useState(preset?.contract ?? '');
   const [tokenId, setTokenId] = useState(preset?.tokenId ?? '');
   const [standard, setStandard] = useState<NftStandard>(preset?.standard ?? 'ERC-721');
@@ -39,6 +41,12 @@ export function NftSendScreen() {
       setStandard(preset.standard);
     }
   }, [preset]);
+
+  useEffect(() => {
+    if (route.params?.to) {
+      setTo(route.params.to);
+    }
+  }, [route.params?.to]);
 
   if (!session) {
     return null;
@@ -119,12 +127,14 @@ export function NftSendScreen() {
       <WarningBanner
         title="Send safety"
         lines={[
+          'Do not tap claim links. BoreDefi will not open metadata websites from this send.',
           'Recipient is checked for checksum, lookalike, and clipboard mismatch.',
           'On-chain ownerOf / balanceOf must match this wallet or send is blocked.',
           'This cannot be undone after you hold to confirm.',
         ]}
       />
       {error ? <ErrorBanner message={error} /> : null}
+      <Text style={styles.label}>To</Text>
       <TextInput
         value={to}
         onChangeText={setTo}
@@ -133,6 +143,11 @@ export function NftSendScreen() {
         placeholder="Recipient address"
         placeholderTextColor={colors.muted}
         style={styles.input}
+      />
+      <Button
+        label="Scan QR"
+        variant="secondary"
+        onPress={() => navigation.navigate('ScanQr', { purpose: 'nft', nft: preset })}
       />
       <WarningBanner lines={addressWarnings(to)} />
       <TextInput
@@ -179,7 +194,16 @@ export function NftSendScreen() {
         />
       ) : null}
       <Button label="Review NFT send" onPress={prepare} loading={busy} />
-      {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
+      {txHash ? (
+        <>
+          <Text style={styles.hash}>Submitted {txHash}</Text>
+          <Button
+            label="Done"
+            variant="secondary"
+            onPress={() => navigation.navigate('Tabs', { screen: 'NFTs' })}
+          />
+        </>
+      ) : null}
       <ConfirmSheet
         visible={review}
         title="Confirm NFT send"
@@ -196,7 +220,10 @@ export function NftSendScreen() {
           { label: 'Recipient', value: checksumAddress(to) ?? to },
           { label: 'Chain', value: selectedChain.name },
         ]}
-        warnings={warnings}
+        warnings={[
+          ...warnings,
+          'Do not tap claim links. BoreDefi will not open metadata websites from this send.',
+        ]}
         loading={busy}
         onConfirm={confirm}
         onCancel={() => setReview(false)}
@@ -206,6 +233,7 @@ export function NftSendScreen() {
 }
 
 const styles = StyleSheet.create({
+  label: type.label,
   input: field,
   row: { flexDirection: 'row', gap: spacing.sm },
   chip,

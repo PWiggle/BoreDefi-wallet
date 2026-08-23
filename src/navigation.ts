@@ -16,7 +16,7 @@ export type MainStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Receive: undefined;
   Send: { to?: string; amount?: string };
-  ScanQr: { purpose?: 'payment' | 'walletconnect' };
+  ScanQr: { purpose?: 'payment' | 'walletconnect' | 'nft'; nft?: NftItem };
   Activity: undefined;
   RevealSeed: undefined;
   ChangePin: undefined;
@@ -25,7 +25,8 @@ export type MainStackParamList = {
   Stake: { marketId?: string };
   Bridge: undefined;
   Ledger: undefined;
-  NftSend: { nft?: NftItem };
+  NftSend: { nft?: NftItem; to?: string };
+  NftReceive: undefined;
   NftImport: undefined;
   WalletConnect: { uri?: string };
 };

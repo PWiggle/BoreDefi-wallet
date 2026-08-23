@@ -74,6 +74,10 @@ export function ScanQrScreen() {
             try {
               const parsed = parsePaymentUri(data);
               setDone(true);
+              if (purpose === 'nft') {
+                navigation.navigate('NftSend', { nft: route.params?.nft, to: parsed.address });
+                return;
+              }
               navigation.navigate('Send', { to: parsed.address, amount: parsed.amount });
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Could not read that QR code.');
@@ -84,7 +88,9 @@ export function ScanQrScreen() {
       <Text style={styles.hint}>
         {purpose === 'walletconnect'
           ? 'Point the camera at a WalletConnect QR from a dApp.'
-          : 'Point the camera at an address, payment, or WalletConnect QR.'}
+          : purpose === 'nft'
+            ? 'Point the camera at a recipient address or payment QR for this NFT send.'
+            : 'Point the camera at an address, payment, or WalletConnect QR.'}
       </Text>
     </Screen>
   );
