@@ -8,9 +8,10 @@ import { Button } from '../components/Button';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { WarningBanner } from '../components/WarningBanner';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { chip, colors, field, spacing, type } from '../theme';
+import { chip, colors, field, spacing } from '../theme';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { type NftItem, type NftStandard, sendNft, verifyNftOwnership } from '../wallet/nfts';
 
@@ -79,6 +80,7 @@ export function NftSendScreen() {
     const clipboard = await Clipboard.getStringAsync().catch(() => '');
     setWarnings([
       ...addressWarnings(to, clipboard),
+      'On-chain ownerOf / balanceOf matches this wallet. Send is blocked if it does not.',
       'This cannot be undone. The NFT leaves this wallet when the transaction confirms.',
     ]);
     setReview(true);
@@ -114,9 +116,14 @@ export function NftSendScreen() {
 
   return (
     <Screen title="Send NFT" subtitle={selectedChain.name}>
-      <Text style={styles.copy}>
-        Owner is checked on-chain before broadcast. No claim or marketplace flow.
-      </Text>
+      <WarningBanner
+        title="Send safety"
+        lines={[
+          'Recipient is checked for checksum, lookalike, and clipboard mismatch.',
+          'On-chain ownerOf / balanceOf must match this wallet or send is blocked.',
+          'This cannot be undone after you hold to confirm.',
+        ]}
+      />
       {error ? <ErrorBanner message={error} /> : null}
       <TextInput
         value={to}
@@ -127,6 +134,7 @@ export function NftSendScreen() {
         placeholderTextColor={colors.muted}
         style={styles.input}
       />
+      <WarningBanner lines={addressWarnings(to)} />
       <TextInput
         value={contract}
         onChangeText={setContract}
@@ -198,7 +206,6 @@ export function NftSendScreen() {
 }
 
 const styles = StyleSheet.create({
-  copy: type.subtitle,
   input: field,
   row: { flexDirection: 'row', gap: spacing.sm },
   chip,

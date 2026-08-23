@@ -9,6 +9,9 @@ const APPROVAL_IFACE = new Interface([
 
 const UNLIMITED_FLOOR = 2n ** 200n;
 
+export const DRAIN_APPROVAL_WARNING =
+  'This site is asking to take ALL NFTs in this collection. Scammers use this.';
+
 export type ApprovalRiskKind =
   | 'setApprovalForAll'
   | 'approve'
@@ -79,7 +82,7 @@ export function decodeApprovalCalldata(to: string | undefined, data: string | un
           : 'This revokes an operator for the whole collection.',
         warnings: approved
           ? [
-              'This site is asking to take ALL NFTs/tokens in this collection. Scammers use this. Prefer Reject.',
+              DRAIN_APPROVAL_WARNING,
               ...(extraOperatorWarning(operator) ? [extraOperatorWarning(operator)!] : []),
             ]
           : [],
@@ -108,7 +111,7 @@ export function decodeApprovalCalldata(to: string | undefined, data: string | un
             : 'Allowance increase or permit signature.',
         warnings: [
           unlimited
-            ? 'This site is asking to take ALL NFTs/tokens in this collection. Scammers use this. Prefer Reject.'
+            ? DRAIN_APPROVAL_WARNING
             : 'This grants an operator. Prefer Reject unless you started this action.',
           ...(extraOperatorWarning(operator) ? [extraOperatorWarning(operator)!] : []),
         ],
@@ -177,7 +180,7 @@ export function decodeTypedApproval(payload: unknown): ApprovalRisk | null {
       unlimited: unlimited || primary.includes('permit'),
       summary: 'Typed-data approval. This can let a contract spend NFTs or tokens.',
       warnings: [
-        'This site is asking to take ALL NFTs/tokens in this collection. Scammers use this. Prefer Reject.',
+        DRAIN_APPROVAL_WARNING,
         ...(extraOperatorWarning(operator) ? [extraOperatorWarning(operator)!] : []),
       ],
     };

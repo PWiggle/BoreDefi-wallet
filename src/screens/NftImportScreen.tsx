@@ -6,6 +6,7 @@ import { getAddress, isAddress } from 'ethers';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { WarningBanner } from '../components/WarningBanner';
 import { useWallet } from '../context/WalletContext';
 import { chip, colors, field, spacing, type } from '../theme';
 import { nftItemKey, type NftItem, type NftStandard, verifyNftOwnership } from '../wallet/nfts';
@@ -61,10 +62,13 @@ export function NftImportScreen() {
 
   return (
     <Screen title="Import NFT" subtitle={selectedChain.name}>
-      <Text style={styles.warn}>
-        Paste the collectible contract address, not a wallet address. Import only adds a view on
-        this device. It is not a claim, mint, or airdrop.
-      </Text>
+      <WarningBanner
+        title="Paste the collectible contract"
+        lines={[
+          'Paste the collectible contract address, not a wallet address.',
+          'Import only adds a view on this device. It is not a claim, mint, or airdrop.',
+        ]}
+      />
       <ErrorBanner message={error} />
       <Text style={styles.label}>Collectible contract</Text>
       <TextInput
@@ -101,10 +105,6 @@ export function NftImportScreen() {
 }
 
 const styles = StyleSheet.create({
-  warn: {
-    ...type.subtitle,
-    color: colors.warning,
-  },
   label: type.label,
   input: field,
   row: { flexDirection: 'row', gap: spacing.sm },

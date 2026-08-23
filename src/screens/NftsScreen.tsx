@@ -8,6 +8,7 @@ import { ChainPicker } from '../components/ChainPicker';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SafeNftImage } from '../components/SafeNftImage';
 import { Screen } from '../components/Screen';
+import { WarningBanner } from '../components/WarningBanner';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
 import { card, colors, radius, spacing, type } from '../theme';
@@ -151,7 +152,7 @@ export function NftsScreen() {
           <Text style={styles.emptyTitle}>No NFTs yet</Text>
           <Text style={styles.meta}>
             {hidden.length > 0
-              ? 'Unsolicited airdrops are hidden below. Import a collectible you own, or show one after you read the warnings.'
+              ? 'Unsolicited airdrops are in Hidden / possible spam below. Import a collectible you own, or show one after you read the warnings.'
               : 'Nothing from autodetect on this network. Import a collectible you already own.'}
           </Text>
           <Button label="Import" variant="secondary" onPress={() => navigation.navigate('NftImport')} />
@@ -167,35 +168,37 @@ export function NftsScreen() {
           </View>
         </View>
       ))}
-      {hidden.length > 0 ? (
-        <View style={styles.hiddenBox}>
-          <Pressable onPress={() => setShowHidden((value) => !value)}>
-            <Text style={styles.hiddenTitle}>
-              Hidden / possible spam ({hidden.length}) {showHidden ? '▾' : '▸'}
-            </Text>
-          </Pressable>
-          <Text style={styles.meta}>
-            Hidden by default: airdrops, missing media, and famous names on the wrong contract.
+      <View style={styles.hiddenBox}>
+        <Pressable onPress={() => setShowHidden((value) => !value)}>
+          <Text style={styles.hiddenTitle}>
+            Hidden / possible spam ({hidden.length}) {showHidden ? '▾' : '▸'}
           </Text>
-          {showHidden
-            ? hiddenGroups.map((group) => (
-                <View key={`hidden-${group.contract}`} style={styles.group}>
-                  <Text style={styles.groupTitle}>{group.collection}</Text>
-                  <View style={styles.grid}>
-                    {group.entries.map((entry) => (
-                      <NftTile
-                        key={nftStorageKey(entry.item)}
-                        entry={entry}
-                        dim
-                        onPress={() => setSelected(entry)}
-                      />
-                    ))}
-                  </View>
+        </Pressable>
+        <Text style={styles.meta}>
+          Airdrops and lookalike collections are hidden by default. Famous names on the wrong
+          contract, missing https media, and first-seen drops stay here. Never auto-trust a name.
+        </Text>
+        {showHidden && hidden.length === 0 ? (
+          <Text style={styles.meta}>Nothing hidden on this network right now.</Text>
+        ) : null}
+        {showHidden
+          ? hiddenGroups.map((group) => (
+              <View key={`hidden-${group.contract}`} style={styles.group}>
+                <Text style={styles.groupTitle}>{group.collection}</Text>
+                <View style={styles.grid}>
+                  {group.entries.map((entry) => (
+                    <NftTile
+                      key={nftStorageKey(entry.item)}
+                      entry={entry}
+                      dim
+                      onPress={() => setSelected(entry)}
+                    />
+                  ))}
                 </View>
-              ))
-            : null}
-        </View>
-      ) : null}
+              </View>
+            ))
+          : null}
+      </View>
       <Modal transparent animationType="fade" visible={Boolean(selected)} onRequestClose={() => setSelected(null)}>
         <View style={styles.backdrop}>
           <View style={styles.sheet}>
@@ -219,14 +222,13 @@ export function NftsScreen() {
                   </Text>
                 </Pressable>
                 <Text style={styles.meta}>{CHAINS[selected.item.chainId].name}</Text>
-                {selected.risk.reasons.map((reason) => (
-                  <Text key={reason} style={styles.warn}>
-                    {reason}
-                  </Text>
-                ))}
-                <Text style={styles.warn}>
-                  Metadata websites, claim buttons, and marketplaces are not opened from this wallet.
-                </Text>
+                <WarningBanner
+                  title="Do not tap claim links"
+                  lines={[
+                    'BoreDefi will not open metadata websites, claim pages, or marketplaces from this NFT.',
+                    ...selected.risk.reasons,
+                  ]}
+                />
                 <Button label="View" onPress={() => setSelected(null)} />
                 <Button
                   label="Send"

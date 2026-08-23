@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, type } from '../theme';
 import { checksumAddress } from '../wallet/address-safety';
 import { Button } from './Button';
+import { WarningBanner } from './WarningBanner';
 
 export type ConfirmRow = {
   label: string;
@@ -116,11 +117,11 @@ export function ConfirmSheet({
               </Text>
             </View>
           ))}
-          {warnings.map((warning) => (
-            <Text key={warning} style={[styles.warn, danger && styles.warnDanger]}>
-              {warning}
-            </Text>
-          ))}
+          <WarningBanner
+            danger={danger}
+            title={danger ? 'Do not approve unless you started this' : undefined}
+            lines={warnings}
+          />
           {danger || mode === 'hold' ? (
             <>
               {danger ? <Button label={rejectLabel} onPress={onCancel} /> : null}
@@ -183,11 +184,6 @@ const styles = StyleSheet.create({
     ...type.body,
     fontSize: 14,
   },
-  warn: {
-    color: colors.warning,
-    fontSize: 13,
-    lineHeight: 18,
-  },
   hold: {
     alignItems: 'center',
     backgroundColor: colors.accentDim,
@@ -216,9 +212,6 @@ const styles = StyleSheet.create({
     borderColor: colors.danger,
   },
   titleDanger: {
-    color: colors.danger,
-  },
-  warnDanger: {
     color: colors.danger,
   },
   holdDanger: {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getAddress, Interface } from 'ethers';
 
-import { decodeApprovalCalldata, inspectDappApproval } from './approval-risk';
+import { DRAIN_APPROVAL_WARNING, decodeApprovalCalldata, inspectDappApproval } from './approval-risk';
 
 const iface = new Interface([
   'function setApprovalForAll(address operator, bool approved)',
@@ -20,7 +20,11 @@ test('flags setApprovalForAll as a drain-danger approval', () => {
   assert.equal(risk.kind, 'setApprovalForAll');
   assert.equal(risk.danger, true);
   assert.equal(risk.operator, OPERATOR);
-  assert.ok(risk.warnings.some((item) => /ALL NFTs/i.test(item)));
+  assert.ok(risk.warnings.includes(DRAIN_APPROVAL_WARNING));
+  assert.equal(
+    DRAIN_APPROVAL_WARNING,
+    'This site is asking to take ALL NFTs in this collection. Scammers use this.',
+  );
 });
 
 test('flags unlimited ERC-20 approve and increaseAllowance', () => {
@@ -31,6 +35,7 @@ test('flags unlimited ERC-20 approve and increaseAllowance', () => {
   );
   assert.equal(approve?.unlimited, true);
   assert.equal(approve?.danger, true);
+  assert.ok(approve?.warnings.includes(DRAIN_APPROVAL_WARNING));
   const bump = decodeApprovalCalldata(
     TOKEN,
     iface.encodeFunctionData('increaseAllowance', [OPERATOR, max]),
