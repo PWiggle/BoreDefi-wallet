@@ -5,12 +5,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '../components/Button';
+import { ChainPicker } from '../components/ChainPicker';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { colors, radius, spacing } from '../theme';
-import { CHAIN_LIST, type ChainId } from '../wallet/chains';
 import { formatNative, formatTimestamp, shortenAddress } from '../wallet/format';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
 import { fetchBalance } from '../wallet/rpc';
@@ -63,19 +63,7 @@ export function HomeScreen() {
       title="Wallet"
       subtitle={selectedChain.name}
     >
-      <View style={styles.chainRow}>
-        {CHAIN_LIST.map((chain) => (
-          <Pressable
-            key={chain.id}
-            onPress={() => setSelectedChain(chain.id as ChainId)}
-            style={[styles.chip, selectedChain.id === chain.id && styles.chipOn]}
-          >
-            <Text style={[styles.chipText, selectedChain.id === chain.id && styles.chipTextOn]}>
-              {chain.name}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
       <View style={styles.balanceCard}>
         <Text style={styles.balanceLabel}>Available</Text>
         <Text style={styles.balance}>
@@ -93,6 +81,15 @@ export function HomeScreen() {
           variant="secondary"
           style={styles.action}
           onPress={() => navigation.navigate('Receive')}
+        />
+      </View>
+      <View style={styles.actions}>
+        <Button label="Swap" style={styles.action} onPress={() => navigation.navigate('Swap')} />
+        <Button
+          label="Connect"
+          variant="secondary"
+          style={styles.action}
+          onPress={() => navigation.navigate('WalletConnect', {})}
         />
       </View>
       <Button label="Activity" variant="secondary" onPress={() => navigation.navigate('Activity')} />
@@ -124,29 +121,6 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  chainRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipOn: {
-    backgroundColor: colors.accentDim,
-    borderColor: colors.accent,
-  },
-  chipText: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  chipTextOn: {
-    color: colors.accent,
-  },
   balanceCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

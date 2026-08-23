@@ -5,6 +5,8 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { WalletConnectOverlay } from './src/components/WalletConnectOverlay';
+import { WalletConnectProvider } from './src/context/WalletConnectContext';
 import { WalletProvider, useWallet } from './src/context/WalletContext';
 import type { MainStackParamList } from './src/navigation';
 import { ActivityScreen } from './src/screens/ActivityScreen';
@@ -18,8 +20,10 @@ import { ScanQrScreen } from './src/screens/ScanQrScreen';
 import { SendScreen } from './src/screens/SendScreen';
 import { SetPinScreen } from './src/screens/SetPinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { SwapScreen } from './src/screens/SwapScreen';
 import { UnlockScreen } from './src/screens/UnlockScreen';
 import { VerifySeedScreen } from './src/screens/VerifySeedScreen';
+import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { colors } from './src/theme';
 
@@ -71,6 +75,8 @@ function RootNavigator() {
         <MainStack.Screen name="Receive" component={ReceiveScreen} />
         <MainStack.Screen name="Send" component={SendScreen} initialParams={{}} />
         <MainStack.Screen name="ScanQr" component={ScanQrScreen} options={{ title: 'Scan QR' }} />
+        <MainStack.Screen name="Swap" component={SwapScreen} />
+        <MainStack.Screen name="WalletConnect" component={WalletConnectScreen} options={{ title: 'WalletConnect' }} />
         <MainStack.Screen name="Activity" component={ActivityScreen} />
         <MainStack.Screen name="Settings" component={SettingsScreen} />
         <MainStack.Screen
@@ -142,10 +148,13 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <WalletProvider>
-          <NavigationContainer theme={navTheme}>
-            <StatusBar style="light" />
-            <RootNavigator />
-          </NavigationContainer>
+          <WalletConnectProvider>
+            <NavigationContainer theme={navTheme}>
+              <StatusBar style="light" />
+              <RootNavigator />
+              <WalletConnectOverlay />
+            </NavigationContainer>
+          </WalletConnectProvider>
         </WalletProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

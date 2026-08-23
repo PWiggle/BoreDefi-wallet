@@ -20,10 +20,10 @@ export function WelcomeScreen() {
       }
     >
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Phase 1</Text>
+        <Text style={styles.cardTitle}>Phase 2</Text>
         <Text style={styles.cardBody}>
-          Create or import a BIP39 wallet, back up the seed (this cannot be skipped), then send and
-          receive on Ethereum, Base, and Polygon.
+          Create or import a BIP39 wallet, back up the seed, then send, receive, swap, and connect
+          to dApps on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, and Avalanche.
         </Text>
       </View>
     </Screen>

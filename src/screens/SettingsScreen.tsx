@@ -32,12 +32,18 @@ export function SettingsScreen() {
         />
       </View>
       <Button
+        label="WalletConnect sessions"
+        variant="secondary"
+        onPress={() => navigation.navigate('WalletConnect', {})}
+      />
+      <Button
         label="Reveal recovery phrase"
         variant="secondary"
         onPress={() => navigation.navigate('RevealSeed')}
       />
       <Text style={styles.note}>
-        Phase 1 does not include swaps, staking, bridges, a dApp browser, or fiat on-ramps.
+        Phase 2 adds same-chain aggregator swaps and WalletConnect. Stake, bridge, an in-app dApp
+        browser, and fiat on-ramps are later phases.
       </Text>
       <Button
         label="Delete wallet from device"

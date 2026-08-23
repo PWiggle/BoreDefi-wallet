@@ -3,7 +3,7 @@
     "name": "BoreDefi Wallet",
     "slug": "boredefi-wallet",
     "scheme": "boredefi",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -12,7 +12,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.boredefi.wallet",
       "infoPlist": {
-        "NSCameraUsageDescription": "Scan a recipient address QR code to send funds.",
+        "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
         "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID."
       }
     },
@@ -43,7 +43,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Scan a recipient address QR code to send funds.",
+          "cameraPermission": "Scan a recipient address or WalletConnect QR code.",
           "recordAudioAndroid": false
         }
       ],

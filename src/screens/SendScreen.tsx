@@ -125,7 +125,11 @@ export function SendScreen() {
         placeholderTextColor={colors.muted}
         editable={!review}
       />
-      <Button label="Scan QR" variant="secondary" onPress={() => navigation.navigate('ScanQr')} />
+      <Button
+        label="Scan QR"
+        variant="secondary"
+        onPress={() => navigation.navigate('ScanQr', { purpose: 'payment' })}
+      />
       <Text style={styles.label}>Amount ({selectedChain.symbol})</Text>
       <TextInput
         value={amount}
