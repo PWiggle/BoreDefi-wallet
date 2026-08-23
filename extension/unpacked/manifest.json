@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "BoreDefi Wallet",
+  "version": "0.4.0",
+  "description": "Non-custodial BoreDefi companion. Keys stay in this browser profile.",
+  "action": {
+    "default_title": "BoreDefi Wallet",
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
+    }
+  ],
+  "permissions": ["storage"],
+  "host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
+}

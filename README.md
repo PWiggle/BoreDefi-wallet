@@ -1,0 +1,254 @@
+# BoreDefi Wallet
+
+Non-custodial React Native wallet. Android is the first target; the same codebase is iOS-ready.
+
+**Phase 1** covers creating or importing a BIP39 wallet, a backup flow that cannot be skipped, PIN and biometric unlock, encrypted on-device key storage, and send / receive / balances / activity.
+
+**Phase 2** adds same-chain DEX aggregator swaps (best route), WalletConnect so this wallet can connect to dApps, and more EVM chains.
+
+**Phase 3** adds stake / unstake, cross-chain bridge, NFT view / send, and an in-app dApp browser.
+
+**Phase 4** adds Discover / Market (CoinGecko), a Chrome companion extension, and Ledger signing over WebHID.
+
+## What is not included
+
+No fiat on-ramp, Apple Pay, or bank rails. There is no backend that holds keys.
+
+## Security model
+
+- Keys are generated and stored only on the device.
+- The BIP39 phrase is encrypted at rest with a PIN-derived PBKDF2-SHA256 key and AES-256-GCM. Salt and nonce sit beside the ciphertext. Unlock decrypts into memory only; lock drops the plaintext. Native storage is still [Expo SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/) (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`). Web uses localStorage for ciphertext only — the TEST-ONLY banner stays; web is not a Keystore. Existing plaintext v1 vaults migrate on the next PIN unlock.
+- A new wallet is held in memory until the user writes the phrase down **and** re-enters three of the words. There is no skip control.
+- Unlock is a 6-digit PIN (the PIN itself is never stored). Failed attempts back off (5 → 30s, 10 → longer). Change PIN in Settings re-wraps the vault. Biometrics are an optional native convenience after a PIN unlock (unwrap key in SecureStore). Auto-lock default is 1 minute (immediate / 1 min / 5 min). Reveal phrase requires PIN or biometrics and blocks screenshots. Sends, swaps, stakes, bridges, NFT sends, and dApp signatures use a hold-to-confirm sheet. dApps never auto-sign.
+- Swap and bridge quotes go to LI.FI as public HTTP. NFT lists go to public Blockscout APIs. The seed is never sent. The signed transaction stays on-device.
+- WalletConnect sessions and the in-app browser share only the public address and signatures the user approves.
+- Optional RPC / WalletConnect project ID overrides belong in a local `.env` (see `.env.example`). Do not put a seed, private key, or privileged API key in the repo.
+- Discover uses the public CoinGecko API (no key). Market data is public; it never includes the seed.
+- The Chrome extension encrypts the phrase with a PIN-derived AES-GCM key in `chrome.storage.local`. The mobile vault and the extension vault are separate — import the same phrase if you want the same address.
+- Ledger: the seed stays on the device. This app only receives an address and signatures.
+
+## Stack
+
+Expo SDK 57 + React Native 0.86, with **ethers v6** for BIP39 / BIP44 (`m/44'/60'/0'/0/0`) and EVM signing.
+
+Swaps and bridges use the public [LI.FI](https://docs.li.fi/) quote API. Same-chain quotes stay on **Swap** (`fromChain === toChain`). Cross-chain quotes are **Bridge** (`fromChain !== toChain`). LI.FI aggregates 1inch, 0x, Kyber, Paraswap, LayerSwap, and others. 0x and 1inch direct APIs now require API keys, which we will not put in this public repo.
+
+WalletConnect is **Reown WalletKit** (`@reown/walletkit`) plus `@walletconnect/react-native-compat`. This is the wallet-side SDK (the app is the wallet, not a dApp). Pairing uses a `wc:` URI from QR, paste, a `boredefi://wc?uri=` deep link, or the in-app browser. A public Cloud project ID is a client identifier, not a key that can move funds. Override it with `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` in a local `.env`, or use the documented TEST-ONLY fallback so the public demo can pair.
+
+The in-app browser and Chrome extension announce **EIP-6963** (`rdns: com.boredefi.wallet`, `isBoreDefi`) so a dApp can prefer BoreDefi over other injected wallets.
+
+The in-app browser uses `react-native-webview` plus an injected EIP-1193 `window.ethereum` (`isBoreDefi` and `isMetaMask` for site compatibility). Signing reuses the same on-device path as WalletConnect.
+
+A companion **Chrome extension** lives in `extension/` (see [Load the Chrome extension](#load-the-chrome-extension)). It injects the same style of provider into https pages.
+
+### Discover / Market
+
+Home shows a live USD total (native balance × CoinGecko price, including `$0.00`), a compact Send / Receive / Swap / Stake / Bridge action row, native + USDC/USDT rows in the Discover MarketRow style, and a short top-market strip. Bottom tabs: Wallet, Markets, Browser, NFTs, Settings. Ledger, WalletConnect, and Activity live under Settings. **Markets** is a full in-app CoinGecko screen: rank, logo, name, symbol, live USD, 24h change, market cap, and 7d sparkline from public `/coins/markets?vs_currency=usd&sparkline=true&price_change_percentage=24h` (100 coins). Tabs: All / Trending / Gainers. Search uses CoinGecko search + details. Pull-to-refresh and Retry on failure. Tapping a coin (or **Open CoinGecko**) loads `www.coingecko.com` in the in-app Browser WebView — not Safari. On Expo web, CoinGecko blocks iframes (`X-Frame-Options: SAMEORIGIN`), so the Browser shows a live CoinGecko embed from the same public API. No API key and no custom browser `User-Agent`.
+
+### Ledger
+
+Attempted path:
+
+| Runtime | Transport | Status |
+| --- | --- | --- |
+| Chrome extension / Expo web | `@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-eth` | Implemented. Unlock the device, open the Ethereum app, confirm on hardware. Send / swap / bridge sign EIP-1559 txs at `44'/60'/0'/0/0`. |
+| Expo/React Native Android or iOS | USB HID or BLE | **Not shipped.** `@ledgerhq/react-native-hid` is unmaintained and is not wired for this Expo SDK 57 New Architecture prebuild. `@ledgerhq/react-native-hw-transport-ble` needs `react-native-ble-plx`, extra Bluetooth/location permissions, and a custom JSC that this project does not use. |
+
+The signing helpers (`buildUnsignedLedgerTx`, `applyLedgerSignature`) are shared and covered by unit tests. On a phone, **Settings → Ledger** explains the gap and points at the extension / Expo web WebHID path. Stake, NFTs, WalletConnect, and the in-app browser still use the software key when a Ledger is not connected.
+
+## Phase 3 protocol choices
+
+### Stake
+
+| Market | Why |
+| --- | --- |
+| **Lido stETH on Ethereum** | Canonical liquid staking. `submit()` on `0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84`. Unstake uses the withdrawal queue at `0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1` (`requestWithdrawals` / `claimWithdrawals`). Avoids running a 32 ETH validator from a phone. |
+| **Aave V3 USDC supply** | Instant withdraw and the most portable “put assets to work” interface. Pools: Ethereum `0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2`, Base `0xA238Dd80C259a72c79Bd56434e4eC5138f2Bc59B`, and the shared L2 pool `0x794a61358D6845594F94dc1DB02A252b5b4814aD` on Arbitrum, Optimism, Polygon, and Avalanche. |
+
+Native beacon-chain staking is not mobile-friendly. BNB Aave is omitted because the pool address was not verified for this app. Markets are listed only on their home chain.
+
+### Bridge
+
+Verified: LI.FI `GET https://li.quest/v1/quote` accepts `fromChain !== toChain` and returns a `transactionRequest` (example: Base → Arbitrum native ETH via LayerSwap). Bridge reuses that quote + on-device send. Same-chain or bridge-step quotes are rejected on the Swap path.
+
+### NFTs
+
+Public Blockscout v2 `GET {nftApi}/addresses/{addr}/nft?type=ERC-721,ERC-1155` on Ethereum, Base, Arbitrum, Optimism, Polygon, and BNB Chain. No API key. Avalanche has no Blockscout catalog here — the list is empty. There is no marketplace, claim, or mint.
+
+The NFTs tab is a Collectibles-style **2-column image grid**, grouped by collection, with the network picker on top. Autodetect uses the public Blockscout catalog (Avalanche has none). Empty state is **No NFTs yet** plus **Import**. Tap a tile opens a **detail** sheet (large image, name, collection, token id, checksum contract, network) — not Send. Primary action on detail is **View**. Send is secondary. **Hide NFT** is per item. Unsolicited airdrops stay in a collapsed Hidden / possible spam section (unknown collection, no https image, famous-name impersonation, first-seen drop). **Import NFT** asks for collectible contract + token id + standard and warns not to paste a wallet address. Images render only from `https` or an https IPFS gateway — no scripts, HTML/SVG documents, claim buttons, or marketplace. Send checks `ownerOf` / `balanceOf` and uses the hold-to-confirm sheet. dApp / WalletConnect `setApprovalForAll`, unlimited `approve`, and `increaseAllowance` show a red danger confirm with Reject emphasized; they never auto-sign.
+
+### dApp browser
+
+In-app WebView with an injected provider. Sites can call `eth_requestAccounts`, read RPCs, switch among supported chains, and sign. `wc:` URIs from the address bar or page navigation pair through WalletConnect. Bookmarks: Uniswap, Aave, Lido, Jumper.
+
+## Requirements
+
+- Node.js 22.13+
+- npm 10+
+- Android Studio with:
+  - Android SDK Platform **36**
+  - Android SDK Build-Tools **36.0.0**
+  - A device or emulator
+- `ANDROID_HOME` pointing at the SDK
+
+iOS builds need Xcode 26.4+ (Expo SDK 57). They are not required for Android work.
+
+## Install and run (Android)
+
+```bash
+git clone https://github.com/PWiggle/BoreDefi-wallet.git
+cd BoreDefi-wallet
+npm install
+```
+
+Optional: copy `.env.example` to `.env` and set `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID`.
+
+Generate the native Android project (package `com.boredefi.wallet`, `compileSdk` / `targetSdk` 36) and compile to a device or emulator:
+
+```bash
+npx expo prebuild --platform android
+npx expo run:android
+```
+
+`npm run android` is the same as `expo run:android`.
+
+To compile a debug APK without installing it (requires the Android SDK above):
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+cd android
+./gradlew assembleDebug
+```
+
+This environment produced `app-debug.apk` with package `com.boredefi.wallet`, `compileSdk` 36, and `targetSdk` 36.
+
+The `android/` folder is generated and gitignored. Re-run prebuild after changing native plugins in `app.json`. After adding WalletConnect native peers or `react-native-webview`, run prebuild again.
+
+## Load the Chrome extension
+
+```bash
+npm install
+npm run extension:build
+```
+
+Then in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** → select `extension/unpacked`.
+
+Details: [`extension/README.md`](extension/README.md).
+
+## Public web test (phone)
+
+One HTTPS URL for Phases 1–4:
+
+**https://pwiggle.github.io/BoreDefi-wallet/**
+
+Connect demo (static dApp, no backend):
+
+**https://pwiggle.github.io/BoreDefi-wallet/connect/**
+
+This is an Expo web export hosted on GitHub Pages (`experiments.baseUrl` is `/BoreDefi-wallet`). The Connect page is copied into `dist/connect/` after export (`npm run export:pages`). A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) publishes the `gh-pages` branch on pushes to `main` or `cursor/phase1-wallet-61ec`. The wallet preview stays at the site root; `/connect/` is a separate static page.
+
+### How to connect
+
+1. **In-app Browser (native):** unlock BoreDefi → Browser tab → **Connect** bookmark → **Connect BoreDefi** → approve the in-app prompt. The page sees `window.ethereum.isBoreDefi` / EIP-6963.
+2. **WalletConnect QR:** open the Connect page on a desktop or phone browser → **WalletConnect QR** → in BoreDefi, Settings → WalletConnect → Scan QR (or paste the `wc:` URI). Optional: **Open in BoreDefi** uses `boredefi://wc?uri=…`.
+3. **Chrome extension:** load `extension/unpacked`, unlock the popup, open the Connect page over https → **Connect BoreDefi**.
+
+Do not require MetaMask. If another injected wallet is present, the page still labels BoreDefi as the intended target.
+
+If that URL 404s the first time, enable Pages once: repo **Settings → Pages → Deploy from a branch → `gh-pages` / root**. The API cannot enable Pages from this agent.
+
+The web build shows a **TEST-ONLY** banner. Never enter a real recovery phrase or use real funds. Vault data on web is local to that browser profile (`localStorage`), not Android Keystore / iOS Keychain.
+
+```bash
+npm run export:web   # writes dist/ (gitignored)
+```
+
+### Android identifiers
+
+| Setting | Value |
+| --- | --- |
+| Application ID / package | `com.boredefi.wallet` |
+| compileSdk | 36 |
+| targetSdk | 36 |
+| minSdk | 24 |
+
+These are pinned with `expo-build-properties` in `app.json`.
+
+## Other commands
+
+```bash
+npm start                    # Metro bundler
+npm run typecheck            # TypeScript
+npm test                     # Wallet unit tests (no device required)
+npm run check:android-config # package name + SDK 36
+npm run extension:build      # Chrome unpacked bundle
+npm run export:web           # Expo web export to dist/
+npm run pages:prepare        # add .nojekyll, 404.html, and dist/connect/
+npm run export:pages         # export:web + pages:prepare
+npm run prebuild:android
+```
+
+## Networks
+
+| Network | Native token | Default public RPC | NFT catalog |
+| --- | --- | --- | --- |
+| Ethereum | ETH | `https://ethereum-rpc.publicnode.com` | Blockscout v2 |
+| Base | ETH | `https://mainnet.base.org` | Blockscout v2 |
+| Arbitrum | ETH | `https://arbitrum-one-rpc.publicnode.com` | Blockscout v2 |
+| Optimism | ETH | `https://optimism-rpc.publicnode.com` | Blockscout v2 |
+| Polygon | POL | `https://polygon-bor-rpc.publicnode.com` | Blockscout v2 |
+| BNB Chain | BNB | `https://bsc-rpc.publicnode.com` | Blockscout v2 |
+| Avalanche | AVAX | `https://avalanche-c-chain-rpc.publicnode.com` | Manual send only |
+
+All of these are EVM chains on the same BIP44 account. Activity uses public Blockscout or Routescan account APIs. Rate limits on public endpoints are expected.
+
+Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Ethereum also lists stETH.
+
+## Test plan (device)
+
+### Phase 1
+
+1. Fresh install → **Create new wallet**. Confirm there is no skip on the backup screen.
+2. Leave the acknowledge box unchecked; **Continue** stays disabled.
+3. Check the box, continue, and fail verification with a wrong word. Confirm you cannot proceed.
+4. Enter the correct three words, set a PIN, enable biometrics if the device has them.
+5. Background the app and return. Default auto-lock is 1 minute (Settings can set immediate / 5 min). Unlock with PIN (decrypts the vault into memory). On native, biometrics can unwrap after the first PIN unlock.
+6. On Home, switch networks and confirm the address is the same and balances load or show a connection error (no crash).
+7. Receive: QR encodes `ethereum:<address>@<chainId>`. Copy address.
+8. Send: scan a QR or paste a recipient, review the confirm sheet (network, from, checksum to, amount, fee), hold to confirm. Non-checksum / lookalike / clipboard-mismatch pastes warn. Reject an amount larger than balance + fee.
+9. On a funded test account, send a small amount and confirm the hash appears in Activity.
+10. Settings → reveal phrase requires PIN or biometrics and blocks screenshots. Change PIN requires the old PIN and re-wraps the vault. Hide balances masks Home amounts. Delete wallet requires PIN and returns to Welcome.
+11. Import the same phrase and confirm the same address.
+
+### Phase 2
+
+12. Home shows Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, and Avalanche.
+13. **Swap**: pick a chain, from/to tokens, amount larger than balance → error. Valid amount → quote shows a route name (for example 1inch) and a minimum received amount. Confirming without funds fails cleanly.
+14. On a funded account, swap a small amount of native → USDC (or the reverse). If an ERC-20 spend is required, an approval is sent first. Confirm the hash.
+15. Confirm a quote that would be cross-chain is not offered (same-chain only). Use **Bridge** instead.
+16. WalletConnect uses the documented public TEST-ONLY project ID unless `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` is set.
+17. On [https://pwiggle.github.io/BoreDefi-wallet/connect/](https://pwiggle.github.io/BoreDefi-wallet/connect/) or [react-app.walletconnect.com](https://react-app.walletconnect.com): copy/scan the `wc:` URI, approve the session, then reject a `personal_sign` and approve a later one. Disconnect from Settings or the Connect page.
+18. Confirm logs never print the recovery phrase or private key.
+
+### Phase 3
+
+19. **Stake** on Ethereum: Lido ETH market appears. Amount larger than wallet ETH fails. Funded account: stake a small amount → stETH balance rises. Unstake creates a withdrawal-queue request. When finalized, **Claim finalized** returns ETH.
+20. **Stake** on Base (or Arbitrum / Optimism / Polygon / Avalanche): Aave V3 USDC appears. Supply a small USDC amount, then withdraw. BNB Chain shows no market.
+21. **Bridge**: from and to chains must differ. Amount larger than balance fails. Quote names the LI.FI tool and a minimum received amount. Confirming without funds fails cleanly. Funded account: bridge a small native amount and confirm the source-chain hash.
+22. **NFTs**: 2-column collectibles grid grouped by collection. Tap opens detail (View primary, Send secondary, Hide NFT). Empty state shows No NFTs yet + Import. Import warns to paste the collectible contract, not a wallet. Hidden / possible spam is collapsed. Invalid recipient is rejected. Send is blocked if `ownerOf` / `balanceOf` does not match this wallet. Funded throwaway only: send an ERC-721 you own. In Browser / WalletConnect, a `setApprovalForAll` request is a red danger sheet with Reject first.
+23. **Browser**: open **Connect** / Uniswap / Aave / Lido / Jumper from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
+24. Confirm logs still never print the recovery phrase or private key.
+
+### Phase 4
+
+25. Home shows a USD total, a circular action row (not a button dump), and token rows like Markets. Bottom tabs: Wallet / Markets / Browser / NFTs / Settings. Markets: CoinGecko-style list (rank / logo / price / 24h / cap / sparkline), All / Trending / Gainers. Search “eth”, tap Ethereum — the in-app Browser tab opens the CoinGecko coin page (on web, the live embed). **Open CoinGecko** loads www.coingecko.com in Browser. Ledger / WalletConnect / Activity are under Settings.
+26. Browser bookmarks include CoinGecko. A dApp page still uses the injected provider. CoinGecko itself is read-only market data.
+27. Chrome: load `extension/unpacked`. Create a wallet — no skip on backup; wrong verify words fail. Set PIN, unlock, see a balance or RPC error, send with an invalid address/amount fails. On a dApp page, `window.ethereum.isBoreDefi` is true after unlock; reject by locking first.
+28. **Ledger** on Android: the screen explains WebHID is unavailable and points at the extension. On Chrome (extension or Expo web) with a Nano + Ethereum app: Connect shows the device address; a small send/swap/bridge asks for a device confirmation. Unplug → disconnect.
+29. Confirm logs and the extension service worker never print the recovery phrase or private key. No fiat UI exists.
+30. Open **https://pwiggle.github.io/BoreDefi-wallet/** on a phone. Confirm the TEST-ONLY banner. Do not use a real seed or real funds. Walk through create/backup/PIN, Wallet tab, Markets tab, Swap/Stake stack screens, and (optional) Ledger from Settings.
+31. Open **https://pwiggle.github.io/BoreDefi-wallet/connect/**. Confirm the ape mark, TEST-ONLY copy, and no backend. From the native Browser tab tap Connect BoreDefi and approve. From a desktop browser, scan the WalletConnect QR in BoreDefi. After connect: address, network, native balance, Sign test message (`Hello from BoreDefi`), Disconnect. The wallet root preview and lock/PIN cover stay unchanged.
+
+## License
+
+MIT
