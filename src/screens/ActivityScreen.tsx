@@ -1,15 +1,49 @@
 import { useCallback, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { card, colors, spacing, type } from '../theme';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
 import { formatNative, formatTimestamp, shortenAddress } from '../wallet/format';
 
+function activityStyles({ colors, type, card, spacing }: Theme) {
+  return {
+    empty: type.meta,
+    row: {
+      ...card,
+      gap: 4,
+    },
+    rowTop: {
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+      gap: spacing.md,
+    },
+    dir: {
+      color: colors.muted,
+      textTransform: 'uppercase' as const,
+      fontSize: 12,
+      fontWeight: '700' as const,
+    },
+    amt: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    failed: {
+      color: colors.danger,
+      textDecorationLine: 'line-through' as const,
+    },
+    meta: {
+      color: colors.muted,
+      fontSize: 13,
+    },
+  };
+}
+
 export function ActivityScreen() {
+  const styles = useThemedStyles(activityStyles);
   const { session, selectedChain } = useWallet();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -60,34 +94,3 @@ export function ActivityScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: type.meta,
-  row: {
-    ...card,
-    gap: 4,
-  },
-  rowTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  dir: {
-    color: colors.muted,
-    textTransform: 'uppercase',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  amt: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  failed: {
-    color: colors.danger,
-    textDecorationLine: 'line-through',
-  },
-  meta: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-});

@@ -1,7 +1,9 @@
 import { forwardRef } from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
+
+import { useTheme } from '../context/ThemeContext';
 
 type Props = {
   uri: string;
@@ -25,13 +27,19 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
   },
   ref,
 ) {
+  const { colors } = useTheme();
   if (Platform.OS === 'web') {
     return (
-      <View style={[styles.frame, style]}>
+      <View style={[{ backgroundColor: colors.surface, overflow: 'hidden' }, style]}>
         <iframe
           src={uri}
           title="BoreDefi in-app browser"
-          style={iframeStyle}
+          style={{
+            backgroundColor: colors.surface,
+            border: 'none',
+            height: '100%',
+            width: '100%',
+          }}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         />
       </View>
@@ -53,18 +61,4 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
       onError={(event) => onError?.(event.nativeEvent.description || 'Page failed to load.')}
     />
   );
-});
-
-const iframeStyle = {
-  backgroundColor: '#ffffff',
-  border: 'none',
-  height: '100%',
-  width: '100%',
-} as const;
-
-const styles = StyleSheet.create({
-  frame: {
-    backgroundColor: '#ffffff',
-    overflow: 'hidden',
-  },
 });

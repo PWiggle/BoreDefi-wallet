@@ -1,8 +1,26 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
+
+function errorStyles({ colors, radius, spacing }: Theme) {
+  return {
+    banner: {
+      backgroundColor: colors.dangerSurface,
+      borderColor: colors.danger,
+      borderWidth: 1,
+      borderRadius: radius.sm,
+      padding: spacing.md,
+    },
+    text: {
+      color: colors.danger,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+  };
+}
 
 export function ErrorBanner({ message }: { message?: string | null }) {
+  const styles = useThemedStyles(errorStyles);
   if (!message) {
     return null;
   }
@@ -12,18 +30,3 @@ export function ErrorBanner({ message }: { message?: string | null }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  banner: {
-    backgroundColor: 'rgba(255, 92, 122, 0.12)',
-    borderColor: colors.danger,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-  },
-  text: {
-    color: colors.danger,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-});

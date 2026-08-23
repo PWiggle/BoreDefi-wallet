@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
@@ -7,8 +7,8 @@ import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { card, chip, colors, field, spacing } from '../theme';
 import { CHAIN_LIST, type ChainId } from '../wallet/chains';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
@@ -24,7 +24,28 @@ function otherChainId(current: ChainId): ChainId {
   return CHAIN_LIST.find((chain) => chain.id !== current)?.id ?? current;
 }
 
+function bridgeStyles({ colors, card, chip, field, spacing }: Theme) {
+  return {
+    copy: { color: colors.muted },
+    label: { color: colors.text, fontWeight: '700' as const },
+    row: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
+    chip,
+    chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
+    chipText: { color: colors.text, fontWeight: '700' as const },
+    input: field,
+    meta: { color: colors.muted },
+    box: {
+      ...card,
+      gap: spacing.sm,
+    },
+    boxTitle: { color: colors.text, fontWeight: '700' as const },
+    hash: { color: colors.accent },
+  };
+}
+
 export function BridgeScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(bridgeStyles);
   const { session, selectedChain, setSelectedChain } = useWallet();
   const ledger = useLedger();
   const fromAddress = ledger.account?.address ?? session?.address ?? '';
@@ -223,20 +244,3 @@ export function BridgeScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  copy: { color: colors.muted },
-  label: { color: colors.text, fontWeight: '700' },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip,
-  chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
-  chipText: { color: colors.text, fontWeight: '700' },
-  input: field,
-  meta: { color: colors.muted },
-  box: {
-    ...card,
-    gap: spacing.sm,
-  },
-  boxTitle: { color: colors.text, fontWeight: '700' },
-  hash: { color: colors.accent },
-});

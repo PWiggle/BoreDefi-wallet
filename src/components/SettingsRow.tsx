@@ -1,6 +1,41 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
+
+function rowStyles({ colors, radius, spacing }: Theme) {
+  return {
+    row: {
+      alignItems: 'center' as const,
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      flexDirection: 'row' as const,
+      gap: spacing.md,
+      padding: spacing.md,
+    },
+    copy: {
+      flex: 1,
+      gap: 2,
+    },
+    label: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    detail: {
+      color: colors.muted,
+      fontSize: 13,
+    },
+    chevron: {
+      color: colors.muted,
+      fontSize: 22,
+      lineHeight: 22,
+    },
+    danger: {
+      color: colors.danger,
+    },
+  };
+}
 
 export function SettingsRow({
   label,
@@ -13,6 +48,7 @@ export function SettingsRow({
   onPress: () => void;
   danger?: boolean;
 }) {
+  const styles = useThemedStyles(rowStyles);
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <View style={styles.copy}>
@@ -23,36 +59,3 @@ export function SettingsRow({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  copy: {
-    flex: 1,
-    gap: 2,
-  },
-  label: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  detail: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  chevron: {
-    color: colors.muted,
-    fontSize: 22,
-    lineHeight: 22,
-  },
-  danger: {
-    color: colors.danger,
-  },
-});

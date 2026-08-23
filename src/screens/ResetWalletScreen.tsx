@@ -1,15 +1,26 @@
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, spacing } from '../theme';
 import { isValidPin } from '../wallet/pin';
 
+function resetStyles({ colors, spacing }: Theme) {
+  return {
+    warn: {
+      color: colors.warning,
+      lineHeight: 20,
+      marginBottom: spacing.sm,
+    },
+  };
+}
+
 export function ResetWalletScreen() {
+  const styles = useThemedStyles(resetStyles);
   const { resetWallet, pinBackoffMs } = useWallet();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +56,3 @@ export function ResetWalletScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  warn: {
-    color: colors.warning,
-    lineHeight: 20,
-    marginBottom: spacing.sm,
-  },
-});

@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { CHAIN_LIST, type ChainId } from '../wallet/chains';
 
 type Props = {
@@ -8,7 +8,37 @@ type Props = {
   onSelect: (chainId: ChainId) => void;
 };
 
+function pickerStyles({ colors, radius, spacing }: Theme) {
+  return {
+    row: {
+      flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
+      gap: spacing.sm,
+    },
+    chip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    chipOn: {
+      backgroundColor: colors.accentDim,
+      borderColor: colors.accent,
+    },
+    chipText: {
+      color: colors.muted,
+      fontWeight: '700' as const,
+    },
+    chipTextOn: {
+      color: colors.accent,
+    },
+  };
+}
+
 export function ChainPicker({ selected, onSelect }: Props) {
+  const styles = useThemedStyles(pickerStyles);
   return (
     <View style={styles.row}>
       {CHAIN_LIST.map((chain) => (
@@ -23,30 +53,3 @@ export function ChainPicker({ selected, onSelect }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipOn: {
-    backgroundColor: colors.accentDim,
-    borderColor: colors.accent,
-  },
-  chipText: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  chipTextOn: {
-    color: colors.accent,
-  },
-});

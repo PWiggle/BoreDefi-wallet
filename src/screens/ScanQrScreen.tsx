@@ -7,13 +7,30 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
-import { colors } from '../theme';
 import { parsePaymentUri } from '../wallet/qr';
 import { extractWalletConnectUri } from '../wallet/wc';
 
+function scanStyles({ colors }: Theme) {
+  return {
+    cameraWrap: {
+      flex: 1,
+      minHeight: 320,
+      borderRadius: 16,
+      overflow: 'hidden' as const,
+      backgroundColor: colors.surface,
+    },
+    hint: {
+      color: colors.muted,
+      textAlign: 'center' as const,
+    },
+  };
+}
+
 export function ScanQrScreen() {
+  const styles = useThemedStyles(scanStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'ScanQr'>>();
   const purpose = route.params?.purpose ?? 'payment';
@@ -95,17 +112,3 @@ export function ScanQrScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  cameraWrap: {
-    flex: 1,
-    minHeight: 320,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: colors.surface,
-  },
-  hint: {
-    color: colors.muted,
-    textAlign: 'center',
-  },
-});

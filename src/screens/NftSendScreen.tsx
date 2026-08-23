@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
@@ -10,15 +10,29 @@ import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { chip, colors, field, spacing, type } from '../theme';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { type NftItem, type NftStandard, sendNft, verifyNftOwnership } from '../wallet/nfts';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
+function nftSendStyles({ colors, chip, field, spacing, type }: Theme) {
+  return {
+    label: type.label,
+    input: field,
+    row: { flexDirection: 'row' as const, gap: spacing.sm },
+    chip,
+    chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
+    chipText: { color: colors.text, fontWeight: '700' as const },
+    hash: { color: colors.accent },
+  };
+}
+
 export function NftSendScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(nftSendStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'NftSend'>>();
   const { session, selectedChain } = useWallet();
@@ -231,13 +245,3 @@ export function NftSendScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  label: type.label,
-  input: field,
-  row: { flexDirection: 'row', gap: spacing.sm },
-  chip,
-  chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
-  chipText: { color: colors.text, fontWeight: '700' },
-  hash: { color: colors.accent },
-});

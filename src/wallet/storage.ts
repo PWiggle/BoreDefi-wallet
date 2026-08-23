@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { logger } from '../logger';
+import { DEFAULT_APPEARANCE, normalizeAppearance, type AppearanceMode } from '../theme';
 import { DEFAULT_AUTO_LOCK, normalizeAutoLock, type AutoLockMode } from './auto-lock';
 import { DEFAULT_CHAIN_ID, parseChainId, type ChainId } from './chains';
 import { type NftItem } from './nfts';
@@ -78,6 +79,7 @@ export type SettingsRecord = {
   selectedChainId: ChainId;
   backupCompleted: boolean;
   autoLock: AutoLockMode;
+  appearance: AppearanceMode;
   hideBalances: boolean;
   pinFailCount: number;
   pinLockUntil: number;
@@ -88,6 +90,7 @@ export const defaultSettings: SettingsRecord = {
   selectedChainId: DEFAULT_CHAIN_ID,
   backupCompleted: false,
   autoLock: DEFAULT_AUTO_LOCK,
+  appearance: DEFAULT_APPEARANCE,
   hideBalances: false,
   pinFailCount: 0,
   pinLockUntil: 0,
@@ -144,6 +147,7 @@ export async function loadSettings(): Promise<SettingsRecord> {
     selectedChainId: parseChainId(stored.selectedChainId ?? DEFAULT_CHAIN_ID) ?? DEFAULT_CHAIN_ID,
     backupCompleted: Boolean(stored.backupCompleted),
     autoLock: normalizeAutoLock(stored.autoLock),
+    appearance: normalizeAppearance(stored.appearance),
     hideBalances: Boolean(stored.hideBalances),
     pinFailCount: Number.isFinite(stored.pinFailCount) ? Number(stored.pinFailCount) : 0,
     pinLockUntil: Number.isFinite(stored.pinLockUntil) ? Number(stored.pinLockUntil) : 0,

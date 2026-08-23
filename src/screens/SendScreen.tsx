@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import { Text, TextInput } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
@@ -10,14 +10,28 @@ import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { colors, field, type } from '../theme';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { formatNative, parseAmountToWei } from '../wallet/format';
 import { estimateNativeTransfer, fetchBalance, sendNativeTransfer } from '../wallet/rpc';
 
+function sendStyles({ colors, field, type }: Theme) {
+  return {
+    label: type.label,
+    input: field,
+    meta: type.meta,
+    hash: {
+      ...type.meta,
+      color: colors.text,
+    },
+  };
+}
+
 export function SendScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(sendStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'Send'>>();
   const { session, selectedChain } = useWallet();
@@ -177,13 +191,3 @@ export function SendScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  label: type.label,
-  input: field,
-  meta: type.meta,
-  hash: {
-    ...type.meta,
-    color: colors.text,
-  },
-});

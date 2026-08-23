@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { getAddress, isAddress } from 'ethers';
 
@@ -7,14 +7,27 @@ import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { chip, colors, field, spacing, type } from '../theme';
 import { nftItemKey, type NftItem, type NftStandard, verifyNftOwnership } from '../wallet/nfts';
 import { loadImportedNfts, saveImportedNfts } from '../wallet/storage';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
+function nftImportStyles({ colors, chip, field, spacing, type }: Theme) {
+  return {
+    label: type.label,
+    input: field,
+    row: { flexDirection: 'row' as const, gap: spacing.sm },
+    chip,
+    chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
+    chipText: { color: colors.text, fontWeight: '700' as const },
+  };
+}
+
 export function NftImportScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(nftImportStyles);
   const navigation = useNavigation();
   const { session, selectedChain } = useWallet();
   const [contract, setContract] = useState('');
@@ -103,12 +116,3 @@ export function NftImportScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  label: type.label,
-  input: field,
-  row: { flexDirection: 'row', gap: spacing.sm },
-  chip,
-  chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
-  chipText: { color: colors.text, fontWeight: '700' },
-});

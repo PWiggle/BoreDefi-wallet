@@ -1,16 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, spacing } from '../theme';
 import { biometricAvailability } from '../wallet/biometrics';
 import { isValidPin } from '../wallet/pin';
 
+function setPinStyles({ colors, spacing }: Theme) {
+  return {
+    bioRow: {
+      marginTop: spacing.lg,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'space-between' as const,
+      gap: spacing.md,
+    },
+    bioTitle: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    bioSub: {
+      color: colors.muted,
+      marginTop: 4,
+    },
+  };
+}
+
 export function SetPinScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(setPinStyles);
   const { finalizeSetup, cancelOnboarding, biometricsReady } = useWallet();
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -80,21 +102,3 @@ export function SetPinScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  bioRow: {
-    marginTop: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  bioTitle: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  bioSub: {
-    color: colors.muted,
-    marginTop: 4,
-  },
-});

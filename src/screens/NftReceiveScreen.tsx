@@ -1,17 +1,43 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { card, colors, radius, spacing, type } from '../theme';
 import { checksumAddress } from '../wallet/address-safety';
 import { buildReceiveUri } from '../wallet/qr';
 
+function nftReceiveStyles({ colors, type, card, radius, spacing }: Theme) {
+  return {
+    qrWrap: {
+      alignSelf: 'center' as const,
+      backgroundColor: colors.qrBg,
+      padding: spacing.md,
+      borderRadius: radius.md,
+    },
+    addrBox: {
+      ...card,
+      gap: spacing.sm,
+    },
+    network: {
+      color: colors.accent,
+      fontWeight: '800' as const,
+    },
+    addr: {
+      ...type.body,
+      fontFamily: 'monospace',
+      fontSize: 13,
+    },
+  };
+}
+
 export function NftReceiveScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(nftReceiveStyles);
   const { session, selectedChain } = useWallet();
   const [copied, setCopied] = useState(false);
 
@@ -31,7 +57,7 @@ export function NftReceiveScreen() {
   return (
     <Screen title="Receive NFT" subtitle={selectedChain.name}>
       <View style={styles.qrWrap}>
-        <QRCode value={uri} size={220} backgroundColor="white" color="#0B0F14" />
+        <QRCode value={uri} size={220} backgroundColor={colors.qrBg} color={colors.qrFg} />
       </View>
       <View style={styles.addrBox}>
         <Text style={styles.network}>{selectedChain.name}</Text>
@@ -50,25 +76,3 @@ export function NftReceiveScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  qrWrap: {
-    alignSelf: 'center',
-    backgroundColor: '#fff',
-    padding: spacing.md,
-    borderRadius: radius.md,
-  },
-  addrBox: {
-    ...card,
-    gap: spacing.sm,
-  },
-  network: {
-    color: colors.accent,
-    fontWeight: '800',
-  },
-  addr: {
-    ...type.body,
-    fontFamily: 'monospace',
-    fontSize: 13,
-  },
-});

@@ -1,16 +1,42 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
-import { card, colors, field, spacing } from '../theme';
+
+function wcStyles({ colors, card, field, spacing }: Theme) {
+  return {
+    help: {
+      color: colors.muted,
+      lineHeight: 20,
+    },
+    input: field,
+    section: {
+      color: colors.text,
+      fontWeight: '700' as const,
+      fontSize: 18,
+      marginTop: spacing.sm,
+    },
+    session: {
+      ...card,
+      gap: spacing.xs,
+    },
+    name: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+  };
+}
 
 export function WalletConnectScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(wcStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'WalletConnect'>>();
   const { projectId, ready, error, sessions, pair, disconnect } = useWalletConnect();
@@ -76,25 +102,3 @@ export function WalletConnectScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  help: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  input: field,
-  section: {
-    color: colors.text,
-    fontWeight: '700',
-    fontSize: 18,
-    marginTop: spacing.sm,
-  },
-  session: {
-    ...card,
-    gap: spacing.xs,
-  },
-  name: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-});

@@ -1,13 +1,48 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { card, colors, spacing, type } from '../theme';
 import { WEB_TEST_BANNER } from '../web-test-copy';
 import { isWebTestBuild } from '../web-test';
 
+function welcomeStyles({ colors, type, card, spacing }: Theme) {
+  return {
+    card: {
+      ...card,
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    cardTitle: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: '800' as const,
+      letterSpacing: 1,
+      textTransform: 'uppercase' as const,
+    },
+    cardBody: type.subtitle,
+    warn: {
+      backgroundColor: colors.bannerSurface,
+      borderColor: colors.warning,
+      borderRadius: 16,
+      borderWidth: 1,
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+      padding: spacing.md,
+    },
+    warnTitle: {
+      color: colors.warning,
+      fontSize: 12,
+      fontWeight: '800' as const,
+      letterSpacing: 1,
+      textTransform: 'uppercase' as const,
+    },
+  };
+}
+
 export function WelcomeScreen() {
+  const styles = useThemedStyles(welcomeStyles);
   const { startCreate, startImport } = useWallet();
 
   return (
@@ -37,35 +72,3 @@ export function WelcomeScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    ...card,
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  cardTitle: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  cardBody: type.subtitle,
-  warn: {
-    backgroundColor: '#3B2A08',
-    borderColor: colors.warning,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-  },
-  warnTitle: {
-    color: colors.warning,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-});

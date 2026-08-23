@@ -1,13 +1,26 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput } from 'react-native';
+import { TextInput } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, field } from '../theme';
+
+function importStyles({ field }: Theme) {
+  return {
+    input: {
+      ...field,
+      lineHeight: 24,
+      minHeight: 180,
+      paddingVertical: 14,
+    },
+  };
+}
 
 export function ImportWalletScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(importStyles);
   const { importMnemonic, cancelOnboarding } = useWallet();
   const [phrase, setPhrase] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -49,12 +62,3 @@ export function ImportWalletScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    ...field,
-    lineHeight: 24,
-    minHeight: 180,
-    paddingVertical: 14,
-  },
-});

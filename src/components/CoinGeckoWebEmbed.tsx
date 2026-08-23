@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { formatCompactUsd, formatMarketPrice, formatPercent } from '../wallet/format';
 import {
   coinGeckoUrl,
@@ -16,7 +16,72 @@ import { ErrorBanner } from './ErrorBanner';
 import { MarketRow } from './MarketRow';
 import { Sparkline } from './Sparkline';
 
+function embedStyles({ colors, radius, spacing }: Theme) {
+  return {
+    embed: {
+      backgroundColor: colors.bg,
+      flex: 1,
+    },
+    embedBody: {
+      gap: spacing.sm,
+      padding: spacing.md,
+    },
+    kicker: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: '800' as const,
+      letterSpacing: 1,
+      textTransform: 'uppercase' as const,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 22,
+      fontWeight: '800' as const,
+    },
+    copy: {
+      color: colors.muted,
+      lineHeight: 20,
+    },
+    hero: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      gap: spacing.md,
+    },
+    heroLogo: {
+      borderRadius: 20,
+      height: 40,
+      width: 40,
+    },
+    heroCopy: {
+      flex: 1,
+    },
+    heroPrice: {
+      color: colors.text,
+      fontSize: 32,
+      fontWeight: '800' as const,
+    },
+    heroChange: {
+      color: colors.muted,
+      fontWeight: '700' as const,
+    },
+    up: { color: colors.accent },
+    down: { color: colors.danger },
+    chart: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      padding: spacing.sm,
+    },
+    meta: {
+      color: colors.text,
+      fontWeight: '600' as const,
+    },
+  };
+}
+
 export function CoinGeckoWebEmbed({ url, onOpenUrl }: { url: string; onOpenUrl: (next: string) => void }) {
+  const styles = useThemedStyles(embedStyles);
   const coinId = parseCoinGeckoCoinId(url);
   if (coinId) {
     return <CoinDetail id={coinId} />;
@@ -25,6 +90,7 @@ export function CoinGeckoWebEmbed({ url, onOpenUrl }: { url: string; onOpenUrl: 
 }
 
 function MarketsHome({ onOpenUrl }: { onOpenUrl: (next: string) => void }) {
+  const styles = useThemedStyles(embedStyles);
   const [rows, setRows] = useState<MarketCoin[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,6 +131,7 @@ function MarketsHome({ onOpenUrl }: { onOpenUrl: (next: string) => void }) {
 }
 
 function CoinDetail({ id }: { id: string }) {
+  const styles = useThemedStyles(embedStyles);
   const [coin, setCoin] = useState<CoinPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -127,65 +194,3 @@ function CoinDetail({ id }: { id: string }) {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  embed: {
-    backgroundColor: colors.bg,
-    flex: 1,
-  },
-  embedBody: {
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  kicker: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  copy: {
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  hero: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  heroLogo: {
-    borderRadius: 20,
-    height: 40,
-    width: 40,
-  },
-  heroCopy: {
-    flex: 1,
-  },
-  heroPrice: {
-    color: colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  heroChange: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  up: { color: colors.accent },
-  down: { color: colors.danger },
-  chart: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: spacing.sm,
-  },
-  meta: {
-    color: colors.text,
-    fontWeight: '600',
-  },
-});

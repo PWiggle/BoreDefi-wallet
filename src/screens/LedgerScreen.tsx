@@ -1,13 +1,27 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
-import { card, colors, spacing, type } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { LEDGER_ETH_PATH } from '../wallet/ledger';
 
+function ledgerStyles({ colors, type, card, spacing }: Theme) {
+  return {
+    card: {
+      ...card,
+      gap: spacing.sm,
+    },
+    label: type.label,
+    value: { color: colors.text, fontWeight: '700' as const },
+    help: type.subtitle,
+    gap: { color: colors.warning, lineHeight: 20 },
+  };
+}
+
 export function LedgerScreen() {
+  const styles = useThemedStyles(ledgerStyles);
   const { account, connecting, error, transportKind, gapMessage, connect, disconnect } = useLedger();
 
   return (
@@ -46,14 +60,3 @@ export function LedgerScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    ...card,
-    gap: spacing.sm,
-  },
-  label: type.label,
-  value: { color: colors.text, fontWeight: '700' },
-  help: type.subtitle,
-  gap: { color: colors.warning, lineHeight: 20 },
-});

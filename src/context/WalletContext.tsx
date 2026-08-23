@@ -11,6 +11,7 @@ import {
 import { AppState, Platform } from 'react-native';
 
 import { logger } from '../logger';
+import type { AppearanceMode } from '../theme';
 import { autoLockMs, type AutoLockMode } from '../wallet/auto-lock';
 import { authenticateBiometrics, biometricAvailability } from '../wallet/biometrics';
 import { CHAINS, DEFAULT_CHAIN_ID, type ChainConfig, type ChainId } from '../wallet/chains';
@@ -89,6 +90,7 @@ type WalletContextValue = {
   setSelectedChain: (chainId: ChainId) => Promise<void>;
   setBiometricsEnabled: (enabled: boolean) => Promise<void>;
   setAutoLock: (mode: AutoLockMode) => Promise<void>;
+  setAppearance: (mode: AppearanceMode) => Promise<void>;
   setHideBalances: (hidden: boolean) => Promise<void>;
   changePin: (oldPin: string, newPin: string) => Promise<boolean>;
   revealMnemonic: (pin: string) => Promise<string | null>;
@@ -433,6 +435,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [patchSettings],
   );
 
+  const setAppearance = useCallback(
+    async (mode: AppearanceMode) => {
+      await patchSettings({ appearance: mode });
+    },
+    [patchSettings],
+  );
+
   const setHideBalances = useCallback(
     async (hidden: boolean) => {
       await patchSettings({ hideBalances: hidden });
@@ -571,6 +580,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setSelectedChain,
       setBiometricsEnabled,
       setAutoLock,
+      setAppearance,
       setHideBalances,
       changePin,
       revealMnemonic,
@@ -593,6 +603,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       revealMnemonic,
       revealWithBiometrics,
       session,
+      setAppearance,
       setAutoLock,
       setBiometricsEnabled,
       setHideBalances,

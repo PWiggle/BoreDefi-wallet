@@ -1,6 +1,38 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
+
+function warningStyles({ colors, radius, spacing }: Theme) {
+  return {
+    box: {
+      backgroundColor: colors.warningSurface,
+      borderColor: colors.warning,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      gap: 6,
+      padding: spacing.md,
+    },
+    boxDanger: {
+      backgroundColor: colors.dangerSurface,
+      borderColor: colors.danger,
+    },
+    title: {
+      color: colors.warning,
+      fontWeight: '800' as const,
+    },
+    titleDanger: {
+      color: colors.danger,
+    },
+    line: {
+      color: colors.warning,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    lineDanger: {
+      color: colors.danger,
+    },
+  };
+}
 
 export function WarningBanner({
   title,
@@ -11,6 +43,7 @@ export function WarningBanner({
   lines: string[];
   danger?: boolean;
 }) {
+  const styles = useThemedStyles(warningStyles);
   if (lines.length === 0) {
     return null;
   }
@@ -25,33 +58,3 @@ export function WarningBanner({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  box: {
-    backgroundColor: '#2A2108',
-    borderColor: colors.warning,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    gap: 6,
-    padding: spacing.md,
-  },
-  boxDanger: {
-    backgroundColor: '#2A0610',
-    borderColor: colors.danger,
-  },
-  title: {
-    color: colors.warning,
-    fontWeight: '800',
-  },
-  titleDanger: {
-    color: colors.danger,
-  },
-  line: {
-    color: colors.warning,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  lineDanger: {
-    color: colors.danger,
-  },
-});

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 import { usePreventScreenCapture } from 'expo-screen-capture';
 
 import { Button } from '../components/Button';
@@ -7,12 +7,23 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
 import { SeedGrid } from '../components/SeedGrid';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, spacing, type } from '../theme';
 import { isValidPin } from '../wallet/pin';
+
+function revealStyles({ colors, type, spacing }: Theme) {
+  return {
+    warn: {
+      color: colors.warning,
+      marginBottom: spacing.sm,
+    },
+    wait: type.subtitle,
+  };
+}
 
 export function RevealSeedScreen() {
   usePreventScreenCapture();
+  const styles = useThemedStyles(revealStyles);
   const { revealMnemonic, revealWithBiometrics, settings, pinBackoffMs } = useWallet();
   const [pin, setPin] = useState('');
   const [phrase, setPhrase] = useState<string | null>(null);
@@ -77,11 +88,3 @@ export function RevealSeedScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  warn: {
-    color: colors.warning,
-    marginBottom: spacing.sm,
-  },
-  wait: type.subtitle,
-});

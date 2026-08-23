@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import { colors, spacing } from '../theme';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 
 type Name = 'send' | 'receive' | 'swap' | 'stake' | 'bridge';
 
@@ -13,6 +13,31 @@ const ICONS: Record<Name, string> = {
   bridge: 'M5 12h14M8 8 5 12l3 4M16 8l3 4-3 4',
 };
 
+function circleStyles({ colors, spacing }: Theme) {
+  return {
+    wrap: {
+      alignItems: 'center' as const,
+      flex: 1,
+      gap: 6,
+    },
+    circle: {
+      alignItems: 'center' as const,
+      backgroundColor: colors.surfaceAlt,
+      borderColor: colors.border,
+      borderRadius: 22,
+      borderWidth: 1,
+      height: 44,
+      justifyContent: 'center' as const,
+      width: 44,
+    },
+    label: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: '700' as const,
+    },
+  };
+}
+
 export function CircleAction({
   label,
   name,
@@ -22,6 +47,8 @@ export function CircleAction({
   name: Name;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(circleStyles);
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.wrap}>
       <View style={styles.circle}>
@@ -40,26 +67,3 @@ export function CircleAction({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 6,
-  },
-  circle: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-});

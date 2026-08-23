@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
@@ -7,9 +7,9 @@ import { ChainPicker } from '../components/ChainPicker';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { card, chip, colors, field, spacing } from '../theme';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
   claimLidoRequests,
@@ -27,7 +27,28 @@ function stakedLabel(market: StakeMarket): string {
   return market.protocol === 'lido' ? 'stETH' : `a${market.asset.symbol}`;
 }
 
+function stakeStyles({ colors, card, chip, field, spacing }: Theme) {
+  return {
+    copy: { color: colors.muted },
+    row: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
+    chip,
+    chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
+    chipText: { color: colors.text, fontWeight: '700' as const },
+    meta: { color: colors.muted },
+    input: field,
+    actions: { gap: spacing.sm },
+    box: {
+      ...card,
+      gap: spacing.sm,
+    },
+    boxTitle: { color: colors.text, fontWeight: '700' as const },
+    hash: { color: colors.accent },
+  };
+}
+
 export function StakeScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(stakeStyles);
   const route = useRoute<RouteProp<MainStackParamList, 'Stake'>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const markets = useMemo(
@@ -210,20 +231,3 @@ export function StakeScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  copy: { color: colors.muted },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip,
-  chipOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
-  chipText: { color: colors.text, fontWeight: '700' },
-  meta: { color: colors.muted },
-  input: field,
-  actions: { gap: spacing.sm },
-  box: {
-    ...card,
-    gap: spacing.sm,
-  },
-  boxTitle: { color: colors.text, fontWeight: '700' },
-  hash: { color: colors.accent },
-});

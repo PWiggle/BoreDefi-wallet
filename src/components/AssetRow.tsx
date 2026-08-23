@@ -1,10 +1,68 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { formatMarketPrice, formatPercent, formatTokenAmount, formatUsd } from '../wallet/format';
 import { type MarketCoin, usdValueFromUnits } from '../wallet/markets';
 import { type TokenConfig } from '../wallet/tokens';
 import { Sparkline } from './Sparkline';
+
+function assetStyles({ colors, radius, spacing }: Theme) {
+  return {
+    row: {
+      alignItems: 'center' as const,
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      flexDirection: 'row' as const,
+      gap: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
+    },
+    logo: {
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: 14,
+      height: 28,
+      width: 28,
+    },
+    logoFallback: {
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    logoLetter: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: '800' as const,
+    },
+    copy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    name: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    meta: {
+      color: colors.muted,
+      fontSize: 12,
+    },
+    stats: {
+      alignItems: 'flex-end' as const,
+      minWidth: 72,
+    },
+    price: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    change: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: '600' as const,
+    },
+    up: { color: colors.accent },
+    down: { color: colors.danger },
+  };
+}
 
 export function AssetRow({
   token,
@@ -19,6 +77,7 @@ export function AssetRow({
   onPress: () => void;
   hideBalances?: boolean;
 }) {
+  const styles = useThemedStyles(assetStyles);
   const usd = usdValueFromUnits(amount, token.decimals, market?.priceUsd);
   const up = (market?.change24h ?? 0) > 0;
   const down = (market?.change24h ?? 0) < 0;
@@ -49,59 +108,3 @@ export function AssetRow({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  logo: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 14,
-    height: 28,
-    width: 28,
-  },
-  logoFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoLetter: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  copy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  name: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  meta: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  stats: {
-    alignItems: 'flex-end',
-    minWidth: 72,
-  },
-  price: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  change: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  up: { color: colors.accent },
-  down: { color: colors.danger },
-});

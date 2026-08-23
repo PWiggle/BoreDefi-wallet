@@ -1,15 +1,61 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { usePreventScreenCapture } from 'expo-screen-capture';
 
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { SeedGrid } from '../components/SeedGrid';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, radius, spacing } from '../theme';
+
+function backupStyles({ colors, radius, spacing }: Theme) {
+  return {
+    warn: {
+      backgroundColor: colors.warningSurface,
+      borderColor: colors.warning,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      padding: spacing.md,
+    },
+    warnText: {
+      color: colors.warning,
+      lineHeight: 20,
+    },
+    checkRow: {
+      flexDirection: 'row' as const,
+      gap: spacing.md,
+      alignItems: 'flex-start' as const,
+      marginTop: spacing.sm,
+    },
+    box: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      marginTop: 2,
+    },
+    boxOn: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    check: {
+      color: colors.accentText,
+      fontWeight: '800' as const,
+    },
+    checkLabel: {
+      flex: 1,
+      color: colors.text,
+      lineHeight: 20,
+    },
+  };
+}
 
 export function BackupSeedScreen() {
   usePreventScreenCapture();
+  const styles = useThemedStyles(backupStyles);
   const { pending, cancelOnboarding, confirmBackupViewed } = useWallet();
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -55,46 +101,3 @@ export function BackupSeedScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  warn: {
-    backgroundColor: 'rgba(245, 193, 76, 0.1)',
-    borderColor: colors.warning,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  warnText: {
-    color: colors.warning,
-    lineHeight: 20,
-  },
-  checkRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    alignItems: 'flex-start',
-    marginTop: spacing.sm,
-  },
-  box: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  boxOn: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  check: {
-    color: '#04140E',
-    fontWeight: '800',
-  },
-  checkLabel: {
-    flex: 1,
-    color: colors.text,
-    lineHeight: 20,
-  },
-});

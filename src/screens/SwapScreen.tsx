@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
@@ -8,9 +8,9 @@ import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
-import { card, chip, colors, field, spacing } from '../theme';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
   ensureSpendAllowance,
@@ -21,7 +21,48 @@ import {
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 
+function swapStyles({ colors, card, chip, field, spacing }: Theme) {
+  return {
+    label: {
+      color: colors.muted,
+      fontWeight: '700' as const,
+    },
+    input: field,
+    meta: {
+      color: colors.muted,
+    },
+    tokenRow: {
+      flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
+      gap: spacing.sm,
+    },
+    token: chip,
+    tokenOn: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accentDim,
+    },
+    tokenText: {
+      color: colors.muted,
+      fontWeight: '700' as const,
+    },
+    tokenTextOn: {
+      color: colors.accent,
+    },
+    quote: {
+      ...card,
+      gap: spacing.sm,
+    },
+    quoteTitle: {
+      color: colors.text,
+      fontWeight: '700' as const,
+      fontSize: 16,
+    },
+  };
+}
+
 export function SwapScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(swapStyles);
   const route = useRoute<RouteProp<MainStackParamList, 'Swap'>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const ledger = useLedger();
@@ -201,6 +242,7 @@ function TokenRow({
   selected: TokenConfig;
   onSelect: (token: TokenConfig) => void;
 }) {
+  const styles = useThemedStyles(swapStyles);
   return (
     <View style={styles.tokenRow}>
       {tokens.map((token) => (
@@ -217,40 +259,3 @@ function TokenRow({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  label: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  input: field,
-  meta: {
-    color: colors.muted,
-  },
-  tokenRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  token: chip,
-  tokenOn: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentDim,
-  },
-  tokenText: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  tokenTextOn: {
-    color: colors.accent,
-  },
-  quote: {
-    ...card,
-    gap: spacing.sm,
-  },
-  quoteTitle: {
-    color: colors.text,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-});

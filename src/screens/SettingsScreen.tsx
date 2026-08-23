@@ -1,16 +1,71 @@
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { Screen } from '../components/Screen';
 import { SettingsRow } from '../components/SettingsRow';
+import { APPEARANCE_OPTIONS, useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
-import { card, colors, spacing, type } from '../theme';
 import { AUTO_LOCK_OPTIONS } from '../wallet/auto-lock';
 import { shortenAddress } from '../wallet/format';
 
+function settingsStyles({ colors, type, card, spacing }: Theme) {
+  return {
+    section: {
+      ...type.label,
+      marginTop: spacing.sm,
+    },
+    row: {
+      ...card,
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      gap: spacing.md,
+      justifyContent: 'space-between' as const,
+    },
+    card: {
+      ...card,
+      gap: spacing.sm,
+    },
+    copy: {
+      flex: 1,
+      gap: 4,
+    },
+    label: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    help: type.meta,
+    note: type.subtitle,
+    chips: {
+      flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
+      gap: spacing.sm,
+    },
+    chip: {
+      borderColor: colors.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    chipOn: {
+      backgroundColor: colors.accentDim,
+      borderColor: colors.accent,
+    },
+    chipText: {
+      color: colors.muted,
+      fontWeight: '700' as const,
+    },
+    chipTextOn: {
+      color: colors.accent,
+    },
+  };
+}
+
 export function SettingsScreen() {
   const navigation = useNavigation<MainNavigation>();
+  const { colors, appearance, setAppearance } = useTheme();
+  const styles = useThemedStyles(settingsStyles);
   const {
     session,
     settings,
@@ -22,6 +77,24 @@ export function SettingsScreen() {
 
   return (
     <Screen inset="tab" title="Settings" subtitle={session ? shortenAddress(session.address) : undefined}>
+      <Text style={styles.section}>Appearance</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Theme</Text>
+        <Text style={styles.help}>Light, dark, or follow the device. Changes apply immediately.</Text>
+        <View style={styles.chips}>
+          {APPEARANCE_OPTIONS.map((item) => (
+            <Pressable
+              key={item.mode}
+              onPress={() => setAppearance(item.mode)}
+              style={[styles.chip, appearance === item.mode && styles.chipOn]}
+            >
+              <Text style={[styles.chipText, appearance === item.mode && styles.chipTextOn]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
       <Text style={styles.section}>Safety</Text>
       <View style={styles.row}>
         <View style={styles.copy}>
@@ -99,54 +172,3 @@ export function SettingsScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  section: {
-    ...type.label,
-    marginTop: spacing.sm,
-  },
-  row: {
-    ...card,
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'space-between',
-  },
-  card: {
-    ...card,
-    gap: spacing.sm,
-  },
-  copy: {
-    flex: 1,
-    gap: 4,
-  },
-  label: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  help: type.meta,
-  note: type.subtitle,
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chip: {
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  chipOn: {
-    backgroundColor: colors.accentDim,
-    borderColor: colors.accent,
-  },
-  chipText: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  chipTextOn: {
-    color: colors.accent,
-  },
-});

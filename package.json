@@ -11,7 +11,7 @@
     "prebuild": "expo prebuild",
     "prebuild:android": "expo prebuild --platform android",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/logger.test.ts src/web-test.test.ts src/wallet/*.test.ts",
+    "test": "tsx --test src/logger.test.ts src/web-test.test.ts src/theme.test.ts src/wallet/*.test.ts",
     "export:web": "expo export --platform web",
     "check:android-config": "node scripts/check-android-config.mjs",
     "extension:build": "node scripts/build-extension.mjs"

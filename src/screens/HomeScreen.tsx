@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 
@@ -9,9 +9,9 @@ import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { MarketRow } from '../components/MarketRow';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
-import { card, colors, radius, spacing, type } from '../theme';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
 import { formatNative, formatTimestamp, formatUsd, shortenAddress } from '../wallet/format';
 import {
@@ -35,7 +35,80 @@ type TokenRow = {
   market: MarketCoin | undefined;
 };
 
+function homeStyles({ colors, type, card, radius, spacing }: Theme) {
+  return {
+    hero: {
+      ...card,
+      borderRadius: radius.lg,
+      gap: spacing.xs,
+      padding: spacing.lg,
+    },
+    heroTop: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+    },
+    hide: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: '700' as const,
+    },
+    heroLabel: type.label,
+    heroUsd: {
+      color: colors.text,
+      fontSize: 36,
+      fontWeight: '800' as const,
+      letterSpacing: -0.8,
+    },
+    heroNative: {
+      color: colors.muted,
+      fontSize: 15,
+      fontWeight: '600' as const,
+    },
+    address: {
+      color: colors.accent,
+      fontWeight: '700' as const,
+    },
+    rail: {
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+    },
+    section: {
+      gap: spacing.sm,
+    },
+    sectionHead: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+    },
+    sectionTitle: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: '700' as const,
+    },
+    link: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: '700' as const,
+    },
+    empty: {
+      color: colors.muted,
+    },
+    tx: {
+      ...card,
+      gap: 2,
+    },
+    txDir: type.label,
+    txAmt: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    txMeta: type.meta,
+  };
+}
+
 export function HomeScreen() {
+  const styles = useThemedStyles(homeStyles);
   const navigation = useNavigation<MainNavigation>();
   const { session, selectedChain, setSelectedChain, settings, setHideBalances } = useWallet();
   const [balance, setBalance] = useState<bigint | null>(null);
@@ -212,73 +285,3 @@ export function HomeScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  hero: {
-    ...card,
-    borderRadius: radius.lg,
-    gap: spacing.xs,
-    padding: spacing.lg,
-  },
-  heroTop: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  hide: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  heroLabel: type.label,
-  heroUsd: {
-    color: colors.text,
-    fontSize: 36,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-  heroNative: {
-    color: colors.muted,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  address: {
-    color: colors.accent,
-    fontWeight: '700',
-  },
-  rail: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  sectionHead: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  link: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  empty: {
-    color: colors.muted,
-  },
-  tx: {
-    ...card,
-    gap: 2,
-  },
-  txDir: type.label,
-  txAmt: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  txMeta: type.meta,
-});

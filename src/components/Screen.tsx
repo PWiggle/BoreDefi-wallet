@@ -1,8 +1,8 @@
 import { type ReactNode } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, spacing, type } from '../theme';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 
 type Props = {
   title?: string;
@@ -15,6 +15,32 @@ type Props = {
   inset?: 'tab' | 'stack';
 };
 
+function screenStyles({ colors, type, spacing }: Theme) {
+  return {
+    safe: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    scroll: {
+      flexGrow: 1,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.lg,
+    },
+    body: {
+      flexGrow: 1,
+      gap: spacing.md,
+    },
+    title: type.title,
+    subtitle: type.subtitle,
+    footer: {
+      gap: spacing.sm,
+      paddingBottom: spacing.md,
+      paddingHorizontal: spacing.md,
+    },
+  };
+}
+
 export function Screen({
   title,
   subtitle,
@@ -25,6 +51,8 @@ export function Screen({
   onRefresh,
   inset = 'stack',
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(screenStyles);
   const body = (
     <View style={styles.body}>
       {title ? <Text style={styles.title}>{title}</Text> : null}
@@ -55,27 +83,3 @@ export function Screen({
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
-  },
-  body: {
-    flexGrow: 1,
-    gap: spacing.md,
-  },
-  title: type.title,
-  subtitle: type.subtitle,
-  footer: {
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-});

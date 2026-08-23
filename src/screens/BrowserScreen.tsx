@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -18,10 +17,10 @@ import { CoinGeckoWebEmbed } from '../components/CoinGeckoWebEmbed';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { InAppBrowserView } from '../components/InAppBrowserView';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainTabParamList } from '../navigation';
-import { colors, field, radius, spacing, type } from '../theme';
 import { classifyBrowserMethod, DAPP_BOOKMARKS, DEFAULT_BROWSER_URL, normalizeDappUrl } from '../wallet/dapps';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
@@ -64,7 +63,45 @@ function txAmount(value: unknown, symbol: string): string | undefined {
   }
 }
 
+function browserStyles({ colors, field, radius, spacing, type }: Theme) {
+  return {
+    root: {
+      backgroundColor: colors.bg,
+      flex: 1,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+    },
+    title: type.title,
+    copy: { ...type.subtitle, marginBottom: spacing.sm },
+    bar: { flexDirection: 'row' as const, gap: spacing.sm, marginBottom: spacing.sm },
+    input: {
+      ...field,
+      flex: 1,
+    },
+    go: { minWidth: 72 },
+    bookmarks: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm, marginBottom: spacing.sm },
+    chip: {
+      borderColor: colors.border,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    chipText: { color: colors.text, fontWeight: '700' as const },
+    web: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      flex: 1,
+      marginBottom: spacing.md,
+    },
+  };
+}
+
 export function BrowserScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(browserStyles);
   const route = useRoute<RouteProp<MainTabParamList, 'Browser'>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const { pair } = useWalletConnect();
@@ -334,37 +371,3 @@ export function BrowserScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    backgroundColor: colors.bg,
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-  },
-  title: type.title,
-  copy: { ...type.subtitle, marginBottom: spacing.sm },
-  bar: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  input: {
-    ...field,
-    flex: 1,
-  },
-  go: { minWidth: 72 },
-  bookmarks: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
-  chip: {
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  chipText: { color: colors.text, fontWeight: '700' },
-  web: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flex: 1,
-    marginBottom: spacing.md,
-  },
-});

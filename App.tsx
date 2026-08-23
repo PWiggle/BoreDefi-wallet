@@ -1,13 +1,15 @@
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { useMemo } from 'react';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { WalletConnectOverlay } from './src/components/WalletConnectOverlay';
 import { WebTestBanner } from './src/components/WebTestBanner';
 import { LedgerProvider } from './src/context/LedgerContext';
+import { ThemeProvider, useTheme, useThemedStyles } from './src/context/ThemeContext';
 import { WalletConnectProvider } from './src/context/WalletConnectContext';
 import { WalletProvider, useWallet } from './src/context/WalletContext';
 import type { MainStackParamList } from './src/navigation';
@@ -33,24 +35,35 @@ import { UnlockScreen } from './src/screens/UnlockScreen';
 import { VerifySeedScreen } from './src/screens/VerifySeedScreen';
 import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
-import { colors, phoneWidth } from './src/theme';
+import { phoneWidth } from './src/theme';
 
 const OnboardingStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
 
-const navTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.bg,
-    card: colors.bg,
-    text: colors.text,
-    border: colors.border,
-    primary: colors.accent,
-  },
-};
+function useStackScreenOptions() {
+  const { colors } = useTheme();
+  return useMemo(
+    () => ({
+      headerStyle: { backgroundColor: colors.bg },
+      headerTintColor: colors.text,
+      headerTitleStyle: { fontWeight: '700' as const },
+      headerShadowVisible: false,
+      contentStyle: { backgroundColor: colors.bg },
+    }),
+    [colors],
+  );
+}
 
 function BootScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(({ colors: palette }) => ({
+    boot: {
+      alignItems: 'center' as const,
+      backgroundColor: palette.bg,
+      flex: 1,
+      justifyContent: 'center' as const,
+    },
+  }));
   return (
     <View style={styles.boot}>
       <ActivityIndicator color={colors.accent} size="large" />
@@ -58,16 +71,9 @@ function BootScreen() {
   );
 }
 
-const stackScreenOptions = {
-  headerStyle: { backgroundColor: colors.bg },
-  headerTintColor: colors.text,
-  headerTitleStyle: { fontWeight: '700' as const },
-  headerShadowVisible: false,
-  contentStyle: { backgroundColor: colors.bg },
-};
-
 function RootNavigator() {
   const { phase } = useWallet();
+  const stackScreenOptions = useStackScreenOptions();
 
   if (phase === 'booting') {
     return <BootScreen />;
@@ -140,24 +146,60 @@ function RootNavigator() {
   );
 }
 
-export default function App() {
+function ThemedApp() {
+  const { colors, scheme } = useTheme();
+  const styles = useThemedStyles(({ colors: palette }) => ({
+    root: {
+      backgroundColor: palette.canvas,
+      flex: 1,
+    },
+    frame: {
+      alignItems: 'center' as const,
+      backgroundColor: palette.canvas,
+      flex: 1,
+    },
+    phone: {
+      backgroundColor: palette.bg,
+      flex: 1,
+      maxWidth: phoneWidth,
+      overflow: 'hidden' as const,
+      width: '100%' as const,
+      ...(Platform.OS === 'web'
+        ? {
+            borderColor: palette.border,
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+          }
+        : null),
+    },
+  }));
+  const navTheme = useMemo(
+    () => ({
+      ...DefaultTheme,
+      dark: scheme === 'dark',
+      colors: {
+        ...DefaultTheme.colors,
+        background: colors.bg,
+        card: colors.bg,
+        text: colors.text,
+        border: colors.border,
+        primary: colors.accent,
+      },
+    }),
+    [colors, scheme],
+  );
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <View style={styles.frame}>
         <View style={styles.phone}>
           <SafeAreaProvider>
             <WebTestBanner />
-            <WalletProvider>
-              <LedgerProvider>
-                <WalletConnectProvider>
-                  <NavigationContainer theme={navTheme}>
-                    <StatusBar style="light" />
-                    <RootNavigator />
-                    <WalletConnectOverlay />
-                  </NavigationContainer>
-                </WalletConnectProvider>
-              </LedgerProvider>
-            </WalletProvider>
+            <NavigationContainer theme={navTheme}>
+              <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+              <RootNavigator />
+              <WalletConnectOverlay />
+            </NavigationContainer>
           </SafeAreaProvider>
         </View>
       </View>
@@ -165,34 +207,16 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    backgroundColor: colors.canvas,
-    flex: 1,
-  },
-  frame: {
-    alignItems: 'center',
-    backgroundColor: colors.canvas,
-    flex: 1,
-  },
-  phone: {
-    backgroundColor: colors.bg,
-    flex: 1,
-    maxWidth: phoneWidth,
-    overflow: 'hidden',
-    width: '100%',
-    ...(Platform.OS === 'web'
-      ? {
-          borderColor: colors.border,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-        }
-      : null),
-  },
-  boot: {
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-    flex: 1,
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <WalletProvider>
+      <ThemeProvider>
+        <LedgerProvider>
+          <WalletConnectProvider>
+            <ThemedApp />
+          </WalletConnectProvider>
+        </LedgerProvider>
+      </ThemeProvider>
+    </WalletProvider>
+  );
+}

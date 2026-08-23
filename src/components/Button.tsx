@@ -6,7 +6,8 @@ import {
   type PressableProps,
 } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { radius, spacing } from '../theme';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -16,15 +17,15 @@ type Props = PressableProps & {
   loading?: boolean;
 };
 
-const variantStyles: Record<Variant, { background: string; text: string; border: string }> = {
-  primary: { background: colors.accent, text: '#04140E', border: colors.accent },
-  secondary: { background: colors.surfaceAlt, text: colors.text, border: colors.border },
-  danger: { background: colors.danger, text: '#2A0610', border: colors.danger },
-  ghost: { background: 'transparent', text: colors.muted, border: 'transparent' },
-};
-
 export function Button({ label, variant = 'primary', loading, disabled, style, ...rest }: Props) {
-  const palette = variantStyles[variant];
+  const { colors } = useTheme();
+  const palette = {
+    primary: { background: colors.accent, text: colors.accentText, border: colors.accent },
+    secondary: { background: colors.surfaceAlt, text: colors.text, border: colors.border },
+    danger: { background: colors.danger, text: colors.dangerHoldText, border: colors.danger },
+    ghost: { background: 'transparent', text: colors.muted, border: 'transparent' },
+  }[variant];
+
   return (
     <Pressable
       accessibilityRole="button"

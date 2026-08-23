@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 
@@ -10,9 +10,9 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { SafeNftImage } from '../components/SafeNftImage';
 import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
-import { card, colors, radius, spacing, type } from '../theme';
 import { checksumAddress } from '../wallet/address-safety';
 import { CHAINS } from '../wallet/chains';
 import { shortenAddress } from '../wallet/format';
@@ -32,7 +32,141 @@ type GalleryItem = {
   risk: NftSpamAssessment;
 };
 
+function nftStyles({ colors, type, card, radius, spacing }: Theme) {
+  return {
+    rail: {
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+    },
+    toolbar: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+      gap: spacing.sm,
+    },
+    advanced: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: '700' as const,
+    },
+    autodetect: {
+      ...type.meta,
+      flex: 1,
+    },
+    importLink: {
+      color: colors.accent,
+      fontWeight: '800' as const,
+    },
+    meta: type.meta,
+    empty: {
+      ...card,
+      alignItems: 'flex-start' as const,
+      gap: spacing.sm,
+    },
+    emptyTitle: {
+      color: colors.text,
+      fontSize: 22,
+      fontWeight: '800' as const,
+    },
+    group: {
+      gap: spacing.sm,
+    },
+    groupTitle: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '800' as const,
+    },
+    grid: {
+      flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
+      gap: spacing.sm,
+    },
+    tile: {
+      width: '48%' as const,
+      gap: 4,
+    },
+    tileDim: {
+      opacity: 0.7,
+    },
+    thumb: {
+      aspectRatio: 1,
+      borderRadius: radius.md,
+      width: '100%' as const,
+    },
+    tileName: {
+      color: colors.text,
+      fontWeight: '700' as const,
+    },
+    tileMeta: type.meta,
+    pickerRow: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      gap: spacing.sm,
+    },
+    pickerThumb: {
+      borderRadius: radius.sm,
+      height: 56,
+      width: 56,
+    },
+    pickerCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    hiddenBox: {
+      ...card,
+      gap: spacing.sm,
+    },
+    hiddenTitle: {
+      color: colors.warning,
+      fontWeight: '800' as const,
+    },
+    backdrop: {
+      backgroundColor: colors.overlay,
+      flex: 1,
+      justifyContent: 'center' as const,
+      padding: spacing.md,
+    },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      maxHeight: '92%' as const,
+      overflow: 'hidden' as const,
+    },
+    sheetBody: {
+      gap: spacing.sm,
+      padding: spacing.md,
+    },
+    hero: {
+      aspectRatio: 1,
+      borderRadius: radius.md,
+      width: '100%' as const,
+    },
+    name: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: '800' as const,
+    },
+    collection: {
+      color: colors.accent,
+      fontWeight: '700' as const,
+    },
+    contract: {
+      color: colors.text,
+      fontFamily: 'monospace',
+      fontSize: 12,
+    },
+    warn: {
+      color: colors.warning,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+  };
+}
+
 export function NftsScreen() {
+  const styles = useThemedStyles(nftStyles);
   const { session, selectedChain, setSelectedChain } = useWallet();
   const navigation = useNavigation<MainNavigation>();
   const [items, setItems] = useState<NftItem[]>([]);
@@ -337,6 +471,7 @@ function NftTile({
   onPress: () => void;
   dim?: boolean;
 }) {
+  const styles = useThemedStyles(nftStyles);
   return (
     <Pressable onPress={onPress} style={[styles.tile, dim && styles.tileDim]}>
       <SafeNftImage url={entry.item.imageUrl} style={styles.thumb} />
@@ -349,134 +484,3 @@ function NftTile({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  rail: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  toolbar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  advanced: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  autodetect: {
-    ...type.meta,
-    flex: 1,
-  },
-  importLink: {
-    color: colors.accent,
-    fontWeight: '800',
-  },
-  meta: type.meta,
-  empty: {
-    ...card,
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  group: {
-    gap: spacing.sm,
-  },
-  groupTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  tile: {
-    width: '48%',
-    gap: 4,
-  },
-  tileDim: {
-    opacity: 0.7,
-  },
-  thumb: {
-    aspectRatio: 1,
-    borderRadius: radius.md,
-    width: '100%',
-  },
-  tileName: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  tileMeta: type.meta,
-  pickerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  pickerThumb: {
-    borderRadius: radius.sm,
-    height: 56,
-    width: 56,
-  },
-  pickerCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  hiddenBox: {
-    ...card,
-    gap: spacing.sm,
-  },
-  hiddenTitle: {
-    color: colors.warning,
-    fontWeight: '800',
-  },
-  backdrop: {
-    backgroundColor: colors.overlay,
-    flex: 1,
-    justifyContent: 'center',
-    padding: spacing.md,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    maxHeight: '92%',
-    overflow: 'hidden',
-  },
-  sheetBody: {
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  hero: {
-    aspectRatio: 1,
-    borderRadius: radius.md,
-    width: '100%',
-  },
-  name: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  collection: {
-    color: colors.accent,
-    fontWeight: '700',
-  },
-  contract: {
-    color: colors.text,
-    fontFamily: 'monospace',
-    fontSize: 12,
-  },
-  warn: {
-    color: colors.warning,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-});

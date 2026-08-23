@@ -1,10 +1,35 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, spacing } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { WEB_TEST_BANNER } from '../web-test-copy';
 import { isWebTestBuild } from '../web-test';
 
+function bannerStyles({ colors, spacing }: Theme) {
+  return {
+    banner: {
+      backgroundColor: colors.bannerSurface,
+      borderBottomColor: colors.warning,
+      borderBottomWidth: 2,
+      gap: 4,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    kicker: {
+      color: colors.warning,
+      fontSize: 11,
+      fontWeight: '800' as const,
+      letterSpacing: 1,
+    },
+    copy: {
+      color: colors.bannerText,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+  };
+}
+
 export function WebTestBanner() {
+  const styles = useThemedStyles(bannerStyles);
   if (!isWebTestBuild()) {
     return null;
   }
@@ -15,25 +40,3 @@ export function WebTestBanner() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  banner: {
-    backgroundColor: '#3B2A08',
-    borderBottomColor: colors.warning,
-    borderBottomWidth: 2,
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  kicker: {
-    color: colors.warning,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  copy: {
-    color: '#F8E3B0',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-});

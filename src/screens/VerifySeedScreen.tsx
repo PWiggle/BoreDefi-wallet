@@ -1,16 +1,40 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { usePreventScreenCapture } from 'expo-screen-capture';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { colors, radius, spacing } from '../theme';
 import { checkVerificationAnswers, pickVerificationChallenges } from '../wallet/mnemonic';
+
+function verifyStyles({ colors, radius, spacing }: Theme) {
+  return {
+    field: {
+      gap: spacing.xs,
+    },
+    label: {
+      color: colors.muted,
+      fontWeight: '600' as const,
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderWidth: 1,
+      borderRadius: radius.sm,
+      color: colors.text,
+      paddingHorizontal: spacing.md,
+      minHeight: 52,
+      fontSize: 16,
+    },
+  };
+}
 
 export function VerifySeedScreen() {
   usePreventScreenCapture();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(verifyStyles);
   const { pending, completeVerification, cancelOnboarding } = useWallet();
   const challenges = useMemo(
     () => (pending ? pickVerificationChallenges(pending.mnemonic, 3) : []),
@@ -70,23 +94,3 @@ export function VerifySeedScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  field: {
-    gap: spacing.xs,
-  },
-  label: {
-    color: colors.muted,
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    color: colors.text,
-    paddingHorizontal: spacing.md,
-    minHeight: 52,
-    fontSize: 16,
-  },
-});

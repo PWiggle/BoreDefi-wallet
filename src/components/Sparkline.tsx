@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 
-import { colors } from '../theme';
+import { useTheme } from '../context/ThemeContext';
 
 export function Sparkline({
   points,
@@ -27,6 +27,7 @@ export function Sparkline({
       return `${x},${y}`;
     })
     .join(' ');
+  const { colors } = useTheme();
   const rising = points[points.length - 1]! >= points[0]!;
   return (
     <Svg width={width} height={height}>

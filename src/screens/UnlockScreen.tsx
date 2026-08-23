@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { type } from '../theme';
 import { isValidPin } from '../wallet/pin';
 
+function unlockStyles({ type }: Theme) {
+  return {
+    hint: {
+      ...type.subtitle,
+      textAlign: 'center' as const,
+    },
+    wait: {
+      ...type.subtitle,
+      textAlign: 'center' as const,
+    },
+  };
+}
+
 export function UnlockScreen() {
+  const styles = useThemedStyles(unlockStyles);
   const { unlockWithPin, unlockWithBiometrics, settings, pinBackoffMs } = useWallet();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -60,14 +74,3 @@ export function UnlockScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  hint: {
-    ...type.subtitle,
-    textAlign: 'center',
-  },
-  wait: {
-    ...type.subtitle,
-    textAlign: 'center',
-  },
-});

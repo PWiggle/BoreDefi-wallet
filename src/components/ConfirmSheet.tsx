@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing, type } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { checksumAddress } from '../wallet/address-safety';
 import { Button } from './Button';
 import { WarningBanner } from './WarningBanner';
@@ -32,6 +32,77 @@ type Props = {
 
 const HOLD_MS = 1800;
 
+function confirmStyles({ colors, radius, spacing, type }: Theme) {
+  return {
+    backdrop: {
+      backgroundColor: colors.overlay,
+      flex: 1,
+      justifyContent: 'center' as const,
+      padding: spacing.lg,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      gap: spacing.sm,
+      padding: spacing.lg,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 22,
+      fontWeight: '800' as const,
+    },
+    row: {
+      gap: 4,
+    },
+    label: type.label,
+    value: {
+      ...type.body,
+      fontSize: 14,
+    },
+    hold: {
+      alignItems: 'center' as const,
+      backgroundColor: colors.accentDim,
+      borderRadius: radius.md,
+      justifyContent: 'center' as const,
+      minHeight: 52,
+      overflow: 'hidden' as const,
+    },
+    holdDisabled: {
+      opacity: 0.45,
+    },
+    holdFill: {
+      backgroundColor: colors.accent,
+      bottom: 0,
+      left: 0,
+      position: 'absolute' as const,
+      top: 0,
+    },
+    holdLabel: {
+      color: colors.accentText,
+      fontSize: 16,
+      fontWeight: '800' as const,
+      zIndex: 1,
+    },
+    cardDanger: {
+      borderColor: colors.danger,
+    },
+    titleDanger: {
+      color: colors.danger,
+    },
+    holdDanger: {
+      backgroundColor: colors.dangerHold,
+    },
+    holdFillDanger: {
+      backgroundColor: colors.danger,
+    },
+    holdLabelDanger: {
+      color: colors.dangerHoldText,
+    },
+  };
+}
+
 function displayAddress(value?: string): string | undefined {
   if (!value) {
     return undefined;
@@ -57,6 +128,7 @@ export function ConfirmSheet({
   onConfirm,
   onCancel,
 }: Props) {
+  const styles = useThemedStyles(confirmStyles);
   const danger = variant === 'danger';
   const rejectLabel = cancelLabel ?? (danger ? 'Reject' : 'Cancel');
   const [held, setHeld] = useState(0);
@@ -155,72 +227,3 @@ export function ConfirmSheet({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    backgroundColor: colors.overlay,
-    flex: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.lg,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  row: {
-    gap: 4,
-  },
-  label: type.label,
-  value: {
-    ...type.body,
-    fontSize: 14,
-  },
-  hold: {
-    alignItems: 'center',
-    backgroundColor: colors.accentDim,
-    borderRadius: radius.md,
-    justifyContent: 'center',
-    minHeight: 52,
-    overflow: 'hidden',
-  },
-  holdDisabled: {
-    opacity: 0.45,
-  },
-  holdFill: {
-    backgroundColor: colors.accent,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    top: 0,
-  },
-  holdLabel: {
-    color: colors.accentText,
-    fontSize: 16,
-    fontWeight: '800',
-    zIndex: 1,
-  },
-  cardDanger: {
-    borderColor: colors.danger,
-  },
-  titleDanger: {
-    color: colors.danger,
-  },
-  holdDanger: {
-    backgroundColor: '#4A0B18',
-  },
-  holdFillDanger: {
-    backgroundColor: colors.danger,
-  },
-  holdLabelDanger: {
-    color: '#2A0610',
-  },
-});

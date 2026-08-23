@@ -1,18 +1,25 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { type } from '../theme';
 import { isValidPin } from '../wallet/pin';
 
 type Stage = 'old' | 'next' | 'confirm';
 
+function changePinStyles({ type }: Theme) {
+  return {
+    wait: type.subtitle,
+  };
+}
+
 export function ChangePinScreen() {
+  const styles = useThemedStyles(changePinStyles);
   const navigation = useNavigation();
   const { changePin, pinBackoffMs } = useWallet();
   const [stage, setStage] = useState<Stage>('old');
@@ -79,7 +86,3 @@ export function ChangePinScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  wait: type.subtitle,
-});

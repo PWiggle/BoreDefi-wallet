@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { MarketRow } from '../components/MarketRow';
 import { Screen } from '../components/Screen';
+import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import type { MainNavigation } from '../navigation';
-import { colors, field, radius, spacing } from '../theme';
 import {
   COINGECKO_SITE,
   coinGeckoUrl,
@@ -22,7 +22,42 @@ import {
 
 type Tab = 'all' | 'trending' | 'gainers';
 
+function discoverStyles({ colors, field, radius, spacing }: Theme) {
+  return {
+    search: {
+      ...field,
+    },
+    tabs: {
+      flexDirection: 'row' as const,
+      gap: spacing.sm,
+    },
+    tab: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    tabOn: {
+      backgroundColor: colors.accentDim,
+      borderColor: colors.accent,
+    },
+    tabText: {
+      color: colors.muted,
+      fontWeight: '700' as const,
+    },
+    tabTextOn: {
+      color: colors.accent,
+    },
+    heading: { color: colors.text, fontSize: 18, fontWeight: '700' as const },
+    empty: { color: colors.muted },
+  };
+}
+
 export function DiscoverScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(discoverStyles);
   const navigation = useNavigation<MainNavigation>();
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<Tab>('all');
@@ -145,34 +180,3 @@ export function DiscoverScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  search: {
-    ...field,
-  },
-  tabs: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  tab: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  tabOn: {
-    backgroundColor: colors.accentDim,
-    borderColor: colors.accent,
-  },
-  tabText: {
-    color: colors.muted,
-    fontWeight: '700',
-  },
-  tabTextOn: {
-    color: colors.accent,
-  },
-  heading: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  empty: { color: colors.muted },
-});

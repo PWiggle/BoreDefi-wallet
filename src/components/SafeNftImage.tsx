@@ -1,8 +1,28 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, Image, type ImageStyle, type StyleProp } from 'react-native';
+import { Image, Text, View, type ImageStyle, type StyleProp } from 'react-native';
 
-import { colors, radius } from '../theme';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { safeNftImageUrl } from '../wallet/nft-media';
+
+function imageStyles({ colors, radius }: Theme) {
+  return {
+    image: {
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: radius.sm,
+    },
+    placeholder: {
+      alignItems: 'center' as const,
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: radius.sm,
+      justifyContent: 'center' as const,
+    },
+    mark: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: '800' as const,
+    },
+  };
+}
 
 export function SafeNftImage({
   url,
@@ -11,6 +31,7 @@ export function SafeNftImage({
   url?: string;
   style?: StyleProp<ImageStyle>;
 }) {
+  const styles = useThemedStyles(imageStyles);
   const safe = safeNftImageUrl(url);
   const [failed, setFailed] = useState(false);
 
@@ -31,21 +52,3 @@ export function SafeNftImage({
     />
   );
 }
-
-const styles = StyleSheet.create({
-  image: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.sm,
-  },
-  placeholder: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.sm,
-    justifyContent: 'center',
-  },
-  mark: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-});
