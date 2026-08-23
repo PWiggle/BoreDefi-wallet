@@ -76,7 +76,7 @@ export const lightColors: ColorPalette = {
 };
 
 /** Letterbox / splash behind the brand cover. Do not recolor the ape art. */
-export const COVER_BACKGROUND = '#507A8E';
+export const COVER_BACKGROUND = '#000000';
 export const COVER_FOOTER_TEXT = '#F4F7FA';
 
 export const DEFAULT_APPEARANCE: AppearanceMode = 'system';

@@ -60,7 +60,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#507A8E",
+          "backgroundColor": "#000000",
           "image": "./assets/boredefi-cover.png",
           "imageWidth": 280
         }
