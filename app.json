@@ -60,9 +60,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B0F14",
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 120
+          "backgroundColor": "#507A8E",
+          "image": "./assets/boredefi-cover.png",
+          "imageWidth": 280
         }
       ],
       [

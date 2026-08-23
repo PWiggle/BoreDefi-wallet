@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  COVER_BACKGROUND,
+  COVER_FOOTER_TEXT,
   darkColors,
   lightColors,
   normalizeAppearance,
@@ -24,6 +26,11 @@ test('system appearance falls back to dark when the OS scheme is missing', () =>
   assert.equal(resolveColorScheme('system', undefined), 'dark');
   assert.equal(resolveColorScheme('light', 'dark'), 'light');
   assert.equal(resolveColorScheme('dark', 'light'), 'dark');
+});
+
+test('cover letterbox stays the brand slate-blue', () => {
+  assert.equal(COVER_BACKGROUND, '#507A8E');
+  assert.equal(COVER_FOOTER_TEXT, '#F4F7FA');
 });
 
 test('both palettes keep the BoreDefi green accent', () => {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Text } from 'react-native';
 
 import { Button } from '../components/Button';
+import { CoverScreen } from '../components/CoverScreen';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
@@ -25,6 +26,7 @@ function unlockStyles({ type }: Theme) {
 export function UnlockScreen() {
   const styles = useThemedStyles(unlockStyles);
   const { unlockWithPin, unlockWithBiometrics, settings, pinBackoffMs } = useWallet();
+  const [stage, setStage] = useState<'cover' | 'pin'>('cover');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,15 +40,16 @@ export function UnlockScreen() {
   };
 
   useEffect(() => {
-    if (settings.biometricsEnabled) {
-      tryBiometrics();
+    if (stage !== 'pin' || !settings.biometricsEnabled) {
+      return;
     }
-    // Prompt once when the lock screen mounts.
+    tryBiometrics();
+    // Prompt once when the PIN pad is shown — never from the cover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stage]);
 
   useEffect(() => {
-    if (!isValidPin(pin) || busy || pinBackoffMs > 0) {
+    if (stage !== 'pin' || !isValidPin(pin) || busy || pinBackoffMs > 0) {
       return;
     }
     setBusy(true);
@@ -58,10 +61,23 @@ export function UnlockScreen() {
         }
       })
       .finally(() => setBusy(false));
-  }, [busy, pin, pinBackoffMs, unlockWithPin]);
+  }, [busy, pin, pinBackoffMs, stage, unlockWithPin]);
+
+  if (stage === 'cover') {
+    return (
+      <CoverScreen
+        footer={<Button label="Unlock" onPress={() => setStage('pin')} />}
+      />
+    );
+  }
 
   return (
-    <Screen title="Unlock" subtitle="BoreDefi Wallet" scroll={false}>
+    <Screen
+      title="Unlock"
+      subtitle="BoreDefi Wallet"
+      scroll={false}
+      footer={<Button label="Back" variant="ghost" onPress={() => setStage('cover')} />}
+    >
       <Text style={styles.hint}>Enter your PIN to decrypt keys into memory on this device.</Text>
       {pinBackoffMs > 0 ? (
         <Text style={styles.wait}>Too many attempts. Wait {Math.ceil(pinBackoffMs / 1000)}s.</Text>
