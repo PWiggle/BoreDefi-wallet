@@ -32,9 +32,24 @@ test('accepts same-chain aggregator quotes and rejects bridges', () => {
   assert.equal(parsed.transactionRequest.value, 0x2386f26fc10000n);
 });
 
-test('refuses a cross-chain LI.FI quote', () => {
+test('refuses a cross-chain LI.FI quote on the swap path', () => {
   assert.throws(
     () => parseLiFiQuote({ ...quote, action: { ...quote.action, toChainId: 1 } }, 8453),
-    /same-chain/,
+    /Bridge/,
   );
+});
+
+test('parses a cross-chain LI.FI quote on the bridge path', () => {
+  const parsed = parseLiFiQuote(
+    {
+      ...quote,
+      tool: 'layerswap',
+      action: { fromChainId: 8453, toChainId: 42161, fromAmount: '20000000000000000' },
+      includedSteps: [{ type: 'cross', tool: 'layerswap' }],
+    },
+    8453,
+    42161,
+  );
+  assert.equal(parsed.tool, 'layerswap');
+  assert.throws(() => parseLiFiQuote(quote, 8453, 42161), /Swap/);
 });

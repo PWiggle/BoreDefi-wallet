@@ -86,6 +86,24 @@ export function HomeScreen() {
       <View style={styles.actions}>
         <Button label="Swap" style={styles.action} onPress={() => navigation.navigate('Swap')} />
         <Button
+          label="Bridge"
+          variant="secondary"
+          style={styles.action}
+          onPress={() => navigation.navigate('Bridge')}
+        />
+      </View>
+      <View style={styles.actions}>
+        <Button label="Stake" style={styles.action} onPress={() => navigation.navigate('Stake')} />
+        <Button
+          label="NFTs"
+          variant="secondary"
+          style={styles.action}
+          onPress={() => navigation.navigate('Nfts')}
+        />
+      </View>
+      <View style={styles.actions}>
+        <Button label="Browser" style={styles.action} onPress={() => navigation.navigate('Browser')} />
+        <Button
           label="Connect"
           variant="secondary"
           style={styles.action}

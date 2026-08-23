@@ -6,6 +6,14 @@ import { walletFromMnemonic } from './mnemonic';
 
 const providers = new Map<ChainId, JsonRpcProvider>();
 
+export async function sendRpc(
+  chainId: ChainId,
+  method: string,
+  params: unknown[] = [],
+): Promise<unknown> {
+  return getProvider(chainId).send(method, params);
+}
+
 export function getProvider(chainId: ChainId): JsonRpcProvider {
   const existing = providers.get(chainId);
   if (existing) {

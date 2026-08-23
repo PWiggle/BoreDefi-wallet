@@ -58,17 +58,29 @@ export function quoteContainsBridge(steps: Array<{ type?: string; tool?: string 
   return (steps ?? []).some((step) => step.type === 'cross' || step.tool === 'hop' || step.type === 'bridge');
 }
 
-export function parseLiFiQuote(payload: LiFiQuote, expectedChainId: ChainId): SwapQuote {
+export function parseLiFiQuote(
+  payload: LiFiQuote,
+  expectedFromChainId: ChainId,
+  expectedToChainId: ChainId = expectedFromChainId,
+): SwapQuote {
   const fromChainId = payload.action?.fromChainId;
   const toChainId = payload.action?.toChainId;
   if (fromChainId === undefined || toChainId === undefined) {
     throw new Error('Quote is missing chain information.');
   }
-  if (!isSameChainSwap(fromChainId, toChainId) || fromChainId !== expectedChainId) {
-    throw new Error('Only same-chain swaps are enabled in Phase 2.');
-  }
-  if (quoteContainsBridge(payload.includedSteps)) {
-    throw new Error('That route is a bridge. Bridging is not in Phase 2.');
+  if (expectedFromChainId === expectedToChainId) {
+    if (!isSameChainSwap(fromChainId, toChainId) || fromChainId !== expectedFromChainId) {
+      throw new Error('Use Bridge for cross-chain routes.');
+    }
+    if (quoteContainsBridge(payload.includedSteps)) {
+      throw new Error('That route is a bridge. Use Bridge instead.');
+    }
+  } else if (
+    fromChainId !== expectedFromChainId ||
+    toChainId !== expectedToChainId ||
+    isSameChainSwap(fromChainId, toChainId)
+  ) {
+    throw new Error('Use Swap for same-chain routes.');
   }
   const request = payload.transactionRequest;
   if (!request?.to || !request.data) {
@@ -118,13 +130,13 @@ export async function fetchSwapQuote(input: {
 
   try {
     const response = await fetch(url, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
     });
     const payload = (await response.json()) as LiFiQuote;
     if (!response.ok) {
       throw new Error(payload.message || 'Could not get a swap quote.');
     }
-    return parseLiFiQuote(payload, input.chainId);
+    return parseLiFiQuote(payload, input.chainId, input.chainId);
   } catch (error) {
     logger.error('Swap quote failed', {
       chainId: input.chainId,
@@ -188,5 +200,51 @@ export async function sendSwapTransaction(
       message: error instanceof Error ? error.message : 'unknown',
     });
     throw new Error('Swap transaction failed. Review the quote and try again.');
+  }
+}
+
+export async function fetchBridgeQuote(input: {
+  fromChainId: ChainId;
+  toChainId: ChainId;
+  fromToken: TokenConfig;
+  toToken: TokenConfig;
+  fromAmount: bigint;
+  fromAddress: string;
+  slippage?: number;
+}): Promise<SwapQuote> {
+  if (input.fromChainId === input.toChainId) {
+    throw new Error('Choose two different networks to bridge.');
+  }
+  if (input.fromAmount <= 0n) {
+    throw new Error('Enter an amount greater than zero.');
+  }
+  const url = new URL(QUOTE_URL);
+  url.searchParams.set('fromChain', String(input.fromChainId));
+  url.searchParams.set('toChain', String(input.toChainId));
+  url.searchParams.set('fromToken', input.fromToken.address);
+  url.searchParams.set('toToken', input.toToken.address);
+  url.searchParams.set('fromAmount', input.fromAmount.toString());
+  url.searchParams.set('fromAddress', input.fromAddress);
+  url.searchParams.set('toAddress', input.fromAddress);
+  url.searchParams.set('slippage', String(input.slippage ?? 0.005));
+  url.searchParams.set('order', 'CHEAPEST');
+  url.searchParams.set('integrator', 'boredefi');
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
+    });
+    const payload = (await response.json()) as LiFiQuote;
+    if (!response.ok) {
+      throw new Error(payload.message || 'Could not get a bridge quote.');
+    }
+    return parseLiFiQuote(payload, input.fromChainId, input.toChainId);
+  } catch (error) {
+    logger.error('Bridge quote failed', {
+      fromChainId: input.fromChainId,
+      toChainId: input.toChainId,
+      message: error instanceof Error ? error.message : 'unknown',
+    });
+    throw error instanceof Error ? error : new Error('Could not get a bridge quote.');
   }
 }

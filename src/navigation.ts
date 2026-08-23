@@ -1,3 +1,5 @@
+import type { NftItem } from './wallet/nfts';
+
 export type MainStackParamList = {
   Home: undefined;
   Receive: undefined;
@@ -8,5 +10,10 @@ export type MainStackParamList = {
   RevealSeed: undefined;
   ResetWallet: undefined;
   Swap: undefined;
+  Stake: undefined;
+  Bridge: undefined;
+  Nfts: undefined;
+  NftSend: { nft?: NftItem };
+  Browser: undefined;
   WalletConnect: { uri?: string };
 };

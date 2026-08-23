@@ -20,10 +20,11 @@ export function WelcomeScreen() {
       }
     >
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Phase 2</Text>
+        <Text style={styles.cardTitle}>Phase 3</Text>
         <Text style={styles.cardBody}>
-          Create or import a BIP39 wallet, back up the seed, then send, receive, swap, and connect
-          to dApps on Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, and Avalanche.
+          Create or import a BIP39 wallet, back up the seed, then send, receive, swap, stake,
+          bridge, view NFTs, and open WalletConnect-compatible dApps on Ethereum, Base, Arbitrum,
+          Optimism, Polygon, BNB Chain, and Avalanche.
         </Text>
       </View>
     </Screen>

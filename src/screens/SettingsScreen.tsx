@@ -42,8 +42,8 @@ export function SettingsScreen() {
         onPress={() => navigation.navigate('RevealSeed')}
       />
       <Text style={styles.note}>
-        Phase 2 adds same-chain aggregator swaps and WalletConnect. Stake, bridge, an in-app dApp
-        browser, and fiat on-ramps are later phases.
+        Phase 3 adds stake, bridge, NFT view/send, and an in-app dApp browser. Fiat on-ramps, a
+        Chrome extension, and Ledger are later phases.
       </Text>
       <Button
         label="Delete wallet from device"

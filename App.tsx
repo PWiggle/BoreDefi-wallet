@@ -11,8 +11,12 @@ import { WalletProvider, useWallet } from './src/context/WalletContext';
 import type { MainStackParamList } from './src/navigation';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { BackupSeedScreen } from './src/screens/BackupSeedScreen';
+import { BridgeScreen } from './src/screens/BridgeScreen';
+import { BrowserScreen } from './src/screens/BrowserScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ImportWalletScreen } from './src/screens/ImportWalletScreen';
+import { NftSendScreen } from './src/screens/NftSendScreen';
+import { NftsScreen } from './src/screens/NftsScreen';
 import { ReceiveScreen } from './src/screens/ReceiveScreen';
 import { ResetWalletScreen } from './src/screens/ResetWalletScreen';
 import { RevealSeedScreen } from './src/screens/RevealSeedScreen';
@@ -20,6 +24,7 @@ import { ScanQrScreen } from './src/screens/ScanQrScreen';
 import { SendScreen } from './src/screens/SendScreen';
 import { SetPinScreen } from './src/screens/SetPinScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { StakeScreen } from './src/screens/StakeScreen';
 import { SwapScreen } from './src/screens/SwapScreen';
 import { UnlockScreen } from './src/screens/UnlockScreen';
 import { VerifySeedScreen } from './src/screens/VerifySeedScreen';
@@ -76,6 +81,11 @@ function RootNavigator() {
         <MainStack.Screen name="Send" component={SendScreen} initialParams={{}} />
         <MainStack.Screen name="ScanQr" component={ScanQrScreen} options={{ title: 'Scan QR' }} />
         <MainStack.Screen name="Swap" component={SwapScreen} />
+        <MainStack.Screen name="Stake" component={StakeScreen} />
+        <MainStack.Screen name="Bridge" component={BridgeScreen} />
+        <MainStack.Screen name="Nfts" component={NftsScreen} options={{ title: 'NFTs' }} />
+        <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />
+        <MainStack.Screen name="Browser" component={BrowserScreen} />
         <MainStack.Screen name="WalletConnect" component={WalletConnectScreen} options={{ title: 'WalletConnect' }} />
         <MainStack.Screen name="Activity" component={ActivityScreen} />
         <MainStack.Screen name="Settings" component={SettingsScreen} />

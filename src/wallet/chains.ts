@@ -9,6 +9,7 @@ export type ChainConfig = {
   explorerTx: string;
   explorerAddress: string;
   activityUrl: string;
+  nftApi?: string;
 };
 
 const publicRpc = {
@@ -31,6 +32,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerTx: 'https://etherscan.io/tx/',
     explorerAddress: 'https://etherscan.io/address/',
     activityUrl: 'https://eth.blockscout.com/api',
+    nftApi: 'https://eth.blockscout.com/api/v2',
   },
   10: {
     id: 10,
@@ -41,6 +43,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerTx: 'https://optimistic.etherscan.io/tx/',
     explorerAddress: 'https://optimistic.etherscan.io/address/',
     activityUrl: 'https://optimism.blockscout.com/api',
+    nftApi: 'https://optimism.blockscout.com/api/v2',
   },
   56: {
     id: 56,
@@ -51,6 +54,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerTx: 'https://bscscan.com/tx/',
     explorerAddress: 'https://bscscan.com/address/',
     activityUrl: 'https://bsc.blockscout.com/api',
+    nftApi: 'https://bsc.blockscout.com/api/v2',
   },
   137: {
     id: 137,
@@ -61,6 +65,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerTx: 'https://polygonscan.com/tx/',
     explorerAddress: 'https://polygonscan.com/address/',
     activityUrl: 'https://polygon.blockscout.com/api',
+    nftApi: 'https://polygon.blockscout.com/api/v2',
   },
   8453: {
     id: 8453,
@@ -71,6 +76,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerTx: 'https://basescan.org/tx/',
     explorerAddress: 'https://basescan.org/address/',
     activityUrl: 'https://base.blockscout.com/api',
+    nftApi: 'https://base.blockscout.com/api/v2',
   },
   42161: {
     id: 42161,
@@ -81,6 +87,7 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     explorerTx: 'https://arbiscan.io/tx/',
     explorerAddress: 'https://arbiscan.io/address/',
     activityUrl: 'https://arbitrum.blockscout.com/api',
+    nftApi: 'https://arbitrum.blockscout.com/api/v2',
   },
   43114: {
     id: 43114,
