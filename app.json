@@ -60,8 +60,8 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000",
-          "image": "./assets/boredefi-cover.png",
+          "backgroundColor": "#3E6D93",
+          "image": "./assets/bored-defi-sailor-ape.jpeg",
           "imageWidth": 280
         }
       ],

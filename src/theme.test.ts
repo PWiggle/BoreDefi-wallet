@@ -28,8 +28,8 @@ test('system appearance falls back to dark when the OS scheme is missing', () =>
   assert.equal(resolveColorScheme('dark', 'light'), 'dark');
 });
 
-test('cover letterbox stays solid black to match the art', () => {
-  assert.equal(COVER_BACKGROUND, '#000000');
+test('cover letterbox stays steel blue to match the sailor ape art', () => {
+  assert.equal(COVER_BACKGROUND, '#3E6D93');
   assert.equal(COVER_FOOTER_TEXT, '#F4F7FA');
 });
 
