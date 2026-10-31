@@ -49,7 +49,7 @@ export function LaunchSplash({ onDismiss }: Props) {
 
   return (
     <View pointerEvents="auto" style={styles.root} testID="boredefi-launch-splash">
-      <StatusBar style="light" />
+      <StatusBar hidden style="light" />
       <Image
         accessibilityLabel="BoreDefi"
         fadeDuration={0}

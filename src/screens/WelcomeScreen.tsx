@@ -22,6 +22,7 @@ export function WelcomeScreen() {
 
   return (
     <CoverScreen
+      statusBarHidden
       footer={
         <>
           <Text style={styles.hint}>

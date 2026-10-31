@@ -229,7 +229,7 @@ function ThemedApp() {
           <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <WebTestBanner />
             <NavigationContainer ref={navigationRef} theme={navTheme}>
-              <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+              <StatusBar hidden={false} style={scheme === 'dark' ? 'light' : 'dark'} />
               <RootNavigator />
               <WalletConnectDeepLink />
               <WalletConnectOverlay />

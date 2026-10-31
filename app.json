@@ -69,6 +69,7 @@
           "recordAudioAndroid": false
         }
       ],
+      "./plugins/withHiddenSplashStatusBar",
       [
         "expo-splash-screen",
         {

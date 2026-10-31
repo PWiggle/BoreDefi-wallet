@@ -9,6 +9,8 @@ import { COVER_BACKGROUND } from '../theme';
 
 type Props = {
   footer: ReactNode;
+  /** Welcome only. Create, import, PIN, and Home keep the status bar. */
+  statusBarHidden?: boolean;
 };
 
 function coverStyles({ spacing }: Theme) {
@@ -34,12 +36,12 @@ function coverStyles({ spacing }: Theme) {
   };
 }
 
-export function CoverScreen({ footer }: Props) {
+export function CoverScreen({ footer, statusBarHidden = false }: Props) {
   const styles = useThemedStyles(coverStyles);
   const { width, height } = useWindowDimensions();
   return (
     <View style={styles.root} testID="boredefi-cover">
-      <StatusBar style="light" />
+      <StatusBar hidden={statusBarHidden} style="light" />
       <Image
         accessibilityLabel="BoreDefi"
         resizeMode="contain"
