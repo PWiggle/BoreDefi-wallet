@@ -4,6 +4,3 @@ export { COVER_BACKGROUND, COVER_FOOTER_TEXT } from './theme';
 
 /** Official cover, uncropped. Contain it on COVER_BACKGROUND. */
 export const coverImage = require('../assets/boredefi-logo-official.png') as ImageSourcePropType;
-
-/** Ape head cropped from the official logo, for small brand spots. */
-export const markImage = require('../assets/icon.png') as ImageSourcePropType;

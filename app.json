@@ -37,8 +37,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#255470",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundImage": "./assets/android-icon-background.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -49,6 +48,12 @@
     },
     "plugins": [
       "expo-system-ui",
+      [
+        "expo-status-bar",
+        {
+          "style": "light"
+        }
+      ],
       "./plugins/withUnsignedRelease",
       "expo-secure-store",
       [
@@ -69,7 +74,7 @@
         {
           "backgroundColor": "#255470",
           "image": "./assets/splash-icon.png",
-          "imageWidth": 280
+          "imageWidth": 240
         }
       ],
       [

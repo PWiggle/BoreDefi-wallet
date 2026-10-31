@@ -1,11 +1,12 @@
 import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { LaunchSplash } from './src/components/LaunchSplash';
 import { WalletConnectOverlay } from './src/components/WalletConnectOverlay';
 import { WebTestBanner } from './src/components/WebTestBanner';
 import { LedgerProvider } from './src/context/LedgerContext';
@@ -178,6 +179,8 @@ function RootNavigator() {
 
 function ThemedApp() {
   const { colors, scheme } = useTheme();
+  const [launchVisible, setLaunchVisible] = useState(true);
+  const dismissLaunch = useCallback(() => setLaunchVisible(false), []);
   const styles = useThemedStyles(({ colors: palette }) => ({
     root: {
       backgroundColor: palette.canvas,
@@ -223,7 +226,7 @@ function ThemedApp() {
     <GestureHandlerRootView style={styles.root}>
       <View style={styles.frame}>
         <View style={styles.phone}>
-          <SafeAreaProvider>
+          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <WebTestBanner />
             <NavigationContainer ref={navigationRef} theme={navTheme}>
               <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
@@ -231,6 +234,7 @@ function ThemedApp() {
               <WalletConnectDeepLink />
               <WalletConnectOverlay />
             </NavigationContainer>
+            {launchVisible ? <LaunchSplash onDismiss={dismissLaunch} /> : null}
           </SafeAreaProvider>
         </View>
       </View>
