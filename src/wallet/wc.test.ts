@@ -10,7 +10,9 @@ import {
   parseCaipChainId,
   parseSwitchChainId,
   pickSignMessage,
-  PUBLIC_TEST_WALLETCONNECT_PROJECT_ID,
+  PUBLIC_WALLETCONNECT_PROJECT_ID,
+  relayWebSocketOptions,
+  WALLETCONNECT_RELAY_ORIGIN,
   supportedCaipAccounts,
 } from './wc';
 
@@ -44,7 +46,12 @@ test('builds CAIP identifiers and decodes hex messages', () => {
   assert.equal(supportedCaipAccounts('0xabc').length, 7);
 });
 
-test('falls back to the public TEST-ONLY WalletConnect project ID', () => {
-  assert.equal(getWalletConnectProjectId(), PUBLIC_TEST_WALLETCONNECT_PROJECT_ID);
-  assert.match(PUBLIC_TEST_WALLETCONNECT_PROJECT_ID, /^[a-f0-9]{32}$/);
+test('defaults to the live public WalletConnect project ID', () => {
+  assert.equal(getWalletConnectProjectId(), PUBLIC_WALLETCONNECT_PROJECT_ID);
+  assert.equal(PUBLIC_WALLETCONNECT_PROJECT_ID, 'c884e13aaa967e608946ee76f636f27b');
+  assert.equal(WALLETCONNECT_RELAY_ORIGIN, 'https://boredefi.money');
+  assert.deepEqual(relayWebSocketOptions('wss://relay.walletconnect.org/?projectId=abc'), {
+    headers: { Origin: 'https://boredefi.money' },
+  });
+  assert.equal(relayWebSocketOptions('https://example.com'), undefined);
 });

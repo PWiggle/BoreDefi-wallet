@@ -1,5 +1,5 @@
 const TEST_MESSAGE = 'Hello from BoreDefi';
-const PROJECT_ID = 'b56e18d47c72ab683b10814fe9495694';
+const PROJECT_ID = 'c884e13aaa967e608946ee76f636f27b';
 const CHAINS = {
   1: { name: 'Ethereum', symbol: 'ETH' },
   10: { name: 'Optimism', symbol: 'ETH' },

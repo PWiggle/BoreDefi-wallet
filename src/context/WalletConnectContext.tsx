@@ -20,8 +20,12 @@ import {
   supportedCaipAccounts,
   supportedCaipChains,
 } from '../wallet/wc';
+import { installRelayOriginWebSocket } from '../wallet/wc-origin';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
+import { WALLETCONNECT_RELAY_ORIGIN } from '../wallet/wc';
 import { useWallet } from './WalletContext';
+
+installRelayOriginWebSocket();
 
 type SessionInfo = {
   topic: string;
@@ -107,6 +111,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
+        installRelayOriginWebSocket();
         const { Core } = await import('@walletconnect/core');
         const { WalletKit } = await import('@reown/walletkit');
         const core = new Core({ projectId });
@@ -115,7 +120,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
           metadata: {
             name: 'BoreDefi Wallet',
             description: 'Non-custodial BoreDefi wallet',
-            url: 'https://github.com/PWiggle/BoreDefi-wallet',
+            url: WALLETCONNECT_RELAY_ORIGIN,
             icons: ['https://raw.githubusercontent.com/PWiggle/BoreDefi-wallet/main/assets/icon.png'],
             redirect: { native: 'boredefi://' },
           },

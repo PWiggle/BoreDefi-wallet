@@ -16,17 +16,35 @@ export const WALLETCONNECT_METHODS = [
 ] as const;
 
 /**
- * Public Reown Cloud client ID for the TEST-ONLY Connect demo. Not a secret.
- * The relay currently rejects it with WebSocket 3000 "origin not allowed",
- * so it cannot pair. Set EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID for a real project.
+ * Public Reown Cloud client ID used by the live BoreDefi listing.
+ * Not a secret. Override with EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID.
  */
-export const PUBLIC_TEST_WALLETCONNECT_PROJECT_ID = 'b56e18d47c72ab683b10814fe9495694';
+export const PUBLIC_WALLETCONNECT_PROJECT_ID = 'c884e13aaa967e608946ee76f636f27b';
+
+/** Relay allowlists this HTTPS origin. The package name is also accepted. */
+export const WALLETCONNECT_RELAY_ORIGIN = 'https://boredefi.money';
 
 export const WALLETCONNECT_EVENTS = ['accountsChanged', 'chainChanged', 'disconnect'] as const;
 
 export function getWalletConnectProjectId(): string | null {
   const value = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
-  return value ? value : PUBLIC_TEST_WALLETCONNECT_PROJECT_ID;
+  return value ? value : PUBLIC_WALLETCONNECT_PROJECT_ID;
+}
+
+export function relayWebSocketOptions(
+  url: string,
+  options?: { headers?: Record<string, string> },
+): { headers?: Record<string, string> } | undefined {
+  if (!url.includes('relay.walletconnect')) {
+    return options;
+  }
+  return {
+    ...(options ?? {}),
+    headers: {
+      ...(options?.headers ?? {}),
+      Origin: WALLETCONNECT_RELAY_ORIGIN,
+    },
+  };
 }
 
 export function caipChainId(chainId: ChainId): string {
