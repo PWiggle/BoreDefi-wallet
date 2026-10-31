@@ -35,7 +35,7 @@
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#0B0F14",
+        "backgroundColor": "#255470",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -67,8 +67,8 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#3E6D93",
-          "image": "./assets/bored-defi-sailor-ape.jpeg",
+          "backgroundColor": "#255470",
+          "image": "./assets/splash-icon.png",
           "imageWidth": 280
         }
       ],

@@ -2,5 +2,8 @@ import type { ImageSourcePropType } from 'react-native';
 
 export { COVER_BACKGROUND, COVER_FOOTER_TEXT } from './theme';
 
-/** Brand cover art. Keep contain + matching blue letterboxing; do not recolor. */
-export const coverImage = require('../assets/bored-defi-sailor-ape.jpeg') as ImageSourcePropType;
+/** Official cover, uncropped. Contain it on COVER_BACKGROUND. */
+export const coverImage = require('../assets/boredefi-logo-official.png') as ImageSourcePropType;
+
+/** Ape head cropped from the official logo, for small brand spots. */
+export const markImage = require('../assets/icon.png') as ImageSourcePropType;

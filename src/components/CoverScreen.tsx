@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Image, View } from 'react-native';
+import { Image, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { coverImage } from '../brand';
@@ -18,11 +18,16 @@ function coverStyles({ spacing }: Theme) {
       flex: 1,
     },
     art: {
-      flex: 1,
-      width: '100%' as const,
+      bottom: 0,
+      left: 0,
+      position: 'absolute' as const,
+      right: 0,
+      top: 0,
     },
     footer: {
       gap: spacing.sm,
+      marginTop: 'auto' as const,
+      paddingBottom: spacing.md,
       paddingHorizontal: spacing.md,
       paddingTop: spacing.sm,
     },
@@ -31,6 +36,7 @@ function coverStyles({ spacing }: Theme) {
 
 export function CoverScreen({ footer }: Props) {
   const styles = useThemedStyles(coverStyles);
+  const { width, height } = useWindowDimensions();
   return (
     <View style={styles.root} testID="boredefi-cover">
       <StatusBar style="light" />
@@ -38,7 +44,7 @@ export function CoverScreen({ footer }: Props) {
         accessibilityLabel="BoreDefi"
         resizeMode="contain"
         source={coverImage}
-        style={styles.art}
+        style={[styles.art, { width, height }]}
       />
       <SafeAreaView edges={['bottom']} style={styles.footer}>
         {footer}

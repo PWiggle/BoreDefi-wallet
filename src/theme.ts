@@ -75,8 +75,8 @@ export const lightColors: ColorPalette = {
   bannerText: '#7A5A10',
 };
 
-/** Letterbox / splash behind the brand cover. Match the sailor-ape blue; do not recolor the art. */
-export const COVER_BACKGROUND = '#3E6D93';
+/** Letterbox behind the official cover. Matches the logo field exactly. */
+export const COVER_BACKGROUND = '#255470';
 export const COVER_FOOTER_TEXT = '#F4F7FA';
 
 export const DEFAULT_APPEARANCE: AppearanceMode = 'system';
