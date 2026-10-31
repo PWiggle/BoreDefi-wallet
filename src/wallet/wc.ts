@@ -15,7 +15,11 @@ export const WALLETCONNECT_METHODS = [
   'wallet_revokePermissions',
 ] as const;
 
-/** Public Reown Cloud client ID for the TEST-ONLY Connect demo. Not a secret. */
+/**
+ * Public Reown Cloud client ID for the TEST-ONLY Connect demo. Not a secret.
+ * The relay currently rejects it with WebSocket 3000 "origin not allowed",
+ * so it cannot pair. Set EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID for a real project.
+ */
 export const PUBLIC_TEST_WALLETCONNECT_PROJECT_ID = 'b56e18d47c72ab683b10814fe9495694';
 
 export const WALLETCONNECT_EVENTS = ['accountsChanged', 'chainChanged', 'disconnect'] as const;

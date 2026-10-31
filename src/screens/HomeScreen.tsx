@@ -132,7 +132,8 @@ export function HomeScreen() {
       const geckoIds = [...new Set(portfolio.map((item) => geckoIdForToken(item)).filter((id): id is string => Boolean(id)))];
       const [nextBalance, nextActivity, details, nextStrip] = await Promise.all([
         fetchBalance(session.address, selectedChain.id),
-        fetchActivity(session.address, selectedChain.id, 5),
+        // Indexers are optional. A Blockscout outage must not hide a live balance.
+        fetchActivity(session.address, selectedChain.id, 5).catch(() => [] as ActivityItem[]),
         fetchMarketDetails(geckoIds).catch(() => {
           setMarketsError('Could not load live CoinGecko prices.');
           return [] as MarketCoin[];

@@ -108,9 +108,6 @@ export function SwapScreen() {
     setBusy(true);
     try {
       const fromAmount = parseTokenAmount(amount, fromToken.decimals);
-      if (fromAmount > balance) {
-        throw new Error('Amount is larger than the token balance.');
-      }
       setQuote(
         await fetchSwapQuote({
           chainId: selectedChain.id,
@@ -120,6 +117,9 @@ export function SwapScreen() {
           fromAddress,
         }),
       );
+      if (fromAmount > balance) {
+        setError('Quote is ready, but the balance is too low to send this swap.');
+      }
     } catch (err) {
       setQuote(null);
       setError(err instanceof Error ? err.message : 'Quote failed.');
@@ -130,6 +130,11 @@ export function SwapScreen() {
 
   const confirm = async () => {
     if (!quote) {
+      return;
+    }
+    if (quote.fromAmount > balance) {
+      setReview(false);
+      setError('Balance is too low to send this swap.');
       return;
     }
     setBusy(true);

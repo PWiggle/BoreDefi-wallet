@@ -95,9 +95,6 @@ export function BridgeScreen() {
     setError(null);
     try {
       const fromAmount = parseTokenAmount(amount, fromToken.decimals);
-      if (fromAmount > balance) {
-        throw new Error('Amount is larger than the token balance.');
-      }
       setQuote(
         await fetchBridgeQuote({
           fromChainId: selectedChain.id,
@@ -108,6 +105,9 @@ export function BridgeScreen() {
           fromAddress,
         }),
       );
+      if (fromAmount > balance) {
+        setError('Quote is ready, but the balance is too low to send this bridge.');
+      }
     } catch (err) {
       setQuote(null);
       setError(err instanceof Error ? err.message : 'Bridge quote failed.');
@@ -118,6 +118,11 @@ export function BridgeScreen() {
 
   const confirm = async () => {
     if (!quote) {
+      return;
+    }
+    if (quote.fromAmount > balance) {
+      setReview(false);
+      setError('Balance is too low to send this bridge.');
       return;
     }
     setBusy(true);

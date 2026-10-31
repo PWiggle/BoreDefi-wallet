@@ -33,7 +33,7 @@ Expo SDK 57 + React Native 0.86, with **ethers v6** for BIP39 / BIP44 (`m/44'/60
 
 Swaps and bridges use the public [LI.FI](https://docs.li.fi/) quote API. Same-chain quotes stay on **Swap** (`fromChain === toChain`). Cross-chain quotes are **Bridge** (`fromChain !== toChain`). LI.FI aggregates 1inch, 0x, Kyber, Paraswap, LayerSwap, and others. 0x and 1inch direct APIs now require API keys, which we will not put in this public repo.
 
-WalletConnect is **Reown WalletKit** (`@reown/walletkit`) plus `@walletconnect/react-native-compat`. This is the wallet-side SDK (the app is the wallet, not a dApp). Pairing uses a `wc:` URI from QR, paste, a `boredefi://wc?uri=` deep link, or the in-app browser. A public Cloud project ID is a client identifier, not a key that can move funds. Override it with `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` in a local `.env`, or use the documented TEST-ONLY fallback so the public demo can pair.
+WalletConnect is **Reown WalletKit** (`@reown/walletkit`) plus `@walletconnect/react-native-compat`. This is the wallet-side SDK (the app is the wallet, not a dApp). Pairing uses a `wc:` URI from QR, paste, a `boredefi://wc?uri=` deep link, or the in-app browser. A public Cloud project ID is a client identifier, not a key that can move funds. Override it with `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` in a local `.env`. The repo fallback `b56e18d47c72ab683b10814fe9495694` is the public TEST-ONLY example client ID. On 2026-10-31 the relay closed that socket with `3000 Unauthorized: origin not allowed`, so it does not pair and is not a production project ID. Create a Reown project and allow this app's origin before shipping WalletConnect.
 
 The in-app browser and Chrome extension announce **EIP-6963** (`rdns: com.boredefi.wallet`, `isBoreDefi`) so a dApp can prefer BoreDefi over other injected wallets.
 
@@ -168,9 +168,12 @@ npm run export:web   # writes dist/ (gitignored)
 | Setting | Value |
 | --- | --- |
 | Application ID / package | `com.boredefi.wallet` |
+| versionName | 1.0.0 |
+| versionCode | 23 |
 | compileSdk | 36 |
 | targetSdk | 36 |
 | minSdk | 24 |
+| Native library packaging | uncompressed, 16 KB zip alignment (`useLegacyPackaging: false`) |
 
 These are pinned with `expo-build-properties` in `app.json`.
 
@@ -190,14 +193,14 @@ npm run prebuild:android
 
 ## Networks
 
-| Network | Native token | Default public RPC | NFT catalog |
+| Network | Native token | Default public RPC (fallbacks follow) | NFT catalog |
 | --- | --- | --- | --- |
 | Ethereum | ETH | `https://ethereum-rpc.publicnode.com` | Blockscout v2 |
 | Base | ETH | `https://mainnet.base.org` | Blockscout v2 |
 | Arbitrum | ETH | `https://arbitrum-one-rpc.publicnode.com` | Blockscout v2 |
-| Optimism | ETH | `https://optimism-rpc.publicnode.com` | Blockscout v2 |
+| Optimism | ETH | `https://optimism-rpc.publicnode.com` | `explorer.optimism.io` Blockscout v2 |
 | Polygon | POL | `https://polygon-bor-rpc.publicnode.com` | Blockscout v2 |
-| BNB Chain | BNB | `https://bsc-rpc.publicnode.com` | Blockscout v2 |
+| BNB Chain | BNB | `https://bsc-rpc.publicnode.com` | Manual import (`bsc.blockscout.com` is 404) |
 | Avalanche | AVAX | `https://avalanche-c-chain-rpc.publicnode.com` | Manual send only |
 
 All of these are EVM chains on the same BIP44 account. Activity uses public Blockscout or Routescan account APIs. Rate limits on public endpoints are expected.
@@ -223,7 +226,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 ### Phase 2
 
 12. Home shows Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, and Avalanche.
-13. **Swap**: pick a chain, from/to tokens, amount larger than balance → error. Valid amount → quote shows a route name (for example 1inch) and a minimum received amount. Confirming without funds fails cleanly.
+13. **Swap**: pick a chain, from/to tokens, and a valid amount. The quote shows a route name (for example 1inch) and a minimum received amount even when the balance is too low to send. Confirming without funds fails cleanly and does not broadcast.
 14. On a funded account, swap a small amount of native → USDC (or the reverse). If an ERC-20 spend is required, an approval is sent first. Confirm the hash.
 15. Confirm a quote that would be cross-chain is not offered (same-chain only). Use **Bridge** instead.
 16. WalletConnect uses the documented public TEST-ONLY project ID unless `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID` is set.

@@ -312,7 +312,7 @@ export function NftsScreen() {
         <Text style={styles.autodetect}>
           {CHAINS[selectedChain.id].nftApi
             ? 'Autodetect is on · public Blockscout catalog. Pull down or tap Refresh after you receive.'
-            : 'No catalog on Avalanche · import a collectible you own'}
+            : `No public catalog on ${selectedChain.name} · import a collectible you own`}
         </Text>
         <Pressable onPress={() => void load()}>
           <Text style={styles.importLink}>Refresh</Text>

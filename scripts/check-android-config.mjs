@@ -19,10 +19,22 @@ if (plugin?.[1]?.android?.compileSdkVersion !== 36) {
 if (plugin?.[1]?.android?.targetSdkVersion !== 36) {
   errors.push('targetSdkVersion is not 36');
 }
+if (app.expo.version !== '1.0.0') {
+  errors.push(`version (versionName) is ${app.expo.version}`);
+}
+if (android.versionCode !== 23) {
+  errors.push(`android.versionCode is ${android.versionCode}`);
+}
+if (plugin?.[1]?.android?.useLegacyPackaging !== false) {
+  errors.push('useLegacyPackaging is not false (16 KB zip alignment needs uncompressed native libs)');
+}
+if (plugin?.[1]?.android?.enableMinifyInReleaseBuilds !== true) {
+  errors.push('release minify is not enabled');
+}
 
 if (errors.length) {
   console.error(errors.join('\n'));
   process.exit(1);
 }
 
-console.log('Android package com.boredefi.wallet; compileSdk/targetSdk 36');
+console.log('Android package com.boredefi.wallet; versionName 1.0.0; versionCode 23; compileSdk/targetSdk 36');

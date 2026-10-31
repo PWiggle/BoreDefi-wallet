@@ -3,7 +3,7 @@
     "name": "BoreDefi Wallet",
     "slug": "boredefi-wallet",
     "scheme": "boredefi",
-    "version": "0.4.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -28,6 +28,12 @@
     },
     "android": {
       "package": "com.boredefi.wallet",
+      "versionCode": 23,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0B0F14",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -43,6 +49,7 @@
     },
     "plugins": [
       "expo-system-ui",
+      "./plugins/withUnsignedRelease",
       "expo-secure-store",
       [
         "expo-local-authentication",
@@ -72,7 +79,11 @@
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
             "minSdkVersion": 24,
-            "buildToolsVersion": "36.0.0"
+            "buildToolsVersion": "36.0.0",
+            "useLegacyPackaging": false,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.facebook.hermes.unicode.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keep class expo.modules.** { *; }\n-keep class com.swmansion.rnscreens.** { *; }\n-keep class com.swmansion.gesturehandler.** { *; }\n-keep class com.reactnativecommunity.asyncstorage.** { *; }\n-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.netinfo.** { *; }\n-keep class com.shopify.reactnative.skia.** { *; }\n-dontwarn org.bouncycastle.**\n-dontwarn org.conscrypt.**\n-dontwarn org.slf4j.**\n-dontwarn java.awt.**\n-dontwarn javax.swing.**\n-keep class com.sun.jna.** { *; }\n-keepclassmembers class * extends com.sun.jna.** { *; }\n-keepclassmembers class com.sun.jna.Pointer { long peer; }\n-keep class uniffi.** { *; }\n-keep class com.walletconnect.** { *; }\n-keep class com.reown.** { *; }"
           },
           "ios": {
             "deploymentTarget": "16.4"

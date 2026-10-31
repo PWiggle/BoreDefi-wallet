@@ -1,26 +1,66 @@
-import { HDNodeWallet, JsonRpcProvider, TransactionResponse } from 'ethers';
+import {
+  type AbstractProvider,
+  FallbackProvider,
+  HDNodeWallet,
+  JsonRpcProvider,
+  TransactionResponse,
+} from 'ethers';
 
 import { logger } from '../logger';
 import { CHAINS, type ChainId } from './chains';
 import { walletFromMnemonic } from './mnemonic';
 
-const providers = new Map<ChainId, JsonRpcProvider>();
+const providers = new Map<ChainId, AbstractProvider>();
 
 export async function sendRpc(
   chainId: ChainId,
   method: string,
   params: unknown[] = [],
 ): Promise<unknown> {
-  return getProvider(chainId).send(method, params);
+  const provider = getProvider(chainId);
+  if (provider instanceof JsonRpcProvider) {
+    return provider.send(method, params);
+  }
+  if (!(provider instanceof FallbackProvider)) {
+    throw new Error('RPC provider cannot send.');
+  }
+  const ordered = [...provider.providerConfigs].sort((a, b) => a.priority - b.priority);
+  let lastError: unknown;
+  for (const config of ordered) {
+    if (!(config.provider instanceof JsonRpcProvider)) {
+      continue;
+    }
+    try {
+      return await config.provider.send(method, params);
+    } catch (error) {
+      lastError = error;
+      logger.error('RPC endpoint failed', {
+        chainId,
+        method,
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('RPC request failed.');
 }
 
-export function getProvider(chainId: ChainId): JsonRpcProvider {
+export function getProvider(chainId: ChainId): AbstractProvider {
   const existing = providers.get(chainId);
   if (existing) {
     return existing;
   }
   const chain = CHAINS[chainId];
-  const provider = new JsonRpcProvider(chain.rpcUrl, chain.id, { staticNetwork: true });
+  const urls = chain.rpcUrls.length > 0 ? chain.rpcUrls : [chain.rpcUrl];
+  const configs = urls.map((url, index) => ({
+    provider: new JsonRpcProvider(url, chain.id, { staticNetwork: true }),
+    priority: index + 1,
+    stallTimeout: 1500,
+    weight: 1,
+  }));
+  const provider =
+    configs.length === 1
+      ? configs[0]!.provider
+      : new FallbackProvider(configs, chain.id, { quorum: 1 });
   providers.set(chainId, provider);
   return provider;
 }
