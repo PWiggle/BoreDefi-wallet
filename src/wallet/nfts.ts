@@ -105,25 +105,76 @@ export function parseBlockscoutNfts(items: BlockscoutNft[], chainId: ChainId): N
   return parsed;
 }
 
-export async function fetchNfts(owner: string, chainId: ChainId): Promise<NftItem[]> {
+/**
+ * Autodetect outcome for one network.
+ * - `ok`: the catalog answered. An empty list (or a 404 for an address it has never seen)
+ *   just means the wallet holds no NFTs there.
+ * - `unavailable`: the catalog could not be reached or refused the request (for example the
+ *   Cloudflare 403 challenge Blockscout now serves to app clients on Base, Polygon and Arbitrum,
+ *   402 Pro API, 429, 5xx, a timeout or a non-JSON body). We cannot say the wallet is empty, but
+ *   this is not a wallet error either, so the screen shows a quiet note instead of a red banner.
+ */
+export type NftAutodetect = 'ok' | 'unavailable';
+
+export type NftFetchResult = { items: NftItem[]; autodetect: NftAutodetect };
+
+export const NFT_FETCH_TIMEOUT_MS = 15_000;
+
+export function classifyNftHttpStatus(status: number): 'json' | 'empty' | 'unavailable' {
+  if (status >= 200 && status < 300) {
+    return 'json';
+  }
+  if (status === 404) {
+    return 'empty';
+  }
+  return 'unavailable';
+}
+
+type FetchLike = (input: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+}>;
+
+export async function fetchNfts(
+  owner: string,
+  chainId: ChainId,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+  timeoutMs: number = NFT_FETCH_TIMEOUT_MS,
+): Promise<NftFetchResult> {
   const base = CHAINS[chainId].nftApi;
   if (!base) {
-    return [];
+    return { items: [], autodetect: 'ok' };
   }
   const url = `${base}/addresses/${owner}/nft?type=ERC-721,ERC-1155`;
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const response = await fetchImpl(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller?.signal,
+    });
+    const kind = classifyNftHttpStatus(response.status);
+    if (kind === 'empty') {
+      return { items: [], autodetect: 'ok' };
     }
-    const body = (await response.json()) as { items?: BlockscoutNft[] };
-    return parseBlockscoutNfts(body.items ?? [], chainId);
+    if (kind === 'unavailable') {
+      logger.warn('NFT autodetect unavailable', { chainId, status: response.status });
+      return { items: [], autodetect: 'unavailable' };
+    }
+    const body = (await response.json()) as { items?: unknown } | null;
+    const items = Array.isArray(body?.items) ? (body.items as BlockscoutNft[]) : [];
+    return { items: parseBlockscoutNfts(items, chainId), autodetect: 'ok' };
   } catch (error) {
-    logger.error('NFT list failed', {
+    logger.warn('NFT autodetect unavailable', {
       chainId,
       message: error instanceof Error ? error.message : 'unknown',
     });
-    throw new Error('Could not load NFTs for this network.');
+    return { items: [], autodetect: 'unavailable' };
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
 

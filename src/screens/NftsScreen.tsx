@@ -173,6 +173,7 @@ export function NftsScreen() {
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [userHidden, setUserHidden] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [autodetectDown, setAutodetectDown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<GalleryItem | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -186,13 +187,14 @@ export function NftsScreen() {
     setBusy(true);
     setError(null);
     try {
-      const [catalog, imported, shown, hidden] = await Promise.all([
+      const [{ items: catalog, autodetect }, imported, shown, hidden] = await Promise.all([
         fetchNfts(session.address, selectedChain.id),
         loadImportedNfts(),
         loadRevealedNfts(),
         loadHiddenNfts(),
       ]);
       setItems(mergeNftLists(catalog, imported.filter((item) => item.chainId === selectedChain.id)));
+      setAutodetectDown(autodetect === 'unavailable');
       setRevealed(new Set(shown));
       setUserHidden(new Set(hidden));
     } catch (err) {
@@ -322,6 +324,11 @@ export function NftsScreen() {
         <Text style={styles.advanced}>Import is advanced · paste a collectible contract you already own</Text>
       </Pressable>
       {error ? <ErrorBanner message={error} /> : null}
+      {autodetectDown && !busy ? (
+        <Text style={styles.meta}>
+          {`Autodetect is unavailable on ${selectedChain.name} right now. NFTs you import still show here.`}
+        </Text>
+      ) : null}
       {busy ? <Text style={styles.meta}>Loading…</Text> : null}
       {visible.length === 0 && !busy ? (
         <View style={styles.empty}>
@@ -329,7 +336,9 @@ export function NftsScreen() {
           <Text style={styles.meta}>
             {hidden.length > 0
               ? 'Unsolicited airdrops are in Hidden / possible spam below. Receive an NFT you expect, then pull to refresh. Or Show anyway after you read the warnings.'
-              : 'Nothing from autodetect on this network. Receive an NFT on this chain, then pull to refresh. Import only a collectible you already own.'}
+              : autodetectDown
+                ? 'Receive an NFT on this chain, or import a collectible you already own.'
+                : 'Nothing from autodetect on this network. Receive an NFT on this chain, then pull to refresh. Import only a collectible you already own.'}
           </Text>
           <Button label="Receive" onPress={() => navigation.navigate('NftReceive')} />
           <Button label="Import" variant="secondary" onPress={() => navigation.navigate('NftImport')} />
