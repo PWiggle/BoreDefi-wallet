@@ -1,6 +1,7 @@
 import { Contract, getAddress, isAddress, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
+import { alchemyEnabledFor, fetchAlchemyNfts, getAlchemyKey } from './alchemy';
 import { CHAINS, type ChainId } from './chains';
 import { connectedWallet, getProvider } from './rpc';
 
@@ -137,6 +138,23 @@ type FetchLike = (input: string, init?: { headers?: Record<string, string>; sign
 }>;
 
 export async function fetchNfts(
+  owner: string,
+  chainId: ChainId,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+  timeoutMs: number = NFT_FETCH_TIMEOUT_MS,
+  alchemyKey: string | null = getAlchemyKey(),
+): Promise<NftFetchResult> {
+  if (alchemyKey && alchemyEnabledFor(chainId, alchemyKey)) {
+    const viaAlchemy = await fetchAlchemyNfts(owner, chainId, alchemyKey, fetchImpl, timeoutMs);
+    if (viaAlchemy.autodetect === 'ok') {
+      return viaAlchemy;
+    }
+    // Fall through to Blockscout.
+  }
+  return fetchBlockscoutNfts(owner, chainId, fetchImpl, timeoutMs);
+}
+
+export async function fetchBlockscoutNfts(
   owner: string,
   chainId: ChainId,
   fetchImpl: FetchLike = fetch as unknown as FetchLike,

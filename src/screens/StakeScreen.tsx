@@ -11,13 +11,18 @@ import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
+import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
+import { friendlyTxError } from '../wallet/tx-errors';
+import { preflightLine, type PreflightResult } from '../wallet/preflight';
 import {
+  checkStakePreflight,
   claimLidoRequests,
   fetchStakedBalance,
   listLidoRequests,
   listStakeMarkets,
   stake,
   unstake,
+  type StakeAction,
   type StakeMarket,
   type WithdrawalRequest,
 } from '../wallet/stake';
@@ -25,6 +30,14 @@ import { fetchTokenBalance } from '../wallet/swap';
 
 function stakedLabel(market: StakeMarket): string {
   return market.protocol === 'lido' ? 'stETH' : `a${market.asset.symbol}`;
+}
+
+function safeAmount(value: string, decimals: number): bigint {
+  try {
+    return value.trim() ? parseTokenAmount(value, decimals) : 0n;
+  } catch {
+    return -1n;
+  }
 }
 
 function stakeStyles({ colors, card, chip, field, spacing }: Theme) {
@@ -43,6 +56,7 @@ function stakeStyles({ colors, card, chip, field, spacing }: Theme) {
     },
     boxTitle: { color: colors.text, fontWeight: '700' as const },
     hash: { color: colors.accent },
+    hint: { color: colors.text, fontWeight: '600' as const },
   };
 }
 
@@ -62,6 +76,8 @@ export function StakeScreen() {
   const [amount, setAmount] = useState('');
   const [walletBalance, setWalletBalance] = useState(0n);
   const [stakedBalance, setStakedBalance] = useState(0n);
+  const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
+  const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [requests, setRequests] = useState<WithdrawalRequest[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,12 +106,20 @@ export function StakeScreen() {
     if (!session || !market) {
       return;
     }
+    setNativeBalance(null);
+    setMaxFeePerGas(null);
     fetchTokenBalance(session.address, market.asset, market.chainId)
       .then(setWalletBalance)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Balance failed.'));
+      .catch((err) => setError(friendlyTxError(err, { chainId: market.chainId, fallback: 'Could not load your balance.' })));
     fetchStakedBalance(market, session.address)
       .then(setStakedBalance)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Staked balance failed.'));
+      .catch((err) => setError(friendlyTxError(err, { chainId: market.chainId, fallback: 'Could not load your position.' })));
+    fetchBalance(session.address, market.chainId)
+      .then(setNativeBalance)
+      .catch(() => setNativeBalance(null));
+    fetchMaxFeePerGas(market.chainId)
+      .then(setMaxFeePerGas)
+      .catch(() => setMaxFeePerGas(null));
     if (market.protocol === 'lido') {
       listLidoRequests(session.address)
         .then(setRequests)
@@ -118,6 +142,22 @@ export function StakeScreen() {
       </Screen>
     );
   }
+
+  const amountUnits = safeAmount(amount, market.asset.decimals);
+  const check = (action: StakeAction): PreflightResult =>
+    checkStakePreflight({
+      market,
+      action,
+      amount: amountUnits,
+      walletBalance,
+      positionBalance: stakedBalance,
+      nativeBalance,
+      maxFeePerGas,
+    });
+  const stakeCheck = check('stake');
+  const unstakeCheck = check('unstake');
+  const claimCheck = check('claim');
+  const hint = preflightLine([stakeCheck, unstakeCheck], amount.trim().length > 0);
 
   const run = async (action: 'stake' | 'unstake' | 'claim') => {
     setBusy(true);
@@ -142,7 +182,7 @@ export function StakeScreen() {
       setPendingAction(null);
       setTxHash(result.hash);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Stake action failed.');
+      setError(friendlyTxError(err, { chainId: market.chainId, fallback: 'Stake action failed. Nothing was sent.' }));
       setPendingAction(null);
     } finally {
       setBusy(false);
@@ -184,9 +224,21 @@ export function StakeScreen() {
         style={styles.input}
       />
       <View style={styles.actions}>
-        <Button label="Stake" onPress={() => setPendingAction('stake')} loading={busy} />
-        <Button label="Unstake" variant="secondary" onPress={() => setPendingAction('unstake')} loading={busy} />
+        <Button
+          label={market.protocol === 'aave-v3' ? 'Supply' : 'Stake'}
+          onPress={() => setPendingAction('stake')}
+          loading={busy}
+          disabled={!stakeCheck.ok}
+        />
+        <Button
+          label={market.protocol === 'aave-v3' ? 'Withdraw' : 'Unstake'}
+          variant="secondary"
+          onPress={() => setPendingAction('unstake')}
+          loading={busy}
+          disabled={!unstakeCheck.ok}
+        />
       </View>
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {market.protocol === 'lido' && requests.length > 0 ? (
         <View style={styles.box}>
           <Text style={styles.boxTitle}>Lido withdrawal queue</Text>
@@ -200,7 +252,7 @@ export function StakeScreen() {
             label="Claim finalized"
             onPress={() => setPendingAction('claim')}
             loading={busy}
-            disabled={!requests.some((item) => item.finalized && !item.claimed)}
+            disabled={!requests.some((item) => item.finalized && !item.claimed) || !claimCheck.ok}
           />
         </View>
       ) : null}

@@ -61,6 +61,7 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
   ],
   137: [
     native(137),
+    token(137, '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', 'WPOL', 'Wrapped POL', 18),
     token(137, '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', 'WETH', 'Wrapped Ether', 18),
     token(137, '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', 'USDC', 'USD Coin', 6),
     token(137, '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 'USDT', 'Tether USD', 6),

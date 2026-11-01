@@ -280,7 +280,8 @@ export function actionsForMarket(coin: MarketCoin, selectedChainId: ChainId): Ma
 export function geckoIdForNative(chainId: ChainId): string {
   switch (chainId) {
     case 137:
-      return 'matic-network';
+      // POL replaced MATIC; CoinGecko keeps a separate (stale-priced) matic-network id.
+      return 'polygon-ecosystem-token';
     case 56:
       return 'binancecoin';
     case 43114:
@@ -305,6 +306,8 @@ export function geckoIdForToken(token: TokenConfig): string | null {
       return 'binancecoin';
     case 'WAVAX':
       return 'avalanche-2';
+    case 'WPOL':
+      return 'polygon-ecosystem-token';
     case 'STETH':
       return 'staked-ether';
     default:
@@ -435,4 +438,22 @@ export async function fetchCoinPage(id: string): Promise<CoinPage> {
     });
     throw new Error('Could not load this CoinGecko coin.');
   }
+}
+
+/** USD prices for CoinGecko ids, used by the swap price guard. Missing ids are left out. */
+export async function fetchUsdPrices(ids: string[]): Promise<Record<string, number>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) {
+    return {};
+  }
+  const payload = await gecko<Record<string, { usd?: number }>>(
+    `/simple/price?ids=${encodeURIComponent(unique.join(','))}&vs_currencies=usd`,
+  );
+  const out: Record<string, number> = {};
+  for (const [id, value] of Object.entries(payload ?? {})) {
+    if (typeof value?.usd === 'number' && Number.isFinite(value.usd)) {
+      out[id] = value.usd;
+    }
+  }
+  return out;
 }

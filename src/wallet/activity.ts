@@ -1,4 +1,5 @@
 import { logger } from '../logger';
+import { alchemyEnabledFor, fetchAlchemyActivity, getAlchemyKey } from './alchemy';
 import { CHAINS, type ChainId } from './chains';
 
 export type ActivityItem = {
@@ -25,6 +26,27 @@ export async function fetchActivity(
   address: string,
   chainId: ChainId,
   offset = 25,
+  alchemyKey: string | null = getAlchemyKey(),
+  fetchImpl: typeof fetch = fetch,
+): Promise<ActivityItem[]> {
+  if (alchemyKey && alchemyEnabledFor(chainId, alchemyKey)) {
+    try {
+      return await fetchAlchemyActivity(address, chainId, alchemyKey, offset, fetchImpl as never);
+    } catch (error) {
+      logger.warn('Alchemy activity failed, using Blockscout', {
+        chainId,
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+    }
+  }
+  return fetchBlockscoutActivity(address, chainId, offset, fetchImpl);
+}
+
+export async function fetchBlockscoutActivity(
+  address: string,
+  chainId: ChainId,
+  offset = 25,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<ActivityItem[]> {
   const url = new URL(CHAINS[chainId].activityUrl);
   url.searchParams.set('module', 'account');
@@ -35,7 +57,7 @@ export async function fetchActivity(
   url.searchParams.set('offset', String(offset));
 
   try {
-    const response = await fetch(url);
+    const response = await fetchImpl(url.toString());
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }

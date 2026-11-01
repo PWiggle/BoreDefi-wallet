@@ -1,9 +1,11 @@
 import { Contract, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
-import { type ChainId } from './chains';
-import { connectedWallet, getProvider } from './rpc';
+import { CHAINS, type ChainId } from './chains';
+import { checkPreflight, estimateFeeWei, GAS_UNITS, type PreflightResult } from './preflight';
+import { connectedWallet, fetchMaxFeePerGas, getProvider } from './rpc';
 import { findToken, type TokenConfig } from './tokens';
+import { toUserError, UserFacingError } from './tx-errors';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 
@@ -143,6 +145,114 @@ async function aaveAToken(chainId: ChainId, asset: string): Promise<string> {
   return address;
 }
 
+export type StakeAction = 'stake' | 'unstake' | 'claim';
+
+/** Gas units for one Stake action, including the approve step it may need. */
+export function stakeGasUnits(market: StakeMarket, action: StakeAction, needsApproval = true): bigint {
+  const approve = needsApproval ? GAS_UNITS.erc20Approve : 0n;
+  if (market.protocol === 'lido') {
+    if (action === 'stake') {
+      return GAS_UNITS.lidoStake;
+    }
+    if (action === 'unstake') {
+      return GAS_UNITS.lidoUnstake + approve;
+    }
+    return GAS_UNITS.lidoClaim;
+  }
+  if (action === 'stake') {
+    return GAS_UNITS.aaveSupply + approve;
+  }
+  if (action === 'unstake') {
+    return GAS_UNITS.aaveWithdraw;
+  }
+  return 0n;
+}
+
+/** Which balance an action spends: Lido stake spends ETH, Aave supply spends USDC, withdrawals spend the position. */
+export function stakeSpend(
+  market: StakeMarket,
+  action: StakeAction,
+): { source: 'wallet' | 'position' | 'none'; symbol: string; native: boolean } {
+  if (action === 'claim') {
+    return { source: 'none', symbol: '', native: false };
+  }
+  if (action === 'stake') {
+    return { source: 'wallet', symbol: market.asset.symbol, native: Boolean(market.asset.native) || market.protocol === 'lido' };
+  }
+  return {
+    source: 'position',
+    symbol: market.protocol === 'lido' ? 'stETH' : `a${market.asset.symbol}`,
+    native: false,
+  };
+}
+
+/** Pure pre-flight for every Stake option (Lido stake/unstake/claim, Aave supply/withdraw on every chain). */
+export function checkStakePreflight(input: {
+  market: StakeMarket;
+  action: StakeAction;
+  amount: bigint | null;
+  walletBalance: bigint;
+  positionBalance: bigint;
+  nativeBalance: bigint | null;
+  maxFeePerGas: bigint | null;
+  needsApproval?: boolean;
+}): PreflightResult {
+  const spend = stakeSpend(input.market, input.action);
+  const feeWei =
+    input.maxFeePerGas === null
+      ? null
+      : estimateFeeWei(
+          input.market.chainId,
+          stakeGasUnits(input.market, input.action, input.needsApproval ?? true),
+          input.maxFeePerGas,
+        );
+  return checkPreflight({
+    chainId: input.market.chainId,
+    amount: spend.source === 'none' ? null : input.amount ?? 0n,
+    spendBalance: spend.source === 'position' ? input.positionBalance : input.walletBalance,
+    spendSymbol: spend.symbol,
+    nativeBalance: input.nativeBalance,
+    feeWei,
+    spendIsNative: spend.native,
+  });
+}
+
+async function walletBalanceOf(market: StakeMarket, owner: string): Promise<bigint> {
+  if (market.protocol === 'lido' || market.asset.native) {
+    return getProvider(market.chainId).getBalance(owner);
+  }
+  const token = new Contract(market.asset.address, ERC20_ABI, getProvider(market.chainId));
+  return token.balanceOf(owner) as Promise<bigint>;
+}
+
+/** Re-checks balances right before broadcast so a stale screen can never send a doomed transaction. */
+export async function assertStakeReady(input: {
+  market: StakeMarket;
+  action: StakeAction;
+  owner: string;
+  amount: bigint | null;
+  needsApproval?: boolean;
+}): Promise<void> {
+  let result: PreflightResult;
+  try {
+    const [nativeBalance, maxFeePerGas, walletBalance, positionBalance] = await Promise.all([
+      getProvider(input.market.chainId).getBalance(input.owner),
+      fetchMaxFeePerGas(input.market.chainId).catch(() => null),
+      input.action === 'stake' ? walletBalanceOf(input.market, input.owner) : Promise.resolve(0n),
+      input.action === 'unstake' ? fetchStakedBalance(input.market, input.owner) : Promise.resolve(0n),
+    ]);
+    result = checkStakePreflight({ ...input, walletBalance, positionBalance, nativeBalance, maxFeePerGas });
+  } catch (error) {
+    throw toUserError('Stake pre-flight failed', error, {
+      chainId: input.market.chainId,
+      fallback: `Could not check your balance on ${CHAINS[input.market.chainId].name}. Try again.`,
+    });
+  }
+  if (!result.ok) {
+    throw new UserFacingError(result.message);
+  }
+}
+
 export async function stake(input: {
   mnemonic: string;
   market: StakeMarket;
@@ -150,27 +260,36 @@ export async function stake(input: {
   amount: bigint;
 }): Promise<TransactionResponse> {
   if (input.amount <= 0n) {
-    throw new Error('Enter an amount greater than zero.');
+    throw new UserFacingError('Enter an amount greater than zero.');
   }
-  const wallet = await connectedWallet(input.mnemonic, input.market.chainId);
-  if (input.market.protocol === 'lido') {
-    logger.info('Lido stake', { chainId: 1 });
-    const lido = new Contract(LIDO_STETH, STETH_ABI, wallet);
-    return lido.submit(ZERO, { value: input.amount }) as Promise<TransactionResponse>;
+  const chainId = input.market.chainId;
+  if (input.market.protocol !== 'lido' && !AAVE_V3_POOL[chainId]) {
+    throw new UserFacingError('Aave V3 is not configured on this chain.');
   }
-  const poolAddress = AAVE_V3_POOL[input.market.chainId];
-  if (!poolAddress) {
-    throw new Error('Aave V3 is not configured on this chain.');
+  try {
+    const wallet = await connectedWallet(input.mnemonic, chainId);
+    if (input.market.protocol === 'lido') {
+      await assertStakeReady({ market: input.market, action: 'stake', owner: input.owner, amount: input.amount });
+      logger.info('Lido stake', { chainId: 1 });
+      const lido = new Contract(LIDO_STETH, STETH_ABI, wallet);
+      return (await lido.submit(ZERO, { value: input.amount })) as TransactionResponse;
+    }
+    const poolAddress = AAVE_V3_POOL[chainId]!;
+    const token = new Contract(input.market.asset.address, ERC20_ABI, wallet);
+    const allowance = (await token.allowance(input.owner, poolAddress)) as bigint;
+    const needsApproval = allowance < input.amount;
+    await assertStakeReady({ market: input.market, action: 'stake', owner: input.owner, amount: input.amount, needsApproval });
+    if (needsApproval) {
+      logger.info('Aave approve', { chainId });
+      const approval = (await token.approve(poolAddress, input.amount)) as TransactionResponse;
+      await approval.wait();
+    }
+    logger.info('Aave supply', { chainId });
+    const pool = new Contract(poolAddress, AAVE_POOL_ABI, wallet);
+    return (await pool.supply(input.market.asset.address, input.amount, input.owner, 0)) as TransactionResponse;
+  } catch (error) {
+    throw toUserError('Stake failed', error, { chainId });
   }
-  const token = new Contract(input.market.asset.address, ERC20_ABI, wallet);
-  const allowance = (await token.allowance(input.owner, poolAddress)) as bigint;
-  if (allowance < input.amount) {
-    const approval = (await token.approve(poolAddress, input.amount)) as TransactionResponse;
-    await approval.wait();
-  }
-  logger.info('Aave supply', { chainId: input.market.chainId });
-  const pool = new Contract(poolAddress, AAVE_POOL_ABI, wallet);
-  return pool.supply(input.market.asset.address, input.amount, input.owner, 0) as Promise<TransactionResponse>;
 }
 
 export async function unstake(input: {
@@ -180,27 +299,35 @@ export async function unstake(input: {
   amount: bigint;
 }): Promise<TransactionResponse> {
   if (input.amount <= 0n) {
-    throw new Error('Enter an amount greater than zero.');
+    throw new UserFacingError('Enter an amount greater than zero.');
   }
-  const wallet = await connectedWallet(input.mnemonic, input.market.chainId);
-  if (input.market.protocol === 'lido') {
-    const steth = new Contract(LIDO_STETH, STETH_ABI, wallet);
-    const allowance = (await steth.allowance(input.owner, LIDO_WITHDRAWAL_QUEUE)) as bigint;
-    if (allowance < input.amount) {
-      const approval = (await steth.approve(LIDO_WITHDRAWAL_QUEUE, input.amount)) as TransactionResponse;
-      await approval.wait();
+  const chainId = input.market.chainId;
+  if (input.market.protocol !== 'lido' && !AAVE_V3_POOL[chainId]) {
+    throw new UserFacingError('Aave V3 is not configured on this chain.');
+  }
+  try {
+    const wallet = await connectedWallet(input.mnemonic, chainId);
+    if (input.market.protocol === 'lido') {
+      const steth = new Contract(LIDO_STETH, STETH_ABI, wallet);
+      const allowance = (await steth.allowance(input.owner, LIDO_WITHDRAWAL_QUEUE)) as bigint;
+      const needsApproval = allowance < input.amount;
+      await assertStakeReady({ market: input.market, action: 'unstake', owner: input.owner, amount: input.amount, needsApproval });
+      if (needsApproval) {
+        logger.info('Lido approve', { chainId: 1 });
+        const approval = (await steth.approve(LIDO_WITHDRAWAL_QUEUE, input.amount)) as TransactionResponse;
+        await approval.wait();
+      }
+      logger.info('Lido unstake request', { chainId: 1 });
+      const queue = new Contract(LIDO_WITHDRAWAL_QUEUE, QUEUE_ABI, wallet);
+      return (await queue.requestWithdrawals([input.amount], input.owner)) as TransactionResponse;
     }
-    logger.info('Lido unstake request', { chainId: 1 });
-    const queue = new Contract(LIDO_WITHDRAWAL_QUEUE, QUEUE_ABI, wallet);
-    return queue.requestWithdrawals([input.amount], input.owner) as Promise<TransactionResponse>;
+    await assertStakeReady({ market: input.market, action: 'unstake', owner: input.owner, amount: input.amount });
+    logger.info('Aave withdraw', { chainId });
+    const pool = new Contract(AAVE_V3_POOL[chainId]!, AAVE_POOL_ABI, wallet);
+    return (await pool.withdraw(input.market.asset.address, input.amount, input.owner)) as TransactionResponse;
+  } catch (error) {
+    throw toUserError('Unstake failed', error, { chainId });
   }
-  const poolAddress = AAVE_V3_POOL[input.market.chainId];
-  if (!poolAddress) {
-    throw new Error('Aave V3 is not configured on this chain.');
-  }
-  logger.info('Aave withdraw', { chainId: input.market.chainId });
-  const pool = new Contract(poolAddress, AAVE_POOL_ABI, wallet);
-  return pool.withdraw(input.market.asset.address, input.amount, input.owner) as Promise<TransactionResponse>;
 }
 
 export async function listLidoRequests(owner: string): Promise<WithdrawalRequest[]> {
@@ -223,15 +350,21 @@ export async function listLidoRequests(owner: string): Promise<WithdrawalRequest
 }
 
 export async function claimLidoRequests(mnemonic: string, owner: string): Promise<TransactionResponse> {
-  const requests = (await listLidoRequests(owner)).filter((item) => item.finalized && !item.claimed);
-  if (requests.length === 0) {
-    throw new Error('No finalized Lido withdrawals to claim.');
+  try {
+    const requests = (await listLidoRequests(owner)).filter((item) => item.finalized && !item.claimed);
+    if (requests.length === 0) {
+      throw new UserFacingError('No finalized Lido withdrawals to claim.');
+    }
+    const market = findStakeMarket('lido-eth')!;
+    await assertStakeReady({ market, action: 'claim', owner, amount: null });
+    const wallet = await connectedWallet(mnemonic, 1);
+    const queue = new Contract(LIDO_WITHDRAWAL_QUEUE, QUEUE_ABI, wallet);
+    const ids = requests.map((item) => item.id);
+    const last = (await queue.getLastCheckpointIndex()) as bigint;
+    const hints = (await queue.findCheckpointHints(ids, 1n, last)) as bigint[];
+    logger.info('Lido claim', { count: ids.length });
+    return (await queue.claimWithdrawals(ids, hints)) as TransactionResponse;
+  } catch (error) {
+    throw toUserError('Lido claim failed', error, { chainId: 1 });
   }
-  const wallet = await connectedWallet(mnemonic, 1);
-  const queue = new Contract(LIDO_WITHDRAWAL_QUEUE, QUEUE_ABI, wallet);
-  const ids = requests.map((item) => item.id);
-  const last = (await queue.getLastCheckpointIndex()) as bigint;
-  const hints = (await queue.findCheckpointHints(ids, 1n, last)) as bigint[];
-  logger.info('Lido claim', { count: ids.length });
-  return queue.claimWithdrawals(ids, hints) as Promise<TransactionResponse>;
 }

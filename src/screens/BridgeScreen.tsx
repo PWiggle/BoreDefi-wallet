@@ -19,6 +19,7 @@ import {
   type SwapQuote,
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
+import { friendlyTxError } from '../wallet/tx-errors';
 
 function otherChainId(current: ChainId): ChainId {
   return CHAIN_LIST.find((chain) => chain.id !== current)?.id ?? current;
@@ -83,7 +84,7 @@ export function BridgeScreen() {
     }
     fetchTokenBalance(fromAddress, fromToken, selectedChain.id)
       .then(setBalance)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Balance failed.'));
+      .catch((err) => setError(friendlyTxError(err, { fallback: 'Balance failed.' })));
   }, [fromAddress, fromToken, selectedChain.id, session]);
 
   if (!session) {
@@ -110,7 +111,7 @@ export function BridgeScreen() {
       }
     } catch (err) {
       setQuote(null);
-      setError(err instanceof Error ? err.message : 'Bridge quote failed.');
+      setError(friendlyTxError(err, { fallback: 'Bridge quote failed.' }));
     } finally {
       setBusy(false);
     }
@@ -153,7 +154,7 @@ export function BridgeScreen() {
       setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bridge failed.');
+      setError(friendlyTxError(err, { fallback: 'Bridge failed.' }));
     } finally {
       setBusy(false);
     }
@@ -215,13 +216,18 @@ export function BridgeScreen() {
       {quote ? (
         <View style={styles.box}>
           <Text style={styles.boxTitle}>
-            Receive ≈ {formatTokenAmount(quote.toAmount, toToken.decimals)} {toToken.symbol} via{' '}
+            Receive ≈ {formatTokenAmount(quote.toAmount, quote.toToken.decimals)} {quote.toToken.symbol} via{' '}
             {quote.toolName}
           </Text>
           <Text style={styles.meta}>
-            Minimum {formatTokenAmount(quote.toAmountMin, toToken.decimals)} {toToken.symbol}
+            Minimum {formatTokenAmount(quote.toAmountMin, quote.toToken.decimals)} {quote.toToken.symbol}
           </Text>
-          <Button label="Review bridge" onPress={() => setReview(true)} loading={busy} />
+          <Button
+            label="Review bridge"
+            onPress={() => setReview(true)}
+            loading={busy}
+            disabled={quote.fromAmount <= 0n || quote.fromAmount > balance}
+          />
         </View>
       ) : null}
       {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
@@ -233,7 +239,7 @@ export function BridgeScreen() {
         to={quote?.transactionRequest.to}
         amount={
           quote
-            ? `${amount} ${fromToken.symbol} → ${formatTokenAmount(quote.toAmount, toToken.decimals)} ${toToken.symbol}`
+            ? `${amount} ${fromToken.symbol} → ${formatTokenAmount(quote.toAmount, quote.toToken.decimals)} ${quote.toToken.symbol}`
             : undefined
         }
         fee={

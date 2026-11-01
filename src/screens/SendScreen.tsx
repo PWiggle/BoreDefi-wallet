@@ -15,7 +15,9 @@ import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { formatNative, parseAmountToWei } from '../wallet/format';
-import { estimateNativeTransfer, fetchBalance, sendNativeTransfer } from '../wallet/rpc';
+import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
+import { estimateNativeTransfer, fetchBalance, fetchMaxFeePerGas, sendNativeTransfer } from '../wallet/rpc';
+import { friendlyTxError } from '../wallet/tx-errors';
 
 function sendStyles({ colors, field, type }: Theme) {
   return {
@@ -26,6 +28,7 @@ function sendStyles({ colors, field, type }: Theme) {
       ...type.meta,
       color: colors.text,
     },
+    hint: { color: colors.text, fontWeight: '600' as const },
   };
 }
 
@@ -40,6 +43,8 @@ export function SendScreen() {
   const [to, setTo] = useState(route.params?.to ?? '');
   const [amount, setAmount] = useState(route.params?.amount ?? '');
   const [balance, setBalance] = useState<bigint>(0n);
+  const [balanceLoaded, setBalanceLoaded] = useState(false);
+  const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [feeWei, setFeeWei] = useState<bigint | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -60,14 +65,38 @@ export function SendScreen() {
     if (!session) {
       return;
     }
+    setBalanceLoaded(false);
     fetchBalance(fromAddress, selectedChain.id)
-      .then(setBalance)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load balance.'));
+      .then((value) => {
+        setBalance(value);
+        setBalanceLoaded(true);
+      })
+      .catch((err) => setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Could not load balance.' })));
+    fetchMaxFeePerGas(selectedChain.id)
+      .then(setMaxFeePerGas)
+      .catch(() => setMaxFeePerGas(null));
   }, [fromAddress, selectedChain.id, session]);
 
   if (!session) {
     return null;
   }
+
+  let typedWei = 0n;
+  try {
+    typedWei = amount.trim() ? parseAmountToWei(amount) : 0n;
+  } catch {
+    typedWei = -1n;
+  }
+  const sendCheck = checkPreflight({
+    chainId: selectedChain.id,
+    amount: typedWei,
+    spendBalance: balance,
+    spendSymbol: selectedChain.symbol,
+    nativeBalance: balanceLoaded ? balance : null,
+    feeWei: maxFeePerGas === null ? null : estimateFeeWei(selectedChain.id, GAS_UNITS.nativeTransfer, maxFeePerGas),
+    spendIsNative: true,
+  });
+  const hint = preflightLine([sendCheck], amount.trim().length > 0);
 
   const prepare = async () => {
     setError(null);
@@ -95,14 +124,23 @@ export function SendScreen() {
         amountWei,
         selectedChain.id,
       );
-      if (amountWei + estimate.feeWei > balance) {
-        setError('Insufficient balance to cover amount plus network fee.');
+      const exact = checkPreflight({
+        chainId: selectedChain.id,
+        amount: amountWei,
+        spendBalance: balance,
+        spendSymbol: selectedChain.symbol,
+        nativeBalance: balance,
+        feeWei: estimate.feeWei,
+        spendIsNative: true,
+      });
+      if (!exact.ok) {
+        setError(exact.message);
         return;
       }
       setFeeWei(estimate.feeWei);
       setReview(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not estimate fee.');
+      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Could not estimate the network fee.' }));
     }
   };
 
@@ -127,7 +165,7 @@ export function SendScreen() {
       setReview(false);
       setTxHash(hash);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Send failed.');
+      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Send failed. Nothing left this wallet.' }));
       setReview(false);
     } finally {
       setBusy(false);
@@ -174,7 +212,8 @@ export function SendScreen() {
         placeholderTextColor={colors.muted}
       />
       <Text style={styles.meta}>Balance: {formatNative(balance)} {selectedChain.symbol}</Text>
-      <Button label="Review" onPress={prepare} />
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      <Button label="Review" onPress={prepare} disabled={!sendCheck.ok} />
       <ConfirmSheet
         visible={review}
         title="Confirm send"

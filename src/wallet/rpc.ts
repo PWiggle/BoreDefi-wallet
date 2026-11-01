@@ -9,6 +9,7 @@ import {
 import { logger } from '../logger';
 import { CHAINS, type ChainId } from './chains';
 import { walletFromMnemonic } from './mnemonic';
+import { toUserError } from './tx-errors';
 
 const providers = new Map<ChainId, AbstractProvider>();
 
@@ -82,6 +83,12 @@ export async function fetchBalance(address: string, chainId: ChainId): Promise<b
   }
 }
 
+/** Current max fee per gas (EIP-1559 maxFeePerGas, or legacy gasPrice). */
+export async function fetchMaxFeePerGas(chainId: ChainId): Promise<bigint> {
+  const feeData = await getProvider(chainId).getFeeData();
+  return feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+}
+
 export type FeeEstimate = {
   gasLimit: bigint;
   maxFeePerGas: bigint;
@@ -110,11 +117,7 @@ export async function estimateNativeTransfer(
       feeWei: gasLimit * maxFeePerGas,
     };
   } catch (error) {
-    logger.error('Fee estimate failed', {
-      chainId,
-      message: error instanceof Error ? error.message : 'unknown',
-    });
-    throw new Error('Could not estimate network fee.');
+    throw toUserError('Fee estimate failed', error, { chainId, fallback: 'Could not estimate network fee.' });
   }
 }
 
@@ -135,10 +138,6 @@ export async function sendNativeTransfer(
       maxPriorityFeePerGas: estimate.maxPriorityFeePerGas,
     });
   } catch (error) {
-    logger.error('Send failed', {
-      chainId,
-      message: error instanceof Error ? error.message : 'unknown',
-    });
-    throw new Error('Transaction failed. Nothing left this wallet.');
+    throw toUserError('Send failed', error, { chainId, fallback: 'Transaction failed. Nothing left this wallet.' });
   }
 }

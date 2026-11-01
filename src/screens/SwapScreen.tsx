@@ -6,6 +6,7 @@ import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { WarningBanner } from '../components/WarningBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
@@ -20,6 +21,11 @@ import {
   type SwapQuote,
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
+import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
+import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
+import { friendlyTxError } from '../wallet/tx-errors';
+import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
+import { canReviewSwap, checkSwapPrice, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
 
 function swapStyles({ colors, card, chip, field, spacing }: Theme) {
   return {
@@ -48,6 +54,7 @@ function swapStyles({ colors, card, chip, field, spacing }: Theme) {
     tokenTextOn: {
       color: colors.accent,
     },
+    hint: { color: colors.text, fontWeight: '600' as const },
     quote: {
       ...card,
       gap: spacing.sm,
@@ -72,7 +79,11 @@ export function SwapScreen() {
   const [toToken, setToToken] = useState<TokenConfig>(tokens[1] ?? tokens[0]!);
   const [amount, setAmount] = useState('');
   const [balance, setBalance] = useState<bigint>(0n);
+  const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
+  const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
+  const [quoteKey, setQuoteKey] = useState<string | null>(null);
+  const [priceCheck, setPriceCheck] = useState<PriceCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState(false);
@@ -87,8 +98,26 @@ export function SwapScreen() {
     setFromToken(hinted ?? next[0]!);
     setToToken(next.find((token) => token.address !== (hinted ?? next[0]!).address) ?? next[1] ?? next[0]!);
     setQuote(null);
+    setQuoteKey(null);
+    setPriceCheck(null);
     setTxHash(null);
   }, [route.params?.fromSymbol, selectedChain.id]);
+
+  // Any change to the pair invalidates the quote (build 4 kept an ETH→WETH quote after switching to USDT).
+  useEffect(() => {
+    setQuote(null);
+    setQuoteKey(null);
+    setPriceCheck(null);
+  }, [fromToken.address, toToken.address]);
+
+  useEffect(() => {
+    if (toToken.address === fromToken.address) {
+      const next = tokens.find((token) => token.address !== fromToken.address);
+      if (next) {
+        setToToken(next);
+      }
+    }
+  }, [fromToken.address, toToken.address, tokens]);
 
   useEffect(() => {
     if (!session) {
@@ -96,45 +125,102 @@ export function SwapScreen() {
     }
     fetchTokenBalance(fromAddress, fromToken, selectedChain.id)
       .then(setBalance)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load balance.'));
+      .catch((err) => setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Could not load balance.' })));
   }, [fromAddress, fromToken, selectedChain.id, session]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    setNativeBalance(null);
+    fetchBalance(fromAddress, selectedChain.id)
+      .then(setNativeBalance)
+      .catch(() => setNativeBalance(null));
+    fetchMaxFeePerGas(selectedChain.id)
+      .then(setMaxFeePerGas)
+      .catch(() => setMaxFeePerGas(null));
+  }, [fromAddress, selectedChain.id, session, txHash]);
 
   if (!session) {
     return null;
   }
 
+  let typedUnits = 0n;
+  try {
+    typedUnits = amount.trim() ? parseTokenAmount(amount, fromToken.decimals) : 0n;
+  } catch {
+    typedUnits = -1n;
+  }
+  const swapGasUnits =
+    (quote?.transactionRequest.gasLimit ?? GAS_UNITS.swap) + (fromToken.native ? 0n : GAS_UNITS.erc20Approve);
+  const swapCheck = checkPreflight({
+    chainId: selectedChain.id,
+    amount: typedUnits,
+    spendBalance: balance,
+    spendSymbol: fromToken.symbol,
+    nativeBalance,
+    feeWei: maxFeePerGas === null ? null : estimateFeeWei(selectedChain.id, swapGasUnits, maxFeePerGas),
+    spendIsNative: fromToken.native,
+  });
+  const hint = preflightLine([swapCheck], amount.trim().length > 0);
+  const currentKey = swapQuoteKey(selectedChain.id, fromToken, toToken, typedUnits);
+  const quoteIsCurrent = quote !== null && quoteKey === currentKey;
+  const reviewEnabled = canReviewSwap({
+    quoteKey,
+    currentKey,
+    preflightOk: swapCheck.ok,
+    priceOk: priceCheck?.ok === true,
+    busy,
+  });
+
   const quoteSwap = async () => {
     setError(null);
     setBusy(true);
+    setPriceCheck(null);
     try {
       const fromAmount = parseTokenAmount(amount, fromToken.decimals);
-      setQuote(
-        await fetchSwapQuote({
-          chainId: selectedChain.id,
-          fromToken,
-          toToken,
-          fromAmount,
-          fromAddress,
+      const requestedKey = swapQuoteKey(selectedChain.id, fromToken, toToken, fromAmount);
+      const next = await fetchSwapQuote({
+        chainId: selectedChain.id,
+        fromToken,
+        toToken,
+        fromAmount,
+        fromAddress,
+      });
+      const ids = [geckoIdForToken(fromToken), geckoIdForToken(toToken)];
+      const prices = await fetchUsdPrices(ids.filter((id): id is string => Boolean(id))).catch(() => ({}) as Record<string, number>);
+      setPriceCheck(
+        checkSwapPrice({
+          fromAmount: next.fromAmount,
+          fromDecimals: next.fromToken.decimals,
+          toAmount: next.toAmount,
+          toDecimals: next.toToken.decimals,
+          fromPriceUsd: ids[0] ? prices[ids[0]] ?? null : null,
+          toPriceUsd: ids[1] ? prices[ids[1]] ?? null : null,
+          aggregatorFromUsd: next.fromAmountUsd,
+          aggregatorToUsd: next.toAmountUsd,
         }),
       );
-      if (fromAmount > balance) {
-        setError('Quote is ready, but the balance is too low to send this swap.');
-      }
+      setQuote(next);
+      setQuoteKey(requestedKey);
+
     } catch (err) {
       setQuote(null);
-      setError(err instanceof Error ? err.message : 'Quote failed.');
+      setQuoteKey(null);
+      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'No route available' }));
     } finally {
       setBusy(false);
     }
   };
 
   const confirm = async () => {
-    if (!quote) {
+    if (!quote || !reviewEnabled) {
+      setReview(false);
       return;
     }
-    if (quote.fromAmount > balance) {
+    if (!swapCheck.ok) {
       setReview(false);
-      setError('Balance is too low to send this swap.');
+      setError(swapCheck.message);
       return;
     }
     setBusy(true);
@@ -165,7 +251,8 @@ export function SwapScreen() {
       setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Swap failed.');
+      setReview(false);
+      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Swap failed. Nothing was swapped.' }));
     } finally {
       setBusy(false);
     }
@@ -175,7 +262,7 @@ export function SwapScreen() {
     return (
       <Screen title="Swap submitted" subtitle={selectedChain.name}>
         <Text style={styles.meta}>{txHash}</Text>
-        <Button label="New swap" onPress={() => { setTxHash(null); setQuote(null); setAmount(''); }} />
+        <Button label="New swap" onPress={() => { setTxHash(null); setQuote(null); setQuoteKey(null); setPriceCheck(null); setAmount(''); }} />
       </Screen>
     );
   }
@@ -188,7 +275,7 @@ export function SwapScreen() {
       <TokenRow tokens={tokens} selected={fromToken} onSelect={setFromToken} />
       <TextInput
         value={amount}
-        onChangeText={(value) => { setAmount(value); setQuote(null); }}
+        onChangeText={(value) => { setAmount(value); setQuote(null); setQuoteKey(null); setPriceCheck(null); }}
         keyboardType="decimal-pad"
         style={styles.input}
         placeholder="0.0"
@@ -199,29 +286,33 @@ export function SwapScreen() {
       </Text>
       <Text style={styles.label}>To</Text>
       <TokenRow tokens={tokens.filter((token) => token.address !== fromToken.address)} selected={toToken} onSelect={setToToken} />
-      {quote ? (
+      {quote && quoteIsCurrent ? (
         <View style={styles.quote}>
           <Text style={styles.quoteTitle}>Best route · {quote.toolName}</Text>
           <Text style={styles.meta}>
-            You receive ≈ {formatTokenAmount(quote.toAmount, toToken.decimals)} {toToken.symbol}
+            You receive ≈ {formatTokenAmount(quote.toAmount, quote.toToken.decimals)} {quote.toToken.symbol}
           </Text>
           <Text style={styles.meta}>
-            Minimum {formatTokenAmount(quote.toAmountMin, toToken.decimals)} {toToken.symbol}
+            Minimum {formatTokenAmount(quote.toAmountMin, quote.toToken.decimals)} {quote.toToken.symbol}
           </Text>
-          <Button label="Review swap" loading={busy} onPress={() => setReview(true)} />
+          {priceCheck && !priceCheck.ok ? (
+            <WarningBanner title="Price check failed" lines={[priceCheck.message]} danger />
+          ) : null}
+          <Button label="Review swap" loading={busy} onPress={() => setReview(true)} disabled={!reviewEnabled} />
         </View>
       ) : (
-        <Button label="Get best quote" loading={busy} onPress={quoteSwap} />
+        <Button label="Get best quote" loading={busy} onPress={quoteSwap} disabled={!swapCheck.ok} />
       )}
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       <ConfirmSheet
-        visible={review && Boolean(quote)}
+        visible={review && Boolean(quote) && reviewEnabled}
         title="Confirm swap"
         network={selectedChain.name}
         from={fromAddress}
         to={quote?.transactionRequest.to}
         amount={
           quote
-            ? `${amount} ${fromToken.symbol} → ${formatTokenAmount(quote.toAmount, toToken.decimals)} ${toToken.symbol}`
+            ? `${formatTokenAmount(quote.fromAmount, quote.fromToken.decimals)} ${quote.fromToken.symbol} → ${formatTokenAmount(quote.toAmount, quote.toToken.decimals)} ${quote.toToken.symbol}`
             : undefined
         }
         fee={

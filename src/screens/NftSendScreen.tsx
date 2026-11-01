@@ -15,6 +15,7 @@ import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { addressWarnings, checksumAddress } from '../wallet/address-safety';
 import { type NftItem, type NftStandard, sendNft, verifyNftOwnership } from '../wallet/nfts';
+import { friendlyTxError } from '../wallet/tx-errors';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
@@ -96,7 +97,7 @@ export function NftSendScreen() {
     try {
       await verifyNftOwnership(session.address, buildItem(), quantity);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Owner check failed.');
+      setError(friendlyTxError(err, { fallback: 'Owner check failed.' }));
       return;
     }
     const clipboard = await Clipboard.getStringAsync().catch(() => '');
@@ -129,7 +130,7 @@ export function NftSendScreen() {
       setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'NFT send failed.');
+      setError(friendlyTxError(err, { fallback: 'NFT send failed.' }));
       setReview(false);
     } finally {
       setBusy(false);

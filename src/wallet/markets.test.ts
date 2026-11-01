@@ -99,7 +99,7 @@ test('does not set a custom User-Agent for CoinGecko browser fetch', () => {
 test('maps native and stables onto CoinGecko ids and portfolio rows', () => {
   assert.equal(geckoIdForNative(1), 'ethereum');
   assert.equal(geckoIdForNative(8453), 'ethereum');
-  assert.equal(geckoIdForNative(137), 'matic-network');
+  assert.equal(geckoIdForNative(137), 'polygon-ecosystem-token');
   assert.equal(geckoIdForNative(56), 'binancecoin');
   assert.equal(geckoIdForNative(43114), 'avalanche-2');
 
