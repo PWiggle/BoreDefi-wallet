@@ -1,6 +1,13 @@
 import { HDNodeWallet, Mnemonic, randomBytes } from 'ethers';
 
+import { utf8ToBytes } from '@noble/hashes/utils';
+
+import { pbkdf2Async } from './vault-crypto';
+
 export const DEFAULT_PATH = "m/44'/60'/0'/0/0";
+export const BIP39_SEED_ITERATIONS = 2048;
+
+const walletCache = new Map<string, HDNodeWallet>();
 
 export function normalizeMnemonic(phrase: string): string {
   return phrase
@@ -35,13 +42,33 @@ export function generateMnemonic(wordCount: 12 | 24 = 12): string {
   return Mnemonic.fromEntropy(entropy).phrase;
 }
 
-export function walletFromMnemonic(phrase: string): HDNodeWallet {
-  const mnemonic = Mnemonic.fromPhrase(normalizeMnemonic(phrase));
-  return HDNodeWallet.fromMnemonic(mnemonic, DEFAULT_PATH);
+/**
+ * BIP39 mnemonicToSeed: PBKDF2-SHA512, 2048 iterations, 64 bytes.
+ * On device this is native OpenSSL. The phrase and salt are NFKD, matching the spec.
+ */
+export async function mnemonicToSeed(phrase: string, password = ''): Promise<Uint8Array> {
+  const normalized = normalizeMnemonic(phrase).normalize('NFKD');
+  const salt = utf8ToBytes(`mnemonic${password.normalize('NFKD')}`);
+  return pbkdf2Async(utf8ToBytes(normalized), salt, BIP39_SEED_ITERATIONS, 64, 'sha512');
 }
 
-export function deriveAddress(phrase: string): string {
-  return walletFromMnemonic(phrase).address;
+export async function walletFromMnemonic(phrase: string): Promise<HDNodeWallet> {
+  const normalized = normalizeMnemonic(phrase);
+  const cached = walletCache.get(normalized);
+  if (cached) {
+    return cached;
+  }
+  if (!isValidMnemonic(normalized)) {
+    throw new Error('That recovery phrase is not valid BIP39.');
+  }
+  const seed = await mnemonicToSeed(normalized);
+  const wallet = HDNodeWallet.fromSeed(seed).derivePath(DEFAULT_PATH);
+  walletCache.set(normalized, wallet);
+  return wallet;
+}
+
+export async function deriveAddress(phrase: string): Promise<string> {
+  return (await walletFromMnemonic(phrase)).address;
 }
 
 export type WordChallenge = {

@@ -15,7 +15,7 @@ import type { AppearanceMode } from '../theme';
 import { autoLockMs, type AutoLockMode } from '../wallet/auto-lock';
 import { authenticateBiometrics, biometricAvailability } from '../wallet/biometrics';
 import { CHAINS, DEFAULT_CHAIN_ID, type ChainConfig, type ChainId } from '../wallet/chains';
-import { deriveAddress, generateMnemonic, isValidMnemonic, normalizeMnemonic } from '../wallet/mnemonic';
+import { deriveAddress, generateMnemonic, isValidMnemonic, normalizeMnemonic, walletFromMnemonic } from '../wallet/mnemonic';
 import {
   clearedPinLockState,
   isValidPin,
@@ -77,12 +77,12 @@ type WalletContextValue = {
   selectedChain: ChainConfig;
   biometricsReady: boolean;
   pinBackoffMs: number;
-  startCreate: () => void;
+  startCreate: () => Promise<void>;
   startImport: () => void;
   cancelOnboarding: () => void;
   confirmBackupViewed: () => void;
   completeVerification: () => void;
-  importMnemonic: (phrase: string) => void;
+  importMnemonic: (phrase: string) => Promise<void>;
   finalizeSetup: (pin: string, enableBiometrics: boolean) => Promise<void>;
   unlockWithPin: (pin: string) => Promise<boolean>;
   unlockWithBiometrics: () => Promise<boolean>;
@@ -228,11 +228,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [handleAppHidden, handleAppVisible]);
 
-  const startCreate = useCallback(() => {
+  const startCreate = useCallback(async () => {
     const mnemonic = generateMnemonic(12);
+    const address = await deriveAddress(mnemonic);
     setPending({
       mnemonic,
-      address: deriveAddress(mnemonic),
+      address,
       imported: false,
     });
     setPhase('backup');
@@ -260,20 +261,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [pending]);
 
-  const importMnemonic = useCallback((phrase: string) => {
+  const importMnemonic = useCallback(async (phrase: string) => {
     const normalized = normalizeMnemonic(phrase);
     if (!isValidMnemonic(normalized)) {
       throw new Error('That recovery phrase is not valid BIP39.');
     }
+    const address = await deriveAddress(normalized);
     setPending({
       mnemonic: normalized,
-      address: deriveAddress(normalized),
+      address,
       imported: true,
     });
     setPhase('set-pin');
   }, []);
 
   const persistSession = useCallback(async (next: Session) => {
+    // Warm the BIP39 seed cache while the securing spinner is up, so later
+    // sends and signatures do not re-run PBKDF2 on the JS thread.
+    await walletFromMnemonic(next.mnemonic);
     setSession(next);
     setPending(null);
     setPhase('unlocked');

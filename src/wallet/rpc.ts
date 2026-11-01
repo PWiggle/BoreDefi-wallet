@@ -65,8 +65,9 @@ export function getProvider(chainId: ChainId): AbstractProvider {
   return provider;
 }
 
-export function connectedWallet(mnemonic: string, chainId: ChainId): HDNodeWallet {
-  return walletFromMnemonic(mnemonic).connect(getProvider(chainId));
+export async function connectedWallet(mnemonic: string, chainId: ChainId): Promise<HDNodeWallet> {
+  const wallet = await walletFromMnemonic(mnemonic);
+  return wallet.connect(getProvider(chainId));
 }
 
 export async function fetchBalance(address: string, chainId: ChainId): Promise<bigint> {
@@ -123,7 +124,7 @@ export async function sendNativeTransfer(
   amountWei: bigint,
   chainId: ChainId,
 ): Promise<TransactionResponse> {
-  const wallet = connectedWallet(mnemonic, chainId);
+  const wallet = await connectedWallet(mnemonic, chainId);
   try {
     const estimate = await estimateNativeTransfer(wallet.address, to, amountWei, chainId);
     return await wallet.sendTransaction({

@@ -35,7 +35,7 @@ export async function handleWalletConnectRequest(input: {
   chainId: ChainId;
 }): Promise<WalletConnectRequestResult> {
   const { mnemonic, address, method, params, chainId } = input;
-  const wallet = connectedWallet(mnemonic, chainId);
+  const wallet = await connectedWallet(mnemonic, chainId);
 
   switch (method) {
     case 'eth_accounts':

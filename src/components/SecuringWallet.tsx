@@ -18,13 +18,19 @@ function securingStyles({ colors, spacing, type }: Theme) {
   };
 }
 
-export function SecuringWallet() {
+export function SecuringWallet({
+  label = 'Securing your wallet…',
+  color,
+}: {
+  label?: string;
+  color?: string;
+}) {
   const { colors } = useTheme();
   const styles = useThemedStyles(securingStyles);
   return (
     <View style={styles.wrap}>
-      <ActivityIndicator color={colors.accent} />
-      <Text style={styles.label}>Securing your wallet…</Text>
+      <ActivityIndicator color={color ?? colors.accent} />
+      <Text style={[styles.label, color ? { color } : null]}>{label}</Text>
     </View>
   );
 }

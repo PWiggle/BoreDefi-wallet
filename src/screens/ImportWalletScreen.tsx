@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { SecuringWallet } from '../components/SecuringWallet';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 
@@ -24,14 +25,23 @@ export function ImportWalletScreen() {
   const { importMnemonic, cancelOnboarding } = useWallet();
   const [phrase, setPhrase] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const started = useRef(false);
 
   const submit = () => {
-    try {
-      setError(null);
-      importMnemonic(phrase);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not import that phrase.');
+    if (started.current) {
+      return;
     }
+    started.current = true;
+    setError(null);
+    setImporting(true);
+    setTimeout(() => {
+      importMnemonic(phrase).catch((err) => {
+        started.current = false;
+        setImporting(false);
+        setError(err instanceof Error ? err.message : 'Could not import that phrase.');
+      });
+    }, 50);
   };
 
   return (
@@ -40,18 +50,20 @@ export function ImportWalletScreen() {
       subtitle="Enter your 12 or 24 word BIP39 recovery phrase. It is stored only on this device."
       footer={
         <>
-          <Button label="Import" onPress={submit} />
-          <Button label="Back" variant="ghost" onPress={cancelOnboarding} />
+          <Button label="Import" onPress={submit} loading={importing} />
+          <Button label="Back" variant="ghost" onPress={cancelOnboarding} disabled={importing} />
         </>
       }
     >
       <ErrorBanner message={error} />
+      {importing ? <SecuringWallet label="Importing wallet…" /> : null}
       <TextInput
         multiline
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
         importantForAutofill="no"
+        editable={!importing}
         textAlignVertical="top"
         value={phrase}
         onChangeText={setPhrase}

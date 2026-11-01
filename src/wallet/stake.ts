@@ -152,7 +152,7 @@ export async function stake(input: {
   if (input.amount <= 0n) {
     throw new Error('Enter an amount greater than zero.');
   }
-  const wallet = connectedWallet(input.mnemonic, input.market.chainId);
+  const wallet = await connectedWallet(input.mnemonic, input.market.chainId);
   if (input.market.protocol === 'lido') {
     logger.info('Lido stake', { chainId: 1 });
     const lido = new Contract(LIDO_STETH, STETH_ABI, wallet);
@@ -182,7 +182,7 @@ export async function unstake(input: {
   if (input.amount <= 0n) {
     throw new Error('Enter an amount greater than zero.');
   }
-  const wallet = connectedWallet(input.mnemonic, input.market.chainId);
+  const wallet = await connectedWallet(input.mnemonic, input.market.chainId);
   if (input.market.protocol === 'lido') {
     const steth = new Contract(LIDO_STETH, STETH_ABI, wallet);
     const allowance = (await steth.allowance(input.owner, LIDO_WITHDRAWAL_QUEUE)) as bigint;
@@ -227,7 +227,7 @@ export async function claimLidoRequests(mnemonic: string, owner: string): Promis
   if (requests.length === 0) {
     throw new Error('No finalized Lido withdrawals to claim.');
   }
-  const wallet = connectedWallet(mnemonic, 1);
+  const wallet = await connectedWallet(mnemonic, 1);
   const queue = new Contract(LIDO_WITHDRAWAL_QUEUE, QUEUE_ABI, wallet);
   const ids = requests.map((item) => item.id);
   const last = (await queue.getLastCheckpointIndex()) as bigint;

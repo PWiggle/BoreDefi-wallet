@@ -22,7 +22,7 @@ if (plugin?.[1]?.android?.targetSdkVersion !== 36) {
 if (app.expo.version !== '1.0.0') {
   errors.push(`version (versionName) is ${app.expo.version}`);
 }
-if (android.versionCode !== 25) {
+if (android.versionCode !== 26) {
   errors.push(`android.versionCode is ${android.versionCode}`);
 }
 if (plugin?.[1]?.android?.useLegacyPackaging !== false) {
@@ -37,4 +37,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('Android package com.boredefi.wallet; versionName 1.0.0; versionCode 25; compileSdk/targetSdk 36');
+console.log('Android package com.boredefi.wallet; versionName 1.0.0; versionCode 26; compileSdk/targetSdk 36');

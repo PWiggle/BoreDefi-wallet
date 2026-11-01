@@ -1,6 +1,7 @@
 import { gcm } from '@noble/ciphers/aes';
 import { pbkdf2 } from '@noble/hashes/pbkdf2';
 import { sha256 } from '@noble/hashes/sha256';
+import { sha512 } from '@noble/hashes/sha512';
 import { bytesToHex, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils';
 
 export const VAULT_KDF = 'pbkdf2-sha256' as const;
@@ -48,8 +49,10 @@ export function deriveVaultKeyNoble(pin: string, salt: Uint8Array, iterations: n
   return pbkdf2(sha256, pin, salt, { c: iterations, dkLen: 32 });
 }
 
+export type Pbkdf2Digest = 'sha256' | 'sha512';
+
 type NativePbkdf2 = (
-  password: string,
+  password: Uint8Array | string,
   salt: Uint8Array,
   iterations: number,
   keylen: number,
@@ -71,24 +74,37 @@ function loadNativePbkdf2(): NativePbkdf2 | null {
   }
 }
 
-/**
- * PBKDF2-SHA256, 32-byte key. On Android and iOS this is OpenSSL via
- * react-native-quick-crypto (async, off the JS thread). The salt is passed
- * as a byte array so embedded NUL bytes are kept.
- */
-export async function deriveVaultKey(
-  pin: string,
+function pbkdf2Noble(
+  password: Uint8Array | string,
   salt: Uint8Array,
   iterations: number,
+  keyLen: number,
+  digest: Pbkdf2Digest,
+): Uint8Array {
+  const hash = digest === 'sha512' ? sha512 : sha256;
+  const passwordBytes = typeof password === 'string' ? utf8ToBytes(password) : password;
+  return pbkdf2(hash, passwordBytes, salt, { c: iterations, dkLen: keyLen });
+}
+
+/**
+ * PBKDF2 off the JS thread on Android and iOS (OpenSSL via react-native-quick-crypto).
+ * Noble is the fallback for web and unit tests. The salt is a byte array so NUL bytes are kept.
+ */
+export async function pbkdf2Async(
+  password: Uint8Array | string,
+  salt: Uint8Array,
+  iterations: number,
+  keyLen: number,
+  digest: Pbkdf2Digest,
 ): Promise<Uint8Array> {
   const native = loadNativePbkdf2();
   if (!native) {
-    return deriveVaultKeyNoble(pin, salt, iterations);
+    return pbkdf2Noble(password, salt, iterations, keyLen, digest);
   }
   const saltBytes = Uint8Array.from(salt);
   try {
     return await new Promise<Uint8Array>((resolve, reject) => {
-      native(pin, saltBytes, iterations, 32, 'sha256', (err, derivedKey) => {
+      native(password, saltBytes, iterations, keyLen, digest, (err, derivedKey) => {
         if (err || !derivedKey) {
           reject(err ?? new Error('Native PBKDF2 returned no key'));
           return;
@@ -97,8 +113,17 @@ export async function deriveVaultKey(
       });
     });
   } catch {
-    return deriveVaultKeyNoble(pin, salt, iterations);
+    return pbkdf2Noble(password, salt, iterations, keyLen, digest);
   }
+}
+
+/** PBKDF2-SHA256, 32-byte vault key. */
+export async function deriveVaultKey(
+  pin: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<Uint8Array> {
+  return pbkdf2Async(pin, salt, iterations, 32, 'sha256');
 }
 
 /** Let the 6th PIN dot and the securing spinner paint before key derivation. */

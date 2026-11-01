@@ -195,7 +195,7 @@ export async function ensureSpendAllowance(input: {
     await getProvider(input.chainId).waitForTransaction(hash);
     return null;
   }
-  const wallet = connectedWallet(input.mnemonic, input.chainId);
+  const wallet = await connectedWallet(input.mnemonic, input.chainId);
   const contract = new Contract(input.token.address, ERC20_ABI, wallet);
   const tx = (await contract.approve(input.spender, input.amount)) as TransactionResponse;
   await tx.wait();
@@ -219,7 +219,7 @@ export async function sendSwapTransaction(
       });
       return { hash };
     }
-    const wallet = connectedWallet(mnemonic, chainId);
+    const wallet = await connectedWallet(mnemonic, chainId);
     return await wallet.sendTransaction({
       to: quote.transactionRequest.to,
       data: quote.transactionRequest.data,

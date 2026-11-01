@@ -158,7 +158,7 @@ export async function sendNft(input: {
 }): Promise<TransactionResponse> {
   const to = getAddress(input.to);
   await verifyNftOwnership(input.owner, input.item, input.amount ?? 1n);
-  const wallet = connectedWallet(input.mnemonic, input.item.chainId);
+  const wallet = await connectedWallet(input.mnemonic, input.item.chainId);
   logger.info('NFT send', {
     chainId: input.item.chainId,
     standard: input.item.standard,
