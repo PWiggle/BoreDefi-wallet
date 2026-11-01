@@ -5,11 +5,12 @@ import { type TokenConfig, tokensForChain } from './tokens';
 const BASE = 'https://api.coingecko.com/api/v3';
 
 /**
- * BoreDash market-data proxy. When enabled, every market call tries BoreDash first and falls back to
- * CoinGecko after BOREDASH_TIMEOUT_MS or on any error. Disabled until the BoreDash API routes exist.
+ * BoreDash market-data API (CoinGecko-shaped responses). Market calls try BoreDash first and fall back
+ * to CoinGecko after BOREDASH_TIMEOUT_MS or on any error, including a response that does not parse.
+ * fetchUsdPrices (swap/bridge price guard) always goes straight to CoinGecko.
  */
-export const BOREDASH_API_ENABLED = false;
-export const BOREDASH_API_BASE = 'https://www.boredash.com/api/v3';
+export const BOREDASH_API_ENABLED = true;
+export const BOREDASH_API_BASE = 'https://www.boredash.com';
 export const BOREDASH_TIMEOUT_MS = 4_000;
 export const BOREDASH_SITE = 'https://www.boredash.com';
 /** Browser fetch forbids a custom User-Agent; only Accept is set. */
@@ -363,34 +364,74 @@ export function marketBases(enabled: boolean = BOREDASH_API_ENABLED): string[] {
   return enabled ? [BOREDASH_API_BASE, BASE] : [BASE];
 }
 
+/** A market call: the BoreDash route (null = CoinGecko only) and the CoinGecko v3 path. */
+export type MarketRoute = { boredash: string | null; gecko: string };
+
+const q = encodeURIComponent;
+
+export const MARKET_ROUTES = {
+  top: (perPage: number): MarketRoute => ({
+    boredash: `/api/wallet/top?limit=${perPage}&sparkline=true`,
+    gecko: `/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=true&price_change_percentage=24h`,
+  }),
+  details: (ids: string[]): MarketRoute => ({
+    boredash: `/api/markets?ids=${q(ids.join(','))}&sparkline=true`,
+    gecko: `/coins/markets?vs_currency=usd&ids=${q(ids.join(','))}&order=market_cap_desc&sparkline=true&price_change_percentage=24h`,
+  }),
+  trending: (): MarketRoute => ({ boredash: '/api/wallet/trending', gecko: '/search/trending' }),
+  search: (query: string): MarketRoute => ({ boredash: `/api/search?q=${q(query)}`, gecko: `/search?query=${q(query)}` }),
+  coin: (id: string): MarketRoute => ({
+    boredash: `/api/wallet/coin/${q(id)}`,
+    gecko: `/coins/${q(id)}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`,
+  }),
+  usdPrices: (ids: string[]): MarketRoute => ({
+    boredash: null,
+    gecko: `/simple/price?ids=${q(ids.join(','))}&vs_currencies=usd`,
+  }),
+} as const;
+
+/** Where a market call goes, in order. */
+export function marketUrls(route: MarketRoute, enabled: boolean = BOREDASH_API_ENABLED): string[] {
+  const urls = [`${BASE}${route.gecko}`];
+  return enabled && route.boredash ? [`${BOREDASH_API_BASE}${route.boredash}`, ...urls] : urls;
+}
+
 /**
  * GET a CoinGecko-shaped path. With BoreDash enabled, BoreDash is tried first with a 4 s timeout and
  * CoinGecko is the fallback; the last error is thrown only if every base fails.
  */
-export async function fetchMarketJson<T>(
-  path: string,
-  options: { enabled?: boolean; fetchImpl?: MarketFetch; timeoutMs?: number } = {},
-): Promise<T> {
+export async function fetchMarketJson<T, R = T>(
+  route: string | MarketRoute,
+  options: {
+    enabled?: boolean;
+    fetchImpl?: MarketFetch;
+    timeoutMs?: number;
+    /** Runs per source, so a BoreDash payload that does not parse also falls back to CoinGecko. */
+    parse?: (payload: T) => R;
+  } = {},
+): Promise<R> {
   const fetchImpl = options.fetchImpl ?? (fetch as unknown as MarketFetch);
-  const bases = marketBases(options.enabled ?? BOREDASH_API_ENABLED);
+  const resolved: MarketRoute = typeof route === 'string' ? { boredash: route, gecko: route } : route;
+  const urls = marketUrls(resolved, options.enabled ?? BOREDASH_API_ENABLED);
+  const parse = options.parse ?? ((payload: T) => payload as unknown as R);
   let lastError: unknown = null;
-  for (const base of bases) {
-    const primary = base !== BASE;
+  for (const url of urls) {
+    const primary = url.startsWith(BOREDASH_API_BASE);
     const controller = primary ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs ?? BOREDASH_TIMEOUT_MS) : null;
     try {
-      const response = await fetchImpl(`${base}${path}`, {
+      const response = await fetchImpl(url, {
         headers: COINGECKO_HEADERS,
         ...(controller ? { signal: controller.signal } : {}),
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      return (await response.json()) as T;
+      return parse((await response.json()) as T);
     } catch (error) {
       lastError = error;
       if (primary) {
-        logger.warn('markets: BoreDash failed, falling back to CoinGecko', { path, error: String(error) });
+        logger.warn('markets: BoreDash failed, falling back to CoinGecko', { url, error: String(error) });
       }
     } finally {
       if (timer) {
@@ -401,13 +442,24 @@ export async function fetchMarketJson<T>(
   throw lastError instanceof Error ? lastError : new Error('Market data unavailable.');
 }
 
-async function gecko<T>(path: string): Promise<T> {
-  return fetchMarketJson<T>(path);
+/** A top-markets list that comes back empty is treated as a failure, so the next source is tried. */
+function nonEmpty<T>(parse: (payload: T) => MarketCoin[]): (payload: T) => MarketCoin[] {
+  return (payload) => {
+    const out = parse(payload);
+    if (out.length === 0) {
+      throw new Error('Empty market list');
+    }
+    return out;
+  };
+}
+
+function market<T, R>(route: MarketRoute, parse: (payload: T) => R): Promise<R> {
+  return fetchMarketJson<T, R>(route, { parse });
 }
 
 export async function fetchTrendingCoins(): Promise<MarketCoin[]> {
   try {
-    return parseTrending(await gecko<TrendingPayload>('/search/trending'));
+    return await market<TrendingPayload, MarketCoin[]>(MARKET_ROUTES.trending(), parseTrending);
   } catch (error) {
     logger.error('Trending markets failed', {
       message: error instanceof Error ? error.message : 'unknown',
@@ -419,11 +471,7 @@ export async function fetchTrendingCoins(): Promise<MarketCoin[]> {
 export async function fetchTopMarkets(limit = 100): Promise<MarketCoin[]> {
   const perPage = Math.min(250, Math.max(1, limit));
   try {
-    return parseMarkets(
-      await gecko<MarketsPayload>(
-        `/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=true&price_change_percentage=24h`,
-      ),
-    );
+    return await market<MarketsPayload, MarketCoin[]>(MARKET_ROUTES.top(perPage), nonEmpty(parseMarkets));
   } catch (error) {
     logger.error('Market list failed', {
       message: error instanceof Error ? error.message : 'unknown',
@@ -438,7 +486,7 @@ export async function searchMarkets(query: string): Promise<MarketCoin[]> {
     return [];
   }
   try {
-    return parseSearch(await gecko<SearchPayload>(`/search?query=${encodeURIComponent(trimmed)}`)).slice(0, 20);
+    return (await market<SearchPayload, MarketCoin[]>(MARKET_ROUTES.search(trimmed), parseSearch)).slice(0, 20);
   } catch (error) {
     logger.error('Market search failed', {
       message: error instanceof Error ? error.message : 'unknown',
@@ -452,11 +500,7 @@ export async function fetchMarketDetails(ids: string[]): Promise<MarketCoin[]> {
     return [];
   }
   try {
-    return parseMarkets(
-      await gecko<MarketsPayload>(
-        `/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids.join(','))}&order=market_cap_desc&sparkline=true&price_change_percentage=24h`,
-      ),
-    );
+    return await market<MarketsPayload, MarketCoin[]>(MARKET_ROUTES.details(ids), parseMarkets);
   } catch (error) {
     logger.error('Market details failed', {
       message: error instanceof Error ? error.message : 'unknown',
@@ -490,11 +534,7 @@ export function parseCoinPage(payload: CoinPagePayload): CoinPage {
 
 export async function fetchCoinPage(id: string): Promise<CoinPage> {
   try {
-    return parseCoinPage(
-      await gecko<CoinPagePayload>(
-        `/coins/${encodeURIComponent(id)}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`,
-      ),
-    );
+    return await market<CoinPagePayload, CoinPage>(MARKET_ROUTES.coin(id), parseCoinPage);
   } catch (error) {
     logger.error('Coin page failed', {
       message: error instanceof Error ? error.message : 'unknown',
@@ -509,9 +549,10 @@ export async function fetchUsdPrices(ids: string[]): Promise<Record<string, numb
   if (unique.length === 0) {
     return {};
   }
-  const payload = await gecko<Record<string, { usd?: number }>>(
-    `/simple/price?ids=${encodeURIComponent(unique.join(','))}&vs_currencies=usd`,
-  );
+  // Price guard stays on CoinGecko directly (no BoreDash hop).
+  const payload = await fetchMarketJson<Record<string, { usd?: number }>>(MARKET_ROUTES.usdPrices(unique), {
+    enabled: false,
+  });
   const out: Record<string, number> = {};
   for (const [id, value] of Object.entries(payload ?? {})) {
     if (typeof value?.usd === 'number' && Number.isFinite(value.usd)) {
