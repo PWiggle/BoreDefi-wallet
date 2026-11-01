@@ -5,6 +5,7 @@ import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { WarningBanner } from '../components/WarningBanner';
 import { Screen } from '../components/Screen';
 import { useLedger } from '../context/LedgerContext';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
@@ -20,6 +21,10 @@ import {
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 import { friendlyTxError } from '../wallet/tx-errors';
+import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
+import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
+import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
+import { bridgeQuoteKey, canReviewSwap, checkSwapPrice, type PriceCheck } from '../wallet/swap-guard';
 
 function otherChainId(current: ChainId): ChainId {
   return CHAIN_LIST.find((chain) => chain.id !== current)?.id ?? current;
@@ -41,6 +46,7 @@ function bridgeStyles({ colors, card, chip, field, spacing }: Theme) {
     },
     boxTitle: { color: colors.text, fontWeight: '700' as const },
     hash: { color: colors.accent },
+    hint: { color: colors.text, fontWeight: '600' as const },
   };
 }
 
@@ -58,6 +64,10 @@ export function BridgeScreen() {
   const [amount, setAmount] = useState('');
   const [balance, setBalance] = useState(0n);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
+  const [quoteKey, setQuoteKey] = useState<string | null>(null);
+  const [priceCheck, setPriceCheck] = useState<PriceCheck | null>(null);
+  const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
+  const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -69,14 +79,33 @@ export function BridgeScreen() {
     if (toChainId === selectedChain.id) {
       setToChainId(otherChainId(selectedChain.id));
     }
-    setQuote(null);
     setTxHash(null);
   }, [selectedChain.id]);
 
   useEffect(() => {
     setToToken(tokensForChain(toChainId)[0]!);
-    setQuote(null);
   }, [toChainId]);
+
+  // Any change to chains, tokens or amount makes the old quote unusable.
+  useEffect(() => {
+    setQuote(null);
+    setQuoteKey(null);
+    setPriceCheck(null);
+    setReview(false);
+  }, [selectedChain.id, toChainId, fromToken.address, toToken.address, amount]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    setNativeBalance(null);
+    fetchBalance(fromAddress, selectedChain.id)
+      .then(setNativeBalance)
+      .catch(() => setNativeBalance(null));
+    fetchMaxFeePerGas(selectedChain.id)
+      .then(setMaxFeePerGas)
+      .catch(() => setMaxFeePerGas(null));
+  }, [fromAddress, selectedChain.id, session, txHash]);
 
   useEffect(() => {
     if (!session) {
@@ -91,39 +120,82 @@ export function BridgeScreen() {
     return null;
   }
 
+  let typedUnits = 0n;
+  try {
+    typedUnits = amount.trim() ? parseTokenAmount(amount, fromToken.decimals) : 0n;
+  } catch {
+    typedUnits = -1n;
+  }
+  const bridgeGasUnits =
+    (quote?.transactionRequest.gasLimit ?? GAS_UNITS.bridge) + (fromToken.native ? 0n : GAS_UNITS.erc20Approve);
+  const bridgeCheck = checkPreflight({
+    chainId: selectedChain.id,
+    amount: typedUnits,
+    spendBalance: balance,
+    spendSymbol: fromToken.symbol,
+    nativeBalance,
+    feeWei: maxFeePerGas === null ? null : estimateFeeWei(selectedChain.id, bridgeGasUnits, maxFeePerGas),
+    spendIsNative: fromToken.native,
+  });
+  const hint = preflightLine([bridgeCheck], amount.trim().length > 0);
+  const currentKey = bridgeQuoteKey(selectedChain.id, toChainId, fromToken, toToken, typedUnits);
+  const quoteIsCurrent = quote !== null && quoteKey === currentKey;
+  const reviewEnabled = canReviewSwap({
+    quoteKey,
+    currentKey,
+    preflightOk: bridgeCheck.ok,
+    priceOk: priceCheck?.ok === true,
+    busy,
+  });
+
   const quoteBridge = async () => {
     setBusy(true);
     setError(null);
+    setPriceCheck(null);
     try {
       const fromAmount = parseTokenAmount(amount, fromToken.decimals);
-      setQuote(
-        await fetchBridgeQuote({
-          fromChainId: selectedChain.id,
-          toChainId,
-          fromToken,
-          toToken,
-          fromAmount,
-          fromAddress,
+      const requestedKey = bridgeQuoteKey(selectedChain.id, toChainId, fromToken, toToken, fromAmount);
+      const next = await fetchBridgeQuote({
+        fromChainId: selectedChain.id,
+        toChainId,
+        fromToken,
+        toToken,
+        fromAmount,
+        fromAddress,
+      });
+      const ids = [geckoIdForToken(fromToken), geckoIdForToken(toToken)];
+      const prices = await fetchUsdPrices(ids.filter((id): id is string => Boolean(id))).catch(
+        () => ({}) as Record<string, number>,
+      );
+      setPriceCheck(
+        checkSwapPrice({
+          fromAmount: next.fromAmount,
+          fromDecimals: next.fromToken.decimals,
+          toAmount: next.toAmount,
+          toDecimals: next.toToken.decimals,
+          fromPriceUsd: ids[0] ? prices[ids[0]] ?? null : null,
+          toPriceUsd: ids[1] ? prices[ids[1]] ?? null : null,
+          aggregatorFromUsd: next.fromAmountUsd,
+          aggregatorToUsd: next.toAmountUsd,
         }),
       );
-      if (fromAmount > balance) {
-        setError('Quote is ready, but the balance is too low to send this bridge.');
-      }
+      setQuote(next);
+      setQuoteKey(requestedKey);
     } catch (err) {
       setQuote(null);
-      setError(friendlyTxError(err, { fallback: 'Bridge quote failed.' }));
+      setQuoteKey(null);
+      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'No route available' }));
     } finally {
       setBusy(false);
     }
   };
 
   const confirm = async () => {
-    if (!quote) {
-      return;
-    }
-    if (quote.fromAmount > balance) {
+    if (!quote || !reviewEnabled) {
       setReview(false);
-      setError('Balance is too low to send this bridge.');
+      if (!bridgeCheck.ok) {
+        setError(bridgeCheck.message);
+      }
       return;
     }
     setBusy(true);
@@ -154,7 +226,8 @@ export function BridgeScreen() {
       setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
-      setError(friendlyTxError(err, { fallback: 'Bridge failed.' }));
+      setReview(false);
+      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Bridge failed. Nothing was sent.' }));
     } finally {
       setBusy(false);
     }
@@ -172,10 +245,7 @@ export function BridgeScreen() {
         {fromTokens.map((token) => (
           <Pressable
             key={token.address}
-            onPress={() => {
-              setFromToken(token);
-              setQuote(null);
-            }}
+            onPress={() => setFromToken(token)}
             style={[styles.chip, fromToken.address === token.address && styles.chipOn]}
           >
             <Text style={styles.chipText}>{token.symbol}</Text>
@@ -188,10 +258,7 @@ export function BridgeScreen() {
         {toTokens.map((token) => (
           <Pressable
             key={token.address}
-            onPress={() => {
-              setToToken(token);
-              setQuote(null);
-            }}
+            onPress={() => setToToken(token)}
             style={[styles.chip, toToken.address === token.address && styles.chipOn]}
           >
             <Text style={styles.chipText}>{token.symbol}</Text>
@@ -200,10 +267,7 @@ export function BridgeScreen() {
       </View>
       <TextInput
         value={amount}
-        onChangeText={(value) => {
-          setAmount(value);
-          setQuote(null);
-        }}
+        onChangeText={setAmount}
         keyboardType="decimal-pad"
         placeholder={`Amount (${fromToken.symbol})`}
         placeholderTextColor={colors.muted}
@@ -212,8 +276,9 @@ export function BridgeScreen() {
       <Text style={styles.meta}>
         Balance {formatTokenAmount(balance, fromToken.decimals)} {fromToken.symbol}
       </Text>
-      <Button label="Get quote" onPress={quoteBridge} loading={busy} />
-      {quote ? (
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      <Button label="Get quote" onPress={quoteBridge} loading={busy} disabled={!bridgeCheck.ok} />
+      {quote && quoteIsCurrent ? (
         <View style={styles.box}>
           <Text style={styles.boxTitle}>
             Receive ≈ {formatTokenAmount(quote.toAmount, quote.toToken.decimals)} {quote.toToken.symbol} via{' '}
@@ -222,24 +287,22 @@ export function BridgeScreen() {
           <Text style={styles.meta}>
             Minimum {formatTokenAmount(quote.toAmountMin, quote.toToken.decimals)} {quote.toToken.symbol}
           </Text>
-          <Button
-            label="Review bridge"
-            onPress={() => setReview(true)}
-            loading={busy}
-            disabled={quote.fromAmount <= 0n || quote.fromAmount > balance}
-          />
+          {priceCheck && !priceCheck.ok ? (
+            <WarningBanner title="Price check failed" lines={[priceCheck.message]} danger />
+          ) : null}
+          <Button label="Review bridge" onPress={() => setReview(true)} loading={busy} disabled={!reviewEnabled} />
         </View>
       ) : null}
       {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
       <ConfirmSheet
-        visible={review && Boolean(quote)}
+        visible={review && Boolean(quote) && reviewEnabled}
         title="Confirm bridge"
         network={`${selectedChain.name} → ${CHAIN_LIST.find((chain) => chain.id === toChainId)?.name ?? toChainId}`}
         from={fromAddress}
         to={quote?.transactionRequest.to}
         amount={
           quote
-            ? `${amount} ${fromToken.symbol} → ${formatTokenAmount(quote.toAmount, quote.toToken.decimals)} ${quote.toToken.symbol}`
+            ? `${formatTokenAmount(quote.fromAmount, quote.fromToken.decimals)} ${quote.fromToken.symbol} → ${formatTokenAmount(quote.toAmount, quote.toToken.decimals)} ${quote.toToken.symbol}`
             : undefined
         }
         fee={

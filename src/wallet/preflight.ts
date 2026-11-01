@@ -75,6 +75,7 @@ export const GAS_UNITS = {
   aaveSupply: 320_000n,
   aaveWithdraw: 300_000n,
   swap: 400_000n,
+  bridge: 500_000n,
 } as const;
 
 /** Chains where the fee also includes an L1 data fee; pad the estimate so we do not under-quote. */

@@ -103,3 +103,14 @@ export function canReviewSwap(input: {
 }): boolean {
   return !input.busy && input.preflightOk && input.priceOk && input.quoteKey !== null && input.quoteKey === input.currentKey;
 }
+
+/** Same idea as swapQuoteKey for Bridge: source chain, destination chain, both tokens and the amount. */
+export function bridgeQuoteKey(
+  fromChainId: ChainId,
+  toChainId: ChainId,
+  from: Pick<TokenConfig, 'address'>,
+  to: Pick<TokenConfig, 'address'>,
+  amount: bigint,
+): string {
+  return `${fromChainId}>${toChainId}:${from.address.toLowerCase()}:${to.address.toLowerCase()}:${amount.toString()}`;
+}

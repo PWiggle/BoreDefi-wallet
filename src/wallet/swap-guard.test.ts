@@ -163,3 +163,79 @@ test('Review swap needs a current quote, a passing pre-flight and price check', 
   assert.equal(canReviewSwap({ ...base, quoteKey: null }), false);
   assert.equal(canReviewSwap({ ...base, busy: true }), false);
 });
+
+import { bridgeQuoteKey } from './swap-guard';
+
+const baseUsdc = tokensForChain(8453).find((t) => t.symbol === 'USDC')!;
+const baseEth = tokensForChain(8453).find((t) => t.native)!;
+const arbUsdt = tokensForChain(42161).find((t) => t.symbol === 'USDT')!;
+
+function bridgePayload(from: TokenConfig, to: TokenConfig, toAmount: string, extra: { tool?: string; toDecimals?: number } = {}) {
+  return {
+    tool: extra.tool ?? 'across',
+    toolDetails: { name: 'Across' },
+    action: {
+      fromChainId: from.chainId,
+      toChainId: to.chainId,
+      fromAmount: '1000000000000000000',
+      fromToken: { address: from.address, decimals: from.decimals, symbol: from.symbol },
+      toToken: { address: to.address, decimals: extra.toDecimals ?? to.decimals, symbol: to.symbol },
+    },
+    estimate: { toAmount, toAmountMin: toAmount, fromAmountUSD: '2268.00', toAmountUSD: '2262.00' },
+    includedSteps: [{ type: 'cross', tool: extra.tool ?? 'across' }],
+    transactionRequest: { to: '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE', data: '0x01', value: '0' },
+  };
+}
+
+test('bridge: ETH on Ethereum → USDC on Base parses with the destination token’s 6 decimals', () => {
+  const quote = parseLiFiQuote(bridgePayload(eth, baseUsdc, '2262000000'), 1, 8453, { from: eth, to: baseUsdc });
+  assert.equal(quote.toToken.decimals, 6);
+  assert.equal(quote.toToken.symbol, 'USDC');
+  assert.equal(Number(quote.toAmount) / 1e6, 2262);
+});
+
+test('bridge: a quote for a different destination token or wrong decimals is refused', () => {
+  assert.throws(() => parseLiFiQuote(bridgePayload(eth, baseEth, '1'), 1, 8453, { from: eth, to: baseUsdc }), /different token/);
+  assert.throws(
+    () => parseLiFiQuote(bridgePayload(eth, baseUsdc, '1', { toDecimals: 18 }), 1, 8453, { from: eth, to: baseUsdc }),
+    /wrong token decimals/,
+  );
+});
+
+test('bridge: a Wrapper-only route is never accepted across chains', () => {
+  assert.throws(
+    () => parseLiFiQuote(bridgePayload(eth, baseEth, '1000000000000000000', { tool: 'wrapper' }), 1, 8453, { from: eth, to: baseEth }),
+    /No route available/,
+  );
+});
+
+test('bridge price guard: fair passes, >20% off blocks, decimals mix-up blocks', () => {
+  const fair = checkSwapPrice({ fromAmount: 10n ** 18n, fromDecimals: 18, toAmount: 2_262_000_000n, toDecimals: 6, fromPriceUsd: 2268, toPriceUsd: 1 });
+  assert.equal(fair.ok, true);
+  const low = checkSwapPrice({ fromAmount: 10n ** 18n, fromDecimals: 18, toAmount: 1_700_000_000n, toDecimals: 6, fromPriceUsd: 2268, toPriceUsd: 1 });
+  assert.equal(!low.ok && low.reason, 'deviation');
+  const mixup = checkSwapPrice({ fromAmount: 10n ** 18n, fromDecimals: 18, toAmount: 2_262_000_000n, toDecimals: 18, fromPriceUsd: 2268, toPriceUsd: 1 });
+  assert.equal(mixup.ok, false);
+  // USDC (6 decimals) on Base → USDT (6 decimals) on Arbitrum at par
+  const stable = checkSwapPrice({ fromAmount: 50_000_000n, fromDecimals: 6, toAmount: 49_900_000n, toDecimals: arbUsdt.decimals, fromPriceUsd: 1, toPriceUsd: 0.9995 });
+  assert.equal(stable.ok, true);
+});
+
+test('bridge stale-quote reset: any change of chain, token or amount invalidates Review', () => {
+  const amount = 10n ** 18n;
+  const key = bridgeQuoteKey(1, 8453, eth, baseUsdc, amount);
+  const base = { quoteKey: key, currentKey: key, preflightOk: true, priceOk: true, busy: false };
+  assert.equal(canReviewSwap(base), true);
+  const changes = [
+    bridgeQuoteKey(10, 8453, eth, baseUsdc, amount),
+    bridgeQuoteKey(1, 42161, eth, baseUsdc, amount),
+    bridgeQuoteKey(1, 8453, usdc, baseUsdc, amount),
+    bridgeQuoteKey(1, 8453, eth, baseEth, amount),
+    bridgeQuoteKey(1, 8453, eth, baseUsdc, amount * 2n),
+  ];
+  for (const currentKey of changes) {
+    assert.notEqual(currentKey, key);
+    assert.equal(canReviewSwap({ ...base, currentKey }), false, currentKey);
+  }
+  assert.notEqual(bridgeQuoteKey(1, 8453, eth, baseUsdc, amount), swapQuoteKey(1, eth, baseUsdc, amount));
+});
