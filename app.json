@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.boredefi.wallet",
-      "versionCode": 24,
+      "versionCode": 25,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -58,6 +58,7 @@
     },
     "plugins": [
       "./plugins/withOptionalHardware",
+      "react-native-quick-crypto",
       "expo-system-ui",
       [
         "expo-status-bar",

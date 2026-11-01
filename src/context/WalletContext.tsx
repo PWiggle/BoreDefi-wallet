@@ -317,7 +317,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!isValidPin(pin)) {
         throw new Error('PIN must be 6 digits');
       }
-      const sealed = encryptVault(pending.mnemonic, pending.address, pin);
+      const sealed = await encryptVault(pending.mnemonic, pending.address, pin);
       await setPin(pin);
       await saveEncryptedVault(sealed.vault);
       const bio = enableBiometrics && biometricsReady;
@@ -355,7 +355,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
       if (isVaultV1(vault)) {
-        const sealed = migrateVaultV1(vault, pin);
+        const sealed = await migrateVaultV1(vault, pin);
         await saveEncryptedVault(sealed.vault);
         await persistDekIfNeeded(sealed.dek, settingsRef.current.biometricsEnabled);
         await notePinSuccess();
@@ -366,7 +366,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
         return true;
       }
-      const opened = tryDecryptVault(vault, pin);
+      const opened = await tryDecryptVault(vault, pin);
       if (!opened) {
         await notePinFailure();
         return false;
@@ -464,8 +464,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
       const sealed = isVaultV1(vault)
-        ? migrateVaultV1(vault, newPin)
-        : rewrapVault(vault, oldPin, newPin);
+        ? await migrateVaultV1(vault, newPin)
+        : await rewrapVault(vault, oldPin, newPin);
       if (!sealed) {
         await notePinFailure();
         return false;
@@ -503,7 +503,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       await notePinSuccess();
       return vault.mnemonic;
     }
-    const opened = tryDecryptVault(vault, pin);
+    const opened = await tryDecryptVault(vault, pin);
     if (!opened) {
       await notePinFailure();
       return null;

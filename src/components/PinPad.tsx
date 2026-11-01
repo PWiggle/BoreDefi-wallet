@@ -1,11 +1,14 @@
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 
+type PinUpdater = (current: string) => string;
+
 type Props = {
   value: string;
-  onChange: (next: string) => void;
+  onChange: (updater: PinUpdater) => void;
   maxLength?: number;
+  disabled?: boolean;
 };
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
@@ -62,17 +65,21 @@ function pinStyles({ colors, radius, spacing }: Theme) {
   };
 }
 
-export function PinPad({ value, onChange, maxLength = 6 }: Props) {
+export function PinPad({ value, onChange, maxLength = 6, disabled = false }: Props) {
   const styles = useThemedStyles(pinStyles);
   const press = (key: string) => {
-    if (key === '⌫') {
-      onChange(value.slice(0, -1));
+    if (disabled) {
       return;
     }
-    if (!key || value.length >= maxLength) {
-      return;
-    }
-    onChange(`${value}${key}`);
+    onChange((current) => {
+      if (key === '⌫') {
+        return current.slice(0, -1);
+      }
+      if (!key || current.length >= maxLength) {
+        return current;
+      }
+      return `${current}${key}`;
+    });
   };
 
   return (
@@ -86,7 +93,7 @@ export function PinPad({ value, onChange, maxLength = 6 }: Props) {
         {KEYS.map((key) => (
           <Pressable
             key={key || 'blank'}
-            disabled={!key}
+            disabled={!key || disabled}
             onPress={() => press(key)}
             style={({ pressed }) => [
               styles.key,

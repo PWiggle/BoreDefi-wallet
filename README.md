@@ -169,7 +169,7 @@ npm run export:web   # writes dist/ (gitignored)
 | --- | --- |
 | Application ID / package | `com.boredefi.wallet` |
 | versionName | 1.0.0 |
-| versionCode | 23 |
+| versionCode | 25 |
 | compileSdk | 36 |
 | targetSdk | 36 |
 | minSdk | 24 |

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
+import { SecuringWallet } from '../components/SecuringWallet';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
@@ -28,12 +29,13 @@ export function ChangePinScreen() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submitted = useRef(false);
 
   const value = stage === 'old' ? oldPin : stage === 'next' ? nextPin : confirm;
   const setValue = stage === 'old' ? setOldPin : stage === 'next' ? setNextPin : setConfirm;
 
   useEffect(() => {
-    if (!isValidPin(value) || busy) {
+    if (!isValidPin(value) || submitted.current) {
       return;
     }
     if (stage === 'old') {
@@ -51,21 +53,27 @@ export function ChangePinScreen() {
       setStage('next');
       return;
     }
+    submitted.current = true;
     setBusy(true);
-    changePin(oldPin, nextPin)
-      .then((ok) => {
-        if (!ok) {
-          setError(pinBackoffMs > 0 ? 'Too many attempts. Wait, then try again.' : 'Current PIN is incorrect.');
-          setOldPin('');
-          setNextPin('');
-          setConfirm('');
-          setStage('old');
-          return;
-        }
-        navigation.goBack();
-      })
-      .finally(() => setBusy(false));
-  }, [busy, changePin, confirm, navigation, nextPin, oldPin, pinBackoffMs, stage, value]);
+    setTimeout(() => {
+      changePin(oldPin, nextPin)
+        .then((ok) => {
+          if (!ok) {
+            setError(pinBackoffMs > 0 ? 'Too many attempts. Wait, then try again.' : 'Current PIN is incorrect.');
+            setOldPin('');
+            setNextPin('');
+            setConfirm('');
+            setStage('old');
+          } else {
+            navigation.goBack();
+          }
+        })
+        .finally(() => {
+          submitted.current = false;
+          setBusy(false);
+        });
+    }, 50);
+  }, [changePin, confirm, navigation, nextPin, oldPin, pinBackoffMs, stage, value]);
 
   return (
     <Screen
@@ -77,7 +85,8 @@ export function ChangePinScreen() {
         <Text style={styles.wait}>Wait {Math.ceil(pinBackoffMs / 1000)}s before trying again.</Text>
       ) : null}
       <ErrorBanner message={error} />
-      <PinPad value={value} onChange={setValue} />
+      {busy ? <SecuringWallet /> : null}
+      <PinPad value={value} onChange={setValue} disabled={busy || pinBackoffMs > 0} />
       <Button
         label="Cancel"
         variant="ghost"

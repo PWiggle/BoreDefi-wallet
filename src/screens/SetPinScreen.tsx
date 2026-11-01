@@ -4,6 +4,7 @@ import { Pressable, Switch, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { PinPad } from '../components/PinPad';
+import { SecuringWallet } from '../components/SecuringWallet';
 import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
@@ -40,6 +41,7 @@ export function SetPinScreen() {
   const [useBiometrics, setUseBiometrics] = useState(false);
   const [bioLabel, setBioLabel] = useState('Biometrics');
   const [error, setError] = useState<string | null>(null);
+  const [securing, setSecuring] = useState(false);
   const submitted = useRef(false);
 
   useEffect(() => {
@@ -67,13 +69,17 @@ export function SetPinScreen() {
       return;
     }
     submitted.current = true;
-    finalizeSetup(pin, useBiometrics).catch((err) => {
-      submitted.current = false;
-      setError(err instanceof Error ? err.message : 'Could not finish setup.');
-      setPin('');
-      setConfirm('');
-      setStage('create');
-    });
+    setSecuring(true);
+    setTimeout(() => {
+      finalizeSetup(pin, useBiometrics).catch((err) => {
+        submitted.current = false;
+        setSecuring(false);
+        setError(err instanceof Error ? err.message : 'Could not finish setup.');
+        setPin('');
+        setConfirm('');
+        setStage('create');
+      });
+    }, 50);
   }, [confirm, finalizeSetup, pin, stage, useBiometrics]);
 
   return (
@@ -84,7 +90,12 @@ export function SetPinScreen() {
       footer={<Button label="Cancel" variant="ghost" onPress={cancelOnboarding} />}
     >
       <ErrorBanner message={error} />
-      <PinPad value={stage === 'create' ? pin : confirm} onChange={stage === 'create' ? setPin : setConfirm} />
+      {securing ? <SecuringWallet /> : null}
+      <PinPad
+        value={stage === 'create' ? pin : confirm}
+        onChange={stage === 'create' ? setPin : setConfirm}
+        disabled={securing}
+      />
       {biometricsReady ? (
         <Pressable style={styles.bioRow} onPress={() => setUseBiometrics((value) => !value)}>
           <View>

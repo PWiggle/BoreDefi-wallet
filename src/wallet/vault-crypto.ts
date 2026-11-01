@@ -43,8 +43,69 @@ function aesDecrypt(key: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array):
   return gcm(key, nonce).decrypt(ciphertext);
 }
 
-export function deriveVaultKey(pin: string, salt: Uint8Array, iterations: number): Uint8Array {
+/** Noble PBKDF2-SHA256. Used in tests, on web, and if the native module is missing. */
+export function deriveVaultKeyNoble(pin: string, salt: Uint8Array, iterations: number): Uint8Array {
   return pbkdf2(sha256, pin, salt, { c: iterations, dkLen: 32 });
+}
+
+type NativePbkdf2 = (
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+  keylen: number,
+  digest: string,
+  callback: (err: Error | null, derivedKey?: Uint8Array) => void,
+) => void;
+
+function loadNativePbkdf2(): NativePbkdf2 | null {
+  const isReactNative =
+    typeof navigator !== 'undefined' && (navigator as { product?: string }).product === 'ReactNative';
+  if (!isReactNative) {
+    return null;
+  }
+  try {
+    const mod = require('react-native-quick-crypto') as { pbkdf2?: NativePbkdf2 };
+    return typeof mod.pbkdf2 === 'function' ? mod.pbkdf2 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * PBKDF2-SHA256, 32-byte key. On Android and iOS this is OpenSSL via
+ * react-native-quick-crypto (async, off the JS thread). The salt is passed
+ * as a byte array so embedded NUL bytes are kept.
+ */
+export async function deriveVaultKey(
+  pin: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<Uint8Array> {
+  const native = loadNativePbkdf2();
+  if (!native) {
+    return deriveVaultKeyNoble(pin, salt, iterations);
+  }
+  const saltBytes = Uint8Array.from(salt);
+  try {
+    return await new Promise<Uint8Array>((resolve, reject) => {
+      native(pin, saltBytes, iterations, 32, 'sha256', (err, derivedKey) => {
+        if (err || !derivedKey) {
+          reject(err ?? new Error('Native PBKDF2 returned no key'));
+          return;
+        }
+        resolve(new Uint8Array(derivedKey));
+      });
+    });
+  } catch {
+    return deriveVaultKeyNoble(pin, salt, iterations);
+  }
+}
+
+/** Let the 6th PIN dot and the securing spinner paint before key derivation. */
+export function yieldForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 50);
+  });
 }
 
 export function isVaultV1(value: unknown): value is VaultV1Record {
@@ -84,18 +145,18 @@ export function parseStoredVault(value: unknown): StoredVault | null {
   return null;
 }
 
-export function encryptVault(
+export async function encryptVault(
   mnemonic: string,
   address: string,
   pin: string,
   iterations: number = VAULT_KDF_ITERATIONS,
   existingDek?: Uint8Array,
-): { vault: VaultV2Record; dek: Uint8Array } {
+): Promise<{ vault: VaultV2Record; dek: Uint8Array }> {
   const salt = randomBytes(VAULT_SALT_LEN);
   const dek = existingDek ?? randomBytes(VAULT_DEK_LEN);
   const wrapNonce = randomBytes(VAULT_NONCE_LEN);
   const vaultNonce = randomBytes(VAULT_NONCE_LEN);
-  const pinKey = deriveVaultKey(pin, salt, iterations);
+  const pinKey = await deriveVaultKey(pin, salt, iterations);
   const wrappedDek = aesEncrypt(pinKey, wrapNonce, dek);
   const ciphertext = aesEncrypt(dek, vaultNonce, utf8ToBytes(JSON.stringify({ mnemonic })));
   return {
@@ -114,8 +175,8 @@ export function encryptVault(
   };
 }
 
-export function decryptVault(vault: VaultV2Record, pin: string): OpenVault {
-  const pinKey = deriveVaultKey(pin, hexToBytes(vault.salt), vault.iterations);
+export async function decryptVault(vault: VaultV2Record, pin: string): Promise<OpenVault> {
+  const pinKey = await deriveVaultKey(pin, hexToBytes(vault.salt), vault.iterations);
   const dek = aesDecrypt(pinKey, hexToBytes(vault.wrapNonce), hexToBytes(vault.wrappedDek));
   return openVaultWithDek(vault, dek);
 }
@@ -129,9 +190,9 @@ export function openVaultWithDek(vault: VaultV2Record, dek: Uint8Array): OpenVau
   return { mnemonic: parsed.mnemonic, address: vault.address, dek };
 }
 
-export function tryDecryptVault(vault: VaultV2Record, pin: string): OpenVault | null {
+export async function tryDecryptVault(vault: VaultV2Record, pin: string): Promise<OpenVault | null> {
   try {
-    return decryptVault(vault, pin);
+    return await decryptVault(vault, pin);
   } catch {
     return null;
   }
@@ -145,20 +206,20 @@ export function tryOpenVaultWithDek(vault: VaultV2Record, dek: Uint8Array): Open
   }
 }
 
-export function migrateVaultV1(
+export async function migrateVaultV1(
   vault: VaultV1Record,
   pin: string,
   iterations: number = VAULT_KDF_ITERATIONS,
-): { vault: VaultV2Record; dek: Uint8Array } {
+): Promise<{ vault: VaultV2Record; dek: Uint8Array }> {
   return encryptVault(vault.mnemonic, vault.address, pin, iterations);
 }
 
-export function rewrapVault(
+export async function rewrapVault(
   vault: VaultV2Record,
   oldPin: string,
   newPin: string,
-): { vault: VaultV2Record; dek: Uint8Array } | null {
-  const opened = tryDecryptVault(vault, oldPin);
+): Promise<{ vault: VaultV2Record; dek: Uint8Array } | null> {
+  const opened = await tryDecryptVault(vault, oldPin);
   if (!opened) {
     return null;
   }
