@@ -3,7 +3,7 @@
     "name": "BoreDefi Wallet",
     "slug": "boredefi-wallet",
     "scheme": "boredefi",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -33,7 +33,7 @@
     },
     "android": {
       "package": "com.boredefi.wallet",
-      "versionCode": 26,
+      "versionCode": 27,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
