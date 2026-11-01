@@ -1,4 +1,4 @@
-import { Pressable, Switch, Text, View } from 'react-native';
+import { Platform, Pressable, Switch, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { Screen } from '../components/Screen';
@@ -164,7 +164,10 @@ export function SettingsScreen() {
         detail="Sessions and pairing"
         onPress={() => navigation.navigate('WalletConnect', {})}
       />
-      <SettingsRow label="Ledger" detail="Hardware signing" onPress={() => navigation.navigate('Ledger')} />
+      {/* No native Ledger transport on iOS yet, so the row would only show an unavailable notice. */}
+      {Platform.OS === 'ios' ? null : (
+        <SettingsRow label="Ledger" detail="Hardware signing" onPress={() => navigation.navigate('Ledger')} />
+      )}
       <Text style={styles.note}>
         Keys stay on this device. The vault is encrypted at rest with a PIN-derived key. There is no fiat
         on-ramp. Markets data is public CoinGecko.
