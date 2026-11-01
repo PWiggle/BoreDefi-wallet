@@ -161,3 +161,74 @@ test('builds CoinGecko coin URLs and ranks gainers from live rows', () => {
   assert.equal(page.homepage, 'https://ethereum.org');
   assert.deepEqual(page.sparkline, [2300, 2400]);
 });
+
+import {
+  BOREDASH_API_BASE,
+  BOREDASH_API_ENABLED,
+  boreDashUrl,
+  fetchMarketJson,
+  isCoinGeckoUrl,
+  marketBases,
+} from './markets';
+
+test('BoreDash coin pages: taps open boredash.com/coins/<id>', () => {
+  assert.equal(boreDashUrl(), 'https://www.boredash.com');
+  assert.equal(boreDashUrl('ethereum'), 'https://www.boredash.com/coins/ethereum');
+  assert.equal(boreDashUrl('usd coin'), 'https://www.boredash.com/coins/usd%20coin');
+  assert.equal(parseCoinGeckoCoinId('https://www.boredash.com/coins/usd-coin'), 'usd-coin');
+  assert.equal(isCoinGeckoUrl('https://www.boredash.com/coins/bitcoin'), true);
+  assert.equal(isCoinGeckoUrl('https://www.boredash.com/about'), false);
+});
+
+test('BoreDash API is off by default: only CoinGecko is called', async () => {
+  assert.equal(BOREDASH_API_ENABLED, false);
+  assert.deepEqual(marketBases(), ['https://api.coingecko.com/api/v3']);
+  const calls: string[] = [];
+  const out = await fetchMarketJson<{ a: number }>('/ping', {
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return { ok: true, status: 200, json: async () => ({ a: 1 }) };
+    },
+  });
+  assert.deepEqual(out, { a: 1 });
+  assert.deepEqual(calls, ['https://api.coingecko.com/api/v3/ping']);
+});
+
+test('BoreDash enabled: BoreDash first, CoinGecko fallback on error or 4s timeout', async () => {
+  assert.deepEqual(marketBases(true), [BOREDASH_API_BASE, 'https://api.coingecko.com/api/v3']);
+  const ok = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    fetchImpl: async (url) => ({ ok: true, status: 200, json: async () => url }),
+  });
+  assert.equal(ok, `${BOREDASH_API_BASE}/x`);
+
+  const calls: string[] = [];
+  const fell = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return url.startsWith(BOREDASH_API_BASE)
+        ? { ok: false, status: 404, json: async () => null }
+        : { ok: true, status: 200, json: async () => 'gecko' };
+    },
+  });
+  assert.equal(fell, 'gecko');
+  assert.equal(calls.length, 2);
+
+  const started = Date.now();
+  const timedOut = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    timeoutMs: 50,
+    fetchImpl: (url, init) =>
+      url.startsWith(BOREDASH_API_BASE)
+        ? new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted'))))
+        : Promise.resolve({ ok: true, status: 200, json: async () => 'gecko' }),
+  });
+  assert.equal(timedOut, 'gecko');
+  assert.ok(Date.now() - started < 1000);
+
+  await assert.rejects(
+    fetchMarketJson('/x', { enabled: true, fetchImpl: async () => ({ ok: false, status: 503, json: async () => null }) }),
+    /HTTP 503/,
+  );
+});

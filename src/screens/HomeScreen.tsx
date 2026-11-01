@@ -135,7 +135,7 @@ export function HomeScreen() {
         // Indexers are optional. A Blockscout outage must not hide a live balance.
         fetchActivity(session.address, selectedChain.id, 5).catch(() => [] as ActivityItem[]),
         fetchMarketDetails(geckoIds).catch(() => {
-          setMarketsError('Could not load live CoinGecko prices.');
+          setMarketsError('Could not load live BoreDash prices.');
           return [] as MarketCoin[];
         }),
         fetchTopMarkets(8).catch(() => fetchTrendingCoins().catch(() => [] as MarketCoin[])),
@@ -163,7 +163,7 @@ export function HomeScreen() {
       setNativeMarket(byId.get(geckoIdForNative(selectedChain.id)));
       setStrip(nextStrip.slice(0, 6));
       if (details.length === 0 && nextStrip.length === 0) {
-        setMarketsError('Could not load live CoinGecko prices.');
+        setMarketsError('Could not load live BoreDash prices.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not refresh wallet.');
@@ -254,7 +254,7 @@ export function HomeScreen() {
           </Pressable>
         </View>
         {strip.length === 0 ? (
-          <Text style={styles.empty}>Live CoinGecko markets are offline or rate-limited.</Text>
+          <Text style={styles.empty}>Live BoreDash markets are offline or busy. Pull to refresh.</Text>
         ) : (
           strip.map((coin) => (
             <MarketRow key={coin.id} coin={coin} onPress={() => navigation.navigate('Markets')} />

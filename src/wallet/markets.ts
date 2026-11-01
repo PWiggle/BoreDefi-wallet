@@ -3,6 +3,15 @@ import { type ChainId } from './chains';
 import { type TokenConfig, tokensForChain } from './tokens';
 
 const BASE = 'https://api.coingecko.com/api/v3';
+
+/**
+ * BoreDash market-data proxy. When enabled, every market call tries BoreDash first and falls back to
+ * CoinGecko after BOREDASH_TIMEOUT_MS or on any error. Disabled until the BoreDash API routes exist.
+ */
+export const BOREDASH_API_ENABLED = false;
+export const BOREDASH_API_BASE = 'https://www.boredash.com/api/v3';
+export const BOREDASH_TIMEOUT_MS = 4_000;
+export const BOREDASH_SITE = 'https://www.boredash.com';
 /** Browser fetch forbids a custom User-Agent; only Accept is set. */
 export const COINGECKO_HEADERS = { Accept: 'application/json' } as const;
 
@@ -140,6 +149,14 @@ function coin(
   };
 }
 
+/** Coin page shown in the in-app Browser when a coin is tapped. */
+export function boreDashUrl(id?: string): string {
+  if (!id) {
+    return BOREDASH_SITE;
+  }
+  return `${BOREDASH_SITE}/coins/${encodeURIComponent(id)}`;
+}
+
 export function coinGeckoUrl(id?: string): string {
   if (!id) {
     return COINGECKO_SITE;
@@ -150,7 +167,7 @@ export function coinGeckoUrl(id?: string): string {
 export function parseCoinGeckoCoinId(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (!parsed.hostname.endsWith('coingecko.com')) {
+    if (!parsed.hostname.endsWith('coingecko.com') && !parsed.hostname.endsWith('boredash.com')) {
       return null;
     }
     const match = parsed.pathname.match(/\/coins\/([^/]+)/i);
@@ -162,7 +179,8 @@ export function parseCoinGeckoCoinId(url: string): string | null {
 
 export function isCoinGeckoUrl(url: string): boolean {
   try {
-    return new URL(url).hostname.endsWith('coingecko.com');
+    const host = new URL(url).hostname;
+    return host.endsWith('coingecko.com') || (host.endsWith('boredash.com') && /\/coins(\/|$)/.test(new URL(url).pathname));
   } catch {
     return false;
   }
@@ -334,12 +352,57 @@ export function indexMarketsById(markets: MarketCoin[]): Map<string, MarketCoin>
   return new Map(markets.map((item) => [item.id, item]));
 }
 
-async function gecko<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { headers: COINGECKO_HEADERS });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+type MarketFetch = (input: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+}>;
+
+/** Ordered list of API bases to try for a market call. */
+export function marketBases(enabled: boolean = BOREDASH_API_ENABLED): string[] {
+  return enabled ? [BOREDASH_API_BASE, BASE] : [BASE];
+}
+
+/**
+ * GET a CoinGecko-shaped path. With BoreDash enabled, BoreDash is tried first with a 4 s timeout and
+ * CoinGecko is the fallback; the last error is thrown only if every base fails.
+ */
+export async function fetchMarketJson<T>(
+  path: string,
+  options: { enabled?: boolean; fetchImpl?: MarketFetch; timeoutMs?: number } = {},
+): Promise<T> {
+  const fetchImpl = options.fetchImpl ?? (fetch as unknown as MarketFetch);
+  const bases = marketBases(options.enabled ?? BOREDASH_API_ENABLED);
+  let lastError: unknown = null;
+  for (const base of bases) {
+    const primary = base !== BASE;
+    const controller = primary ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs ?? BOREDASH_TIMEOUT_MS) : null;
+    try {
+      const response = await fetchImpl(`${base}${path}`, {
+        headers: COINGECKO_HEADERS,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return (await response.json()) as T;
+    } catch (error) {
+      lastError = error;
+      if (primary) {
+        logger.warn('markets: BoreDash failed, falling back to CoinGecko', { path, error: String(error) });
+      }
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
   }
-  return response.json() as Promise<T>;
+  throw lastError instanceof Error ? lastError : new Error('Market data unavailable.');
+}
+
+async function gecko<T>(path: string): Promise<T> {
+  return fetchMarketJson<T>(path);
 }
 
 export async function fetchTrendingCoins(): Promise<MarketCoin[]> {

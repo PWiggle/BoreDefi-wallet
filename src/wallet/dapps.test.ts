@@ -35,7 +35,7 @@ test('normalizes dApp URLs and classifies provider methods', () => {
     true,
   );
   assert.equal(
-    DAPP_BOOKMARKS.some((item) => item.name === 'CoinGecko' && item.url === 'https://www.coingecko.com'),
+    DAPP_BOOKMARKS.some((item) => item.name === 'BoreDash' && item.url === 'https://www.boredash.com'),
     true,
   );
 });

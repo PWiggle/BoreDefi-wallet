@@ -170,7 +170,7 @@ export function SettingsScreen() {
       )}
       <Text style={styles.note}>
         Keys stay on this device. The vault is encrypted at rest with a PIN-derived key. There is no fiat
-        on-ramp. Markets data is public CoinGecko.
+        on-ramp. Market data via BoreDash (source: CoinGecko).
       </Text>
     </Screen>
   );

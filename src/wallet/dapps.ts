@@ -8,7 +8,7 @@ export const CONNECT_DEMO_URL = 'https://pwiggle.github.io/BoreDefi-wallet/conne
 
 export const DAPP_BOOKMARKS: DappBookmark[] = [
   { name: 'Connect', url: CONNECT_DEMO_URL, blurb: 'BoreDefi Connect demo' },
-  { name: 'CoinGecko', url: 'https://www.coingecko.com', blurb: 'Live markets' },
+  { name: 'BoreDash', url: 'https://www.boredash.com', blurb: 'Live markets' },
   { name: 'Uniswap', url: 'https://app.uniswap.org', blurb: 'Swap tokens' },
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
   { name: 'Lido', url: 'https://stake.lido.fi', blurb: 'Stake ETH' },
