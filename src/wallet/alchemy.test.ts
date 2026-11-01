@@ -144,3 +144,9 @@ test('fetchActivity falls back to Blockscout when Alchemy errors', async () => {
   assert.deepEqual(items, []);
   assert.ok(calls.some((u) => u.includes('arbitrum.blockscout.com')));
 });
+
+test('the build-time key is read with a literal process.env.EXPO_PUBLIC_ALCHEMY_KEY so Expo can inline it', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('./alchemy.ts', import.meta.url), 'utf8');
+  assert.match(src, /=\s*process\.env\.EXPO_PUBLIC_ALCHEMY_KEY;/);
+});

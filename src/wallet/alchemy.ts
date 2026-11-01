@@ -24,8 +24,15 @@ export const ALCHEMY_NETWORK: Record<ChainId, string> = {
 /** Chains that use Alchemy first (Blockscout blocks app clients there, or has no endpoint). */
 export const ALCHEMY_CHAINS: ReadonlySet<ChainId> = new Set<ChainId>([8453, 137, 42161, 56]);
 
-export function getAlchemyKey(env: Record<string, string | undefined> = process.env): string | null {
-  const key = env.EXPO_PUBLIC_ALCHEMY_KEY?.trim();
+/**
+ * Expo inlines only literal `process.env.EXPO_PUBLIC_*` reads at bundle time. Reading through a variable
+ * (for example `env.EXPO_PUBLIC_ALCHEMY_KEY` with `env = process.env`) leaves it undefined in release
+ * builds, so the literal read below is required.
+ */
+const BUILD_ALCHEMY_KEY: string | undefined = process.env.EXPO_PUBLIC_ALCHEMY_KEY;
+
+export function getAlchemyKey(env?: Record<string, string | undefined>): string | null {
+  const key = (env ? env.EXPO_PUBLIC_ALCHEMY_KEY : BUILD_ALCHEMY_KEY)?.trim();
   return key ? key : null;
 }
 
