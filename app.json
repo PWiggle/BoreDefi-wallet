@@ -1,0 +1,113 @@
+{
+  "expo": {
+    "name": "BoreDefi Wallet",
+    "slug": "boredefi-wallet",
+    "scheme": "boredefi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png",
+      "name": "BoreDefi Wallet",
+      "shortName": "BoreDefi"
+    },
+    "experiments": {
+      "baseUrl": "/BoreDefi-wallet"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.boredefi.wallet",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
+        "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID."
+      }
+    },
+    "android": {
+      "package": "com.boredefi.wallet",
+      "versionCode": 26,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "com.google.android.gms.permission.AD_ID"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#255470",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "plugins": [
+      "./plugins/withOptionalHardware",
+      "react-native-quick-crypto",
+      "expo-system-ui",
+      [
+        "expo-status-bar",
+        {
+          "style": "light"
+        }
+      ],
+      "./plugins/withUnsignedRelease",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Unlock BoreDefi Wallet with Face ID."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan a recipient address or WalletConnect QR code.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "./plugins/withHiddenSplashStatusBar",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#255470",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 240
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "36.0.0",
+            "useLegacyPackaging": false,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.facebook.hermes.unicode.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keep class expo.modules.** { *; }\n-keep class com.swmansion.rnscreens.** { *; }\n-keep class com.swmansion.gesturehandler.** { *; }\n-keep class com.reactnativecommunity.asyncstorage.** { *; }\n-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.netinfo.** { *; }\n-keep class com.shopify.reactnative.skia.** { *; }\n-dontwarn org.bouncycastle.**\n-dontwarn org.conscrypt.**\n-dontwarn org.slf4j.**\n-dontwarn java.awt.**\n-dontwarn javax.swing.**\n-keep class com.sun.jna.** { *; }\n-keepclassmembers class * extends com.sun.jna.** { *; }\n-keepclassmembers class com.sun.jna.Pointer { long peer; }\n-keep class uniffi.** { *; }\n-keep class com.walletconnect.** { *; }\n-keep class com.reown.** { *; }"
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ]
+    ]
+  }
+}
