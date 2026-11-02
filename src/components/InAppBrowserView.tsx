@@ -12,6 +12,7 @@ type Props = {
   onLoadEnd?: () => void;
   onMessage?: (event: WebViewMessageEvent) => void;
   onShouldStartLoadWithRequest?: (request: WebViewNavigation) => boolean;
+  onNavigationStateChange?: (navState: WebViewNavigation) => void;
   onError?: (description: string) => void;
 };
 
@@ -23,6 +24,7 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
     onLoadEnd,
     onMessage,
     onShouldStartLoadWithRequest,
+    onNavigationStateChange,
     onError,
   },
   ref,
@@ -58,6 +60,7 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
       onLoadEnd={onLoadEnd}
       onMessage={onMessage}
       onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+      onNavigationStateChange={onNavigationStateChange}
       onError={(event) => onError?.(event.nativeEvent.description || 'Page failed to load.')}
     />
   );

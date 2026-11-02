@@ -22,7 +22,15 @@ import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainTabParamList } from '../navigation';
-import { classifyBrowserMethod, DAPP_BOOKMARKS, DEFAULT_BROWSER_URL, normalizeDappUrl } from '../wallet/dapps';
+import {
+  classifyBrowserMethod,
+  DAPP_BOOKMARKS,
+  dappHost,
+  dappOrigin,
+  DEFAULT_BROWSER_URL,
+  normalizeDappUrl,
+  urlBarAfterNavigation,
+} from '../wallet/dapps';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
   chainIdHex,
@@ -112,18 +120,22 @@ export function BrowserScreen() {
   const startUrl = route.params?.url ?? DEFAULT_BROWSER_URL;
   const [draft, setDraft] = useState(startUrl);
   const [url, setUrl] = useState(startUrl);
+  // The page actually loaded (follows redirects). Origins on prompts come from here, never from the typed URL.
+  const [pageUrl, setPageUrl] = useState(startUrl);
+  const editingRef = useRef(false);
   const [connectedOrigin, setConnectedOrigin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
 
   const [pendingProtected, setPendingProtected] = useState<{
     verdict: ProtectedVerdict;
+    site: string;
     resolve: (clearance: string | null) => void;
   } | null>(null);
 
-  const requestProtected = (verdict: ProtectedVerdict): Promise<string | null> =>
+  const requestProtected = (verdict: ProtectedVerdict, site: string): Promise<string | null> =>
     new Promise((resolve) => {
-      setPendingProtected({ verdict, resolve });
+      setPendingProtected({ verdict, site, resolve });
     });
 
   const requestConfirm = (spec: Omit<BrowserConfirm, 'resolve'>): Promise<boolean> =>
@@ -143,6 +155,7 @@ export function BrowserScreen() {
       }
       setUrl(next);
       setDraft(next);
+      setPageUrl(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid URL.');
     }
@@ -179,13 +192,17 @@ export function BrowserScreen() {
         payload?: { method?: string; params?: unknown[] };
       };
       id = parsed.id;
+      // Origin of the frame that sent this request (falls back to the last navigated page, never the typed URL).
+      const origin = dappOrigin(event.nativeEvent.url) ?? dappOrigin(pageUrl);
+      const site = dappHost(event.nativeEvent.url) ?? dappHost(pageUrl) ?? 'Unknown site';
+      const isConnected = Boolean(connectedOrigin && origin && connectedOrigin === origin);
       const method = parsed.payload?.method ?? '';
       const params = parsed.payload?.params ?? [];
       const kind = classifyBrowserMethod(method);
       const hex = chainIdHex(selectedChain.id);
 
       if (kind === 'accounts') {
-        resolve(id, connectedOrigin ? [session.address] : []);
+        resolve(id, isConnected ? [session.address] : []);
         return;
       }
       if (kind === 'local') {
@@ -203,7 +220,10 @@ export function BrowserScreen() {
           title: 'Connect wallet',
           network: selectedChain.name,
           from: session.address,
-          extra: [{ label: 'Site', value: 'Share this public address. Keys stay on this device.' }],
+          extra: [
+            { label: 'Site', value: site },
+            { label: 'Shares', value: 'This public address. Keys stay on this device.' },
+          ],
           mode: 'buttons',
           confirmLabel: 'Connect',
         });
@@ -211,7 +231,11 @@ export function BrowserScreen() {
           resolve(id, null, 'User rejected.');
           return;
         }
-        setConnectedOrigin(url);
+        if (!origin) {
+          resolve(id, null, 'This page has no web origin to connect.');
+          return;
+        }
+        setConnectedOrigin(origin);
         webRef.current?.injectJavaScript(providerSyncScript(session.address, selectedChain.id));
         webRef.current?.injectJavaScript(
           providerEmitScript('accountsChanged', [session.address]),
@@ -258,6 +282,10 @@ export function BrowserScreen() {
         return;
       }
       if (kind === 'sign') {
+        if (!isConnected) {
+          resolve(id, null, 'Connect this site to the wallet first.');
+          return;
+        }
         const tx = params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
         const isSend = method === 'eth_sendTransaction' || method === 'eth_signTransaction';
         const verdict = await evaluateProtectedRequest({
@@ -268,7 +296,7 @@ export function BrowserScreen() {
         });
         let clearance: string | null = null;
         if (verdict?.protected) {
-          clearance = await requestProtected(verdict);
+          clearance = await requestProtected(verdict, site);
           if (!clearance) {
             resolve(id, null, 'User rejected.');
             return;
@@ -287,6 +315,7 @@ export function BrowserScreen() {
               : method,
           fee: isSend ? 'Network gas (quoted at sign)' : 'None (signature only)',
           extra: [
+            { label: 'Site', value: site },
             { label: 'Method', value: method },
             ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
             ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
@@ -351,6 +380,12 @@ export function BrowserScreen() {
           placeholderTextColor={colors.muted}
           style={styles.input}
           onSubmitEditing={() => open(draft)}
+          onFocus={() => {
+            editingRef.current = true;
+          }}
+          onBlur={() => {
+            editingRef.current = false;
+          }}
         />
         <Button label="Go" onPress={() => open(draft)} style={styles.go} />
       </View>
@@ -376,6 +411,19 @@ export function BrowserScreen() {
           }}
           onMessage={onMessage}
           onShouldStartLoadWithRequest={intercept}
+          onNavigationStateChange={(nav) => {
+            const nextOrigin = dappOrigin(nav.url);
+            if (!nextOrigin) {
+              return;
+            }
+            setPageUrl(nav.url);
+            setDraft((current) => urlBarAfterNavigation(current, nav.url, editingRef.current));
+            // Leaving the connected site drops the connection, so a redirect cannot inherit it.
+            if (connectedOrigin && nextOrigin !== connectedOrigin) {
+              setConnectedOrigin(null);
+              webRef.current?.injectJavaScript(providerEmitScript('accountsChanged', []));
+            }
+          }}
           onError={(message) => setError(message)}
         />
       )}
@@ -383,7 +431,7 @@ export function BrowserScreen() {
         <ProtectedGuardSheet
           verdict={pendingProtected.verdict}
           network={selectedChain.name}
-          dapp={connectedOrigin ?? url}
+          dapp={pendingProtected.site}
           onApprove={(clearance) => {
             pendingProtected.resolve(clearance);
             setPendingProtected(null);

@@ -99,3 +99,36 @@ export function classifyBrowserMethod(method: string): BrowserMethodKind {
   }
   return 'unsupported';
 }
+
+/** Origin (scheme://host[:port]) of a loaded http(s) page, or null for anything else (about:blank, data:, wc:). */
+export function dappOrigin(raw: string | null | undefined): string | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Host shown on prompts, e.g. "www.boredefi.com" (keeps a non-default port). */
+export function dappHost(raw: string | null | undefined): string | null {
+  const origin = dappOrigin(raw);
+  return origin ? new URL(origin).host : null;
+}
+
+/**
+ * What the URL bar should show after a navigation event. Follows redirects to the page actually loaded,
+ * but never overwrites what the user is typing, and ignores non-http(s) states.
+ */
+export function urlBarAfterNavigation(current: string, navUrl: string | null | undefined, editing: boolean): string {
+  if (editing || !dappOrigin(navUrl)) {
+    return current;
+  }
+  return navUrl as string;
+}
