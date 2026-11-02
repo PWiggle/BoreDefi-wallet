@@ -182,3 +182,21 @@ test('REGRESSION reads-use-fallback: Swap/Bridge/Home balance and fee reads go t
   assert.match(body(rpcSrc, 'fetchBalance'), /readWithFallback\(/);
   assert.match(body(rpcSrc, 'fetchMaxFeePerGas'), /readWithFallback\(/);
 });
+
+test('REGRESSION quote-busy-retry: a transient LI.FI 429/5xx is retried before showing "busy"', async () => {
+  const { fetchQuoteResponse } = await import('./swap');
+  const statuses = [429, 503, 200];
+  let calls = 0;
+  const r = await fetchQuoteResponse(async () => ({ status: statuses[calls++]! }), { sleep: async () => {} });
+  assert.equal(r.status, 200);
+  assert.equal(calls, 3);
+  // Still busy after every attempt: the last answer is returned so the screen can say "busy" (no endless loop).
+  calls = 0;
+  const busy = await fetchQuoteResponse(async () => { calls += 1; return { status: 429 }; }, { sleep: async () => {} });
+  assert.equal(busy.status, 429);
+  assert.equal(calls, 3);
+  // A real "no route" (404) is not retried.
+  calls = 0;
+  await fetchQuoteResponse(async () => { calls += 1; return { status: 404 }; }, { sleep: async () => {} });
+  assert.equal(calls, 1);
+});

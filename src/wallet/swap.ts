@@ -197,7 +197,7 @@ export async function fetchSwapQuote(input: {
   url.searchParams.set('integrator', 'boredefi');
 
   try {
-    const response = await fetchWithRetry(() =>
+    const response = await fetchQuoteResponse(() =>
       fetch(url.toString(), {
         headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
       }),
@@ -223,6 +223,36 @@ export const SWAP_STEPS = {
   balance: (symbol: string) => `loading your ${symbol} balance`,
   prices: 'checking the market price',
 } as const;
+
+/**
+ * LI.FI quote request with retries (soak test 2026-11-02: about 4% of anonymous quotes got a transient 429/5xx
+ * "busy" answer that succeeds a moment later). Retries a dropped connection and a 429/5xx, with a short growing
+ * pause; any other status is returned at once. The last answer (or error) is returned for the caller to map.
+ */
+export async function fetchQuoteResponse<R extends { status: number }>(
+  run: () => Promise<R>,
+  options: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<R> {
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const delayMs = options.delayMs ?? 800;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; ; attempt += 1) {
+    const last = attempt >= attempts - 1;
+    try {
+      const response = await run();
+      if (!last && (response.status === 429 || response.status >= 500)) {
+        await sleep(delayMs * (attempt + 1));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (last) {
+        throw error;
+      }
+      await sleep(delayMs * (attempt + 1));
+    }
+  }
+}
 
 /**
  * One retry for a request that never got an HTTP answer (dropped cellular connection, "Network request failed").
@@ -402,7 +432,7 @@ export async function fetchBridgeQuote(input: {
   url.searchParams.set('integrator', 'boredefi');
 
   try {
-    const response = await fetchWithRetry(() =>
+    const response = await fetchQuoteResponse(() =>
       fetch(url.toString(), {
         headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
       }),

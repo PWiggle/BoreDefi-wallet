@@ -182,7 +182,7 @@ test('fetchSwapQuote: a quote that cannot be fetched says the quote step failed'
       fetchSwapQuote({ chainId: 1, fromToken: ETH, toToken: WETH, fromAmount: 1n, fromAddress: OWNER }),
       /Network problem while getting a swap quote from LI\.FI/,
     );
-    assert.equal(m.calls.length, 2);
+    assert.equal(m.calls.length, 3);
   } finally {
     m.restore();
   }
@@ -256,7 +256,7 @@ test('loadSpendBalance: a lasting failure leaves balance unknown and names the s
   assert.equal(result.error, 'Network problem while loading your USDC balance. Check your connection and try again.');
 });
 
-test('fetchBridgeQuote: a quote that cannot be fetched says the bridge quote step failed (retried once)', async () => {
+test('fetchBridgeQuote: a quote that cannot be fetched says the bridge quote step failed (after retries)', async () => {
   const m = mockGlobalFetch(() => new TypeError('Network request failed'));
   const baseUsdc = tokensForChain(8453).find((t) => t.symbol === 'USDC')!;
   try {
@@ -264,7 +264,7 @@ test('fetchBridgeQuote: a quote that cannot be fetched says the bridge quote ste
       fetchBridgeQuote({ fromChainId: 1, toChainId: 8453, fromToken: USDC, toToken: baseUsdc, fromAmount: 1_000_000n, fromAddress: OWNER }),
       /Network problem while getting a bridge quote from LI\.FI/,
     );
-    assert.equal(m.calls.length, 2);
+    assert.equal(m.calls.length, 3);
   } finally {
     m.restore();
   }
