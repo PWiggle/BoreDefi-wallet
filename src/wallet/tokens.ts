@@ -40,6 +40,8 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(1, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'USDC', 'USD Coin', 6),
     token(1, '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'USDT', 'Tether USD', 6),
     token(1, '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', 'stETH', 'Lido Staked ETH', 18),
+    // ApeCoin: Yuga-protected (see yuga-allowlist.ts); decimals verified on-chain.
+    token(1, '0x4d224452801ACEd8B2F0aebE155379bb5D594381', 'APE', 'ApeCoin', 18),
   ],
   8453: [
     native(8453),
@@ -52,6 +54,7 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(42161, '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', 'WETH', 'Wrapped Ether', 18),
     token(42161, '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', 'USDC', 'USD Coin', 6),
     token(42161, '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', 'USDT', 'Tether USD', 6),
+    token(42161, '0x7f9FBf9bDd3F4105C478b996B648FE6e828a1e98', 'APE', 'ApeCoin', 18),
   ],
   10: [
     native(10),
@@ -71,6 +74,7 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(56, '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', 'WBNB', 'Wrapped BNB', 18),
     token(56, '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', 'USDC', 'USD Coin', 18),
     token(56, '0x55d398326f99059fF775485246999027B3197955', 'USDT', 'Tether USD', 18),
+    token(56, '0x8f86a15EC17cb3369d8b3E666dAdBC11daA82b79', 'APE', 'ApeCoin', 18),
   ],
   43114: [
     native(43114),

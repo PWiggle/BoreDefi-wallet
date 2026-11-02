@@ -124,6 +124,10 @@ const SWAP_SYMBOL: Record<string, string> = {
   'avalanche-2': 'AVAX',
   weth: 'WETH',
   'staked-ether': 'stETH',
+  apecoin: 'APE',
+  wbnb: 'WBNB',
+  'wrapped-avax': 'WAVAX',
+  wmatic: 'WPOL',
 };
 
 function sparklinePoints(values: number[] | undefined): number[] {
@@ -326,20 +330,48 @@ export function geckoIdForToken(token: TokenConfig): string | null {
     case 'WETH':
       return 'weth';
     case 'WBNB':
-      return 'binancecoin';
+      return 'wbnb';
     case 'WAVAX':
-      return 'avalanche-2';
+      return 'wrapped-avax';
     case 'WPOL':
-      return 'polygon-ecosystem-token';
+      // CoinGecko's 'wmatic' coin is Wrapped POL (WPOL); 'polygon-ecosystem-token' is the native POL.
+      return 'wmatic';
     case 'STETH':
       return 'staked-ether';
+    case 'APE':
+      return 'apecoin';
     default:
       return null;
   }
 }
 
+/** Every token the wallet knows on this chain (native, stablecoins, wrapped native, WETH, stETH, APE…). */
 export function portfolioTokensForChain(chainId: ChainId): TokenConfig[] {
-  return tokensForChain(chainId).filter((item) => item.native || item.symbol === 'USDC' || item.symbol === 'USDT');
+  return tokensForChain(chainId);
+}
+
+/**
+ * Home total in USD: sum of every held token priced by its gecko id. Unpriced zero balances are ignored;
+ * returns null when the native price is missing or a held token has no price (so the total is never silently low).
+ */
+export function portfolioUsdTotal(
+  rows: { token: Pick<TokenConfig, 'native' | 'decimals'>; amount: bigint; priceUsd: number | null | undefined }[],
+): number | null {
+  let total = 0;
+  for (const row of rows) {
+    if (row.amount <= 0n) {
+      if (row.token.native && (row.priceUsd === null || row.priceUsd === undefined)) {
+        return null;
+      }
+      continue;
+    }
+    const value = usdValueFromUnits(row.amount, row.token.decimals, row.priceUsd);
+    if (value === null) {
+      return null;
+    }
+    total += value;
+  }
+  return total;
 }
 
 export function usdValueFromUnits(raw: bigint, decimals: number, priceUsd: number | null | undefined): number | null {

@@ -15,7 +15,7 @@ export type MainTabParamList = {
 export type MainStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Receive: undefined;
-  Send: { to?: string; amount?: string };
+  Send: { to?: string; amount?: string; tokenSymbol?: string };
   ScanQr: { purpose?: 'payment' | 'walletconnect' | 'nft'; nft?: NftItem };
   Activity: undefined;
   RevealSeed: undefined;

@@ -113,7 +113,7 @@ test('maps native and stables onto CoinGecko ids and portfolio rows', () => {
   const rows = portfolioTokensForChain(1);
   assert.deepEqual(
     rows.map((item) => item.symbol),
-    ['ETH', 'USDC', 'USDT'],
+    ['ETH', 'WETH', 'USDC', 'USDT', 'stETH', 'APE'],
   );
   assert.equal(usdValueFromUnits(0n, 18, 3500), 0);
   assert.equal(usdValueFromUnits(500000n, 6, 1), 0.5);

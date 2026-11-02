@@ -22,6 +22,7 @@ import {
   geckoIdForToken,
   indexMarketsById,
   portfolioTokensForChain,
+  portfolioUsdTotal,
   type MarketCoin,
   usdValueFromUnits,
 } from '../wallet/markets';
@@ -118,6 +119,7 @@ export function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
   const [nativeMarket, setNativeMarket] = useState<MarketCoin | undefined>(undefined);
   const [strip, setStrip] = useState<MarketCoin[]>([]);
 
@@ -160,6 +162,9 @@ export function HomeScreen() {
       setBalance(nextBalance);
       setActivity(nextActivity);
       setTokens(nextTokens);
+      setPortfolioTotal(
+        portfolioUsdTotal(nextTokens.map((row) => ({ token: row.token, amount: row.amount, priceUsd: row.market?.priceUsd }))),
+      );
       setNativeMarket(byId.get(geckoIdForNative(selectedChain.id)));
       setStrip(nextStrip.slice(0, 6));
       if (details.length === 0 && nextStrip.length === 0) {
@@ -186,7 +191,9 @@ export function HomeScreen() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const usdTotal = balance === null ? null : usdValueFromUnits(balance, 18, nativeMarket?.priceUsd);
+  // Every held token (native, stables, WETH, stETH, APE…) priced by its CoinGecko id; native-only until tokens load.
+  const usdTotal =
+    balance === null ? null : tokens.length ? portfolioTotal : usdValueFromUnits(balance, 18, nativeMarket?.priceUsd);
 
   return (
     <Screen

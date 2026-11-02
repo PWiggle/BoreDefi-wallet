@@ -214,3 +214,46 @@ export async function sendNativeTransfer(
     throw toUserError('Send failed', error, { chainId, fallback: 'Transaction failed. Nothing left this wallet.' });
   }
 }
+
+/** Fee estimate for a zero-value contract call (ERC-20 transfer). */
+export async function estimateContractCall(
+  from: string,
+  to: string,
+  data: string,
+  chainId: ChainId,
+): Promise<FeeEstimate> {
+  const provider = getProvider(chainId);
+  try {
+    const [feeData, gasLimit] = await Promise.all([
+      provider.getFeeData(),
+      provider.estimateGas({ from, to, data, value: 0n }),
+    ]);
+    const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 0n;
+    return { gasLimit, maxFeePerGas, maxPriorityFeePerGas, feeWei: gasLimit * maxFeePerGas };
+  } catch (error) {
+    throw toUserError('Fee estimate failed', error, { chainId, fallback: 'Could not estimate network fee.' });
+  }
+}
+
+export async function sendContractCall(
+  mnemonic: string,
+  to: string,
+  data: string,
+  chainId: ChainId,
+): Promise<TransactionResponse> {
+  const wallet = await connectedWallet(mnemonic, chainId);
+  try {
+    const estimate = await estimateContractCall(wallet.address, to, data, chainId);
+    return await wallet.sendTransaction({
+      to,
+      data,
+      value: 0n,
+      gasLimit: estimate.gasLimit,
+      maxFeePerGas: estimate.maxFeePerGas,
+      maxPriorityFeePerGas: estimate.maxPriorityFeePerGas,
+    });
+  } catch (error) {
+    throw toUserError('Send failed', error, { chainId, fallback: 'Transaction failed. Nothing left this wallet.' });
+  }
+}

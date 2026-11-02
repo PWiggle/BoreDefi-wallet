@@ -4,6 +4,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ConfirmSheet } from '../components/ConfirmSheet';
+import { useProtectedGate } from '../components/useProtectedGate';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { WarningBanner } from '../components/WarningBanner';
 import { Screen } from '../components/Screen';
@@ -21,6 +22,7 @@ import {
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 import { friendlyTxError } from '../wallet/tx-errors';
+import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protected-spend';
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
 import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
@@ -72,6 +74,9 @@ export function BridgeScreen() {
   const [busy, setBusy] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [review, setReview] = useState(false);
+  const { gate: protectedGate, sheet: protectedSheet } = useProtectedGate(selectedChain.name);
+  // Quote key that passed the ApeCoin (Yuga-protected) guard; confirm refuses any other quote.
+  const [clearedKey, setClearedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const next = tokensForChain(selectedChain.id);
@@ -190,7 +195,36 @@ export function BridgeScreen() {
     }
   };
 
+  const protectedFrom = protectedTokenAsset(fromToken);
+
+  const openReview = async () => {
+    if (!quote) {
+      return;
+    }
+    if (protectedFrom) {
+      const spender = quote.approvalAddress ?? quote.transactionRequest.to;
+      if (!spender) {
+        setError('This route has no spender to check. Nothing was sent.');
+        return;
+      }
+      setError(null);
+      const ok = await protectedGate(protectedApproveRequest(fromToken, fromAddress, spender, quote.fromAmount));
+      if (!ok) {
+        setClearedKey(null);
+        setError(`${protectedFrom.name} is protected. The bridge was not approved, so nothing was sent.`);
+        return;
+      }
+      setClearedKey(quoteKey);
+    }
+    setReview(true);
+  };
+
   const confirm = async () => {
+    if (protectedFrom && (clearedKey === null || clearedKey !== quoteKey)) {
+      setReview(false);
+      setError(`${protectedFrom.name} is protected. Review the bridge again to confirm it.`);
+      return;
+    }
     if (!quote || !reviewEnabled) {
       setReview(false);
       if (!bridgeCheck.ok) {
@@ -290,10 +324,11 @@ export function BridgeScreen() {
           {priceCheck && !priceCheck.ok ? (
             <WarningBanner title="Price check failed" lines={[priceCheck.message]} danger />
           ) : null}
-          <Button label="Review bridge" onPress={() => setReview(true)} loading={busy} disabled={!reviewEnabled} />
+          <Button label="Review bridge" onPress={openReview} loading={busy} disabled={!reviewEnabled} />
         </View>
       ) : null}
       {txHash ? <Text style={styles.hash}>Submitted {txHash}</Text> : null}
+      {protectedSheet}
       <ConfirmSheet
         visible={review && Boolean(quote) && reviewEnabled}
         title="Confirm bridge"

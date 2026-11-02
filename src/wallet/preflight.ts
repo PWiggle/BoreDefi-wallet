@@ -69,6 +69,7 @@ export function checkPreflight(input: PreflightInput): PreflightResult {
 export const GAS_UNITS = {
   nativeTransfer: 21_000n,
   erc20Approve: 70_000n,
+  erc20Transfer: 80_000n,
   lidoStake: 120_000n,
   lidoUnstake: 300_000n,
   lidoClaim: 250_000n,

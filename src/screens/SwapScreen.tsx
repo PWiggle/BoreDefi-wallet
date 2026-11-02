@@ -5,6 +5,7 @@ import { useRoute, type RouteProp } from '@react-navigation/native';
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
 import { ConfirmSheet } from '../components/ConfirmSheet';
+import { useProtectedGate } from '../components/useProtectedGate';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { WarningBanner } from '../components/WarningBanner';
 import { Screen } from '../components/Screen';
@@ -24,6 +25,7 @@ import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
 import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
 import { friendlyTxError } from '../wallet/tx-errors';
+import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protected-spend';
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
 import { canReviewSwap, checkSwapPrice, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
 
@@ -88,6 +90,9 @@ export function SwapScreen() {
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const { gate: protectedGate, sheet: protectedSheet } = useProtectedGate(selectedChain.name);
+  // Quote key that passed the ApeCoin (Yuga-protected) guard; confirm refuses any other quote.
+  const [clearedKey, setClearedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const next = tokensForChain(selectedChain.id);
@@ -213,7 +218,36 @@ export function SwapScreen() {
     }
   };
 
+  const protectedFrom = protectedTokenAsset(fromToken);
+
+  const openReview = async () => {
+    if (!quote) {
+      return;
+    }
+    if (protectedFrom) {
+      const spender = quote.approvalAddress ?? quote.transactionRequest.to;
+      if (!spender) {
+        setError('This route has no spender to check. Nothing was sent.');
+        return;
+      }
+      setError(null);
+      const ok = await protectedGate(protectedApproveRequest(fromToken, fromAddress, spender, quote.fromAmount));
+      if (!ok) {
+        setClearedKey(null);
+        setError(`${protectedFrom.name} is protected. The swap was not approved, so nothing was sent.`);
+        return;
+      }
+      setClearedKey(quoteKey);
+    }
+    setReview(true);
+  };
+
   const confirm = async () => {
+    if (protectedFrom && (clearedKey === null || clearedKey !== quoteKey)) {
+      setReview(false);
+      setError(`${protectedFrom.name} is protected. Review the swap again to confirm it.`);
+      return;
+    }
     if (!quote || !reviewEnabled) {
       setReview(false);
       return;
@@ -298,12 +332,13 @@ export function SwapScreen() {
           {priceCheck && !priceCheck.ok ? (
             <WarningBanner title="Price check failed" lines={[priceCheck.message]} danger />
           ) : null}
-          <Button label="Review swap" loading={busy} onPress={() => setReview(true)} disabled={!reviewEnabled} />
+          <Button label="Review swap" loading={busy} onPress={openReview} disabled={!reviewEnabled} />
         </View>
       ) : (
         <Button label="Get best quote" loading={busy} onPress={quoteSwap} disabled={!swapCheck.ok} />
       )}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {protectedSheet}
       <ConfirmSheet
         visible={review && Boolean(quote) && reviewEnabled}
         title="Confirm swap"
