@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 
@@ -28,6 +28,7 @@ import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
 import { friendlyTxError } from '../wallet/tx-errors';
 import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protected-spend';
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
+import { balanceKeyFor, initialSpendView, spendBanner, spendViewReducer } from '../wallet/spend-view';
 import { canReviewSwap, checkSwapPrice, swapBalanceGate, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
 
 function swapStyles({ colors, card, chip, field, spacing }: Theme) {
@@ -81,16 +82,18 @@ export function SwapScreen() {
   const [fromToken, setFromToken] = useState<TokenConfig>(tokens[0]!);
   const [toToken, setToToken] = useState<TokenConfig>(tokens[1] ?? tokens[0]!);
   const [amount, setAmount] = useState('');
-  // Null while loading or after a failed read, so a previous token's balance is never reused.
-  const [balance, setBalance] = useState<bigint | null>(null);
-  // Balance-load problem, kept apart from quote/swap errors so a later successful load clears only this one.
-  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
   const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteKey, setQuoteKey] = useState<string | null>(null);
   const [priceCheck, setPriceCheck] = useState<PriceCheck | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Banner + balance rules live in spend-view.ts (tested): errors clear on chain/token change, a balance is only
+  // used for the chain + token it was read for, a later successful read clears the balance error.
+  const errorKey = `${selectedChain.id}:${fromToken.address}:${toToken.address}`;
+  const balanceKey = balanceKeyFor(selectedChain.id, fromToken.address);
+  const [view, dispatch] = useReducer(spendViewReducer, undefined, () => initialSpendView(errorKey, balanceKey));
+  const { balance, balanceError, error } = view;
+  const setError = (message: string | null) => dispatch({ type: 'error', message });
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -110,8 +113,6 @@ export function SwapScreen() {
     setQuoteKey(null);
     setPriceCheck(null);
     setTxHash(null);
-    // A quote/swap error belongs to the chain it happened on; build 11 kept it on screen for every chain.
-    setError(null);
   }, [route.params?.fromSymbol, selectedChain.id]);
 
   // Any change to the pair invalidates the quote (build 4 kept an ETH→WETH quote after switching to USDT).
@@ -119,8 +120,12 @@ export function SwapScreen() {
     setQuote(null);
     setQuoteKey(null);
     setPriceCheck(null);
-    setError(null);
   }, [fromToken.address, toToken.address]);
+
+  // Must stay before the balance effect: a chain/token change clears the banner and the old balance first.
+  useEffect(() => {
+    dispatch({ type: 'context', errorKey, balanceKey });
+  }, [errorKey, balanceKey]);
 
   useEffect(() => {
     if (toToken.address === fromToken.address) {
@@ -135,18 +140,12 @@ export function SwapScreen() {
     if (!session) {
       return;
     }
-    let live = true;
-    setBalance(null);
-    setBalanceError(null);
-    loadSpendBalance(fromAddress, fromToken, selectedChain.id).then((result) => {
-      if (live) {
-        setBalance(result.balance);
-        setBalanceError(result.error);
-      }
-    });
-    return () => {
-      live = false;
-    };
+    const key = balanceKeyFor(selectedChain.id, fromToken.address);
+    dispatch({ type: 'balance-loading', balanceKey: key });
+    // The reducer drops a result whose key no longer matches (user switched chain/token meanwhile).
+    loadSpendBalance(fromAddress, fromToken, selectedChain.id).then((result) =>
+      dispatch({ type: 'balance', balanceKey: key, result }),
+    );
   }, [fromAddress, fromToken, selectedChain.id, session, txHash]);
 
   useEffect(() => {
@@ -323,7 +322,7 @@ export function SwapScreen() {
   return (
     <Screen title="Swap" subtitle="Best same-chain route via LI.FI (aggregates 1inch, 0x, Kyber, and others).">
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
-      <ErrorBanner message={error ?? balanceError} />
+      <ErrorBanner message={spendBanner(view)} />
       <Text style={styles.label}>From</Text>
       <TokenRow tokens={tokens} selected={fromToken} onSelect={setFromToken} />
       <TextInput

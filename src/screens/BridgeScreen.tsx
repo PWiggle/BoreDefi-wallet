@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Button } from '../components/Button';
@@ -27,6 +27,7 @@ import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protecte
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
 import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
+import { balanceKeyFor, initialSpendView, spendBanner, spendViewReducer } from '../wallet/spend-view';
 import { bridgeQuoteKey, canReviewSwap, checkSwapPrice, swapBalanceGate, type PriceCheck } from '../wallet/swap-guard';
 
 function otherChainId(current: ChainId): ChainId {
@@ -65,16 +66,18 @@ export function BridgeScreen() {
   const [fromToken, setFromToken] = useState<TokenConfig>(fromTokens[0]!);
   const [toToken, setToToken] = useState<TokenConfig>(toTokens[0]!);
   const [amount, setAmount] = useState('');
-  // Null while loading or after a failed read, so a previous token's balance is never reused.
-  const [balance, setBalance] = useState<bigint | null>(null);
-  // Balance-load problem, kept apart from quote/bridge errors so a later successful load clears only this one.
-  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteKey, setQuoteKey] = useState<string | null>(null);
   const [priceCheck, setPriceCheck] = useState<PriceCheck | null>(null);
   const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
   const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Banner + balance rules live in spend-view.ts (tested): errors clear on chain/token change, a balance is only
+  // used for the chain + token it was read for, a later successful read clears the balance error.
+  const errorKey = `${selectedChain.id}>${toChainId}:${fromToken.address}:${toToken.address}`;
+  const balanceKey = balanceKeyFor(selectedChain.id, fromToken.address);
+  const [view, dispatch] = useReducer(spendViewReducer, undefined, () => initialSpendView(errorKey, balanceKey));
+  const { balance, balanceError, error } = view;
+  const setError = (message: string | null) => dispatch({ type: 'error', message });
   const [busy, setBusy] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [review, setReview] = useState(false);
@@ -103,10 +106,10 @@ export function BridgeScreen() {
     setReview(false);
   }, [selectedChain.id, toChainId, fromToken.address, toToken.address, amount]);
 
-  // An error belongs to the chains and tokens it happened on (build 11 kept it on screen after every switch).
+  // Must stay before the balance effect: a chain/token change clears the banner and the old balance first.
   useEffect(() => {
-    setError(null);
-  }, [selectedChain.id, toChainId, fromToken.address, toToken.address]);
+    dispatch({ type: 'context', errorKey, balanceKey });
+  }, [errorKey, balanceKey]);
 
   useEffect(() => {
     if (!session) {
@@ -125,18 +128,12 @@ export function BridgeScreen() {
     if (!session) {
       return;
     }
-    let live = true;
-    setBalance(null);
-    setBalanceError(null);
-    loadSpendBalance(fromAddress, fromToken, selectedChain.id).then((result) => {
-      if (live) {
-        setBalance(result.balance);
-        setBalanceError(result.error);
-      }
-    });
-    return () => {
-      live = false;
-    };
+    const key = balanceKeyFor(selectedChain.id, fromToken.address);
+    dispatch({ type: 'balance-loading', balanceKey: key });
+    // The reducer drops a result whose key no longer matches (user switched chain/token meanwhile).
+    loadSpendBalance(fromAddress, fromToken, selectedChain.id).then((result) =>
+      dispatch({ type: 'balance', balanceKey: key, result }),
+    );
   }, [fromAddress, fromToken, selectedChain.id, session, txHash]);
 
   if (!session) {
@@ -292,7 +289,7 @@ export function BridgeScreen() {
       <Text style={styles.copy}>
         Same-chain quotes stay on Swap. The signed transaction is sent on the source chain.
       </Text>
-      {error ?? balanceError ? <ErrorBanner message={error ?? balanceError} /> : null}
+      {spendBanner(view) ? <ErrorBanner message={spendBanner(view)} /> : null}
       <Text style={styles.label}>From</Text>
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
       <View style={styles.row}>

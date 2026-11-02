@@ -14,6 +14,7 @@ import { toUserError } from './tx-errors';
 const providers = new Map<ChainId, AbstractProvider>();
 
 /**
+ * DO NOT REVERT (locked by swap-regression.test.ts; cause of the build 11 Swap "Network problem" banner).
  * One JSON-RPC request per HTTP call. ethers batches calls made in the same tick by default, and free public
  * RPCs cap batches (drpc's free plan answers HTTP 500 to a batch of more than 3), which ethers reports as
  * SERVER_ERROR ("Network problem").
@@ -114,6 +115,7 @@ function withAttemptTimeout<T>(run: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
+ * DO NOT replace with a bare getProvider(chainId) read (locked by swap-regression.test.ts).
  * Runs a read-only call on the chain's FallbackProvider, then on each public endpoint in order.
  * The first success wins. Deterministic input errors are thrown at once instead of retried.
  *
