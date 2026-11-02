@@ -7,7 +7,7 @@ import { FallbackProvider, JsonRpcProvider } from 'ethers';
 
 import { fetchUsdPrices } from './markets';
 import { readWithFallback, RPC_PROVIDER_OPTIONS } from './rpc';
-import { fetchSwapQuote, fetchWithRetry, SWAP_STEPS } from './swap';
+import { fetchBridgeQuote, fetchSwapQuote, fetchWithRetry, loadSpendBalance, SWAP_STEPS } from './swap';
 import { checkSwapPrice, swapBalanceGate, UNVERIFIED_PRICE_MESSAGE } from './swap-guard';
 import { tokensForChain } from './tokens';
 import { friendlyTxError } from './tx-errors';
@@ -226,4 +226,46 @@ test('swapBalanceGate: no pre-flight on an unknown balance; a loaded balance pas
   assert.deepEqual(swapBalanceGate(null, null), { ok: false, reason: 'loading', message: 'Checking your balance…' });
   assert.equal(swapBalanceGate(null, 'Network problem while loading your ETH balance.')?.message, 'Your balance has not loaded yet.');
   assert.equal(swapBalanceGate(0n, null), null);
+});
+
+test('loadSpendBalance: success returns the balance and no error (clears an earlier error)', async () => {
+  const result = await loadSpendBalance(OWNER, USDC, 1, { read: async () => 5_000_000n, sleep: async () => {} });
+  assert.deepEqual(result, { balance: 5_000_000n, error: null });
+});
+
+test('loadSpendBalance: one transient failure is retried', async () => {
+  let calls = 0;
+  const result = await loadSpendBalance(OWNER, ETH, 8453, {
+    read: async () => {
+      calls += 1;
+      if (calls === 1) throw Object.assign(new Error('server error'), { code: 'SERVER_ERROR' });
+      return 1n;
+    },
+    sleep: async () => {},
+  });
+  assert.deepEqual(result, { balance: 1n, error: null });
+  assert.equal(calls, 2);
+});
+
+test('loadSpendBalance: a lasting failure leaves balance unknown and names the step', async () => {
+  const result = await loadSpendBalance(OWNER, USDC, 1, {
+    read: async () => { throw new TypeError('Network request failed'); },
+    sleep: async () => {},
+  });
+  assert.equal(result.balance, null);
+  assert.equal(result.error, 'Network problem while loading your USDC balance. Check your connection and try again.');
+});
+
+test('fetchBridgeQuote: a quote that cannot be fetched says the bridge quote step failed (retried once)', async () => {
+  const m = mockGlobalFetch(() => new TypeError('Network request failed'));
+  const baseUsdc = tokensForChain(8453).find((t) => t.symbol === 'USDC')!;
+  try {
+    await assert.rejects(
+      fetchBridgeQuote({ fromChainId: 1, toChainId: 8453, fromToken: USDC, toToken: baseUsdc, fromAmount: 1_000_000n, fromAddress: OWNER }),
+      /Network problem while getting a bridge quote from LI\.FI/,
+    );
+    assert.equal(m.calls.length, 2);
+  } finally {
+    m.restore();
+  }
 });

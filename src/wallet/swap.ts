@@ -1,10 +1,10 @@
 import { Contract, Interface, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
-import { toUserError, UserFacingError } from './tx-errors';
+import { friendlyTxError, toUserError, UserFacingError } from './tx-errors';
 import { isWrapPair, isWrapperRoute, sameTokenAddress } from './swap-guard';
 import { type ChainId } from './chains';
-import { connectedWallet, getProvider, readWithFallback } from './rpc';
+import { connectedWallet, getProvider, readWithFallback, retryRead } from './rpc';
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
 
 const QUOTE_URL = 'https://li.quest/v1/quote';
@@ -219,6 +219,7 @@ export async function fetchSwapQuote(input: {
 /** Step names shown in Swap errors ("Network problem while …"). */
 export const SWAP_STEPS = {
   quote: 'getting a swap quote from LI.FI',
+  bridgeQuote: 'getting a bridge quote from LI.FI',
   balance: (symbol: string) => `loading your ${symbol} balance`,
   prices: 'checking the market price',
 } as const;
@@ -260,6 +261,34 @@ export async function fetchTokenBalance(
     chainId,
     (provider) => new Contract(token.address, ERC20_ABI, provider).balanceOf(owner) as Promise<bigint>,
   );
+}
+
+export type SpendBalanceLoad = { balance: bigint; error: null } | { balance: null; error: string };
+
+/**
+ * Balance of the token a Swap or Bridge would spend, for the screen: retried once, and on failure a message that
+ * names the step ("Network problem while loading your USDC balance…"). The screen shows "…" and blocks the
+ * pre-flight while balance is null, and a later successful load clears the error.
+ */
+export async function loadSpendBalance(
+  owner: string,
+  token: TokenConfig,
+  chainId: ChainId,
+  options: { read?: typeof fetchTokenBalance; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<SpendBalanceLoad> {
+  const read = options.read ?? fetchTokenBalance;
+  try {
+    return { balance: await retryRead(() => read(owner, token, chainId), { sleep: options.sleep }), error: null };
+  } catch (error) {
+    return {
+      balance: null,
+      error: friendlyTxError(error, {
+        chainId,
+        step: SWAP_STEPS.balance(token.symbol),
+        fallback: `Could not load your ${token.symbol} balance. Try again in a moment.`,
+      }),
+    };
+  }
 }
 
 export type ExternalTxSender = (tx: {
@@ -373,15 +402,21 @@ export async function fetchBridgeQuote(input: {
   url.searchParams.set('integrator', 'boredefi');
 
   try {
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
-    });
+    const response = await fetchWithRetry(() =>
+      fetch(url.toString(), {
+        headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
+      }),
+    );
     const payload = (await response.json()) as LiFiQuote;
     if (!response.ok) {
       throw new UserFacingError(liFiFailureMessage(response.status, payload.message));
     }
     return parseLiFiQuote(payload, input.fromChainId, input.toChainId, { from: input.fromToken, to: input.toToken });
   } catch (error) {
-    throw toUserError('Bridge quote failed', error, { chainId: input.fromChainId, fallback: NO_ROUTE_MESSAGE });
+    throw toUserError('Bridge quote failed', error, {
+      chainId: input.fromChainId,
+      fallback: NO_ROUTE_MESSAGE,
+      step: SWAP_STEPS.bridgeQuote,
+    });
   }
 }

@@ -16,8 +16,9 @@ import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
   ensureSpendAllowance,
   fetchBridgeQuote,
-  fetchTokenBalance,
+  loadSpendBalance,
   sendSwapTransaction,
+  SWAP_STEPS,
   type SwapQuote,
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
@@ -26,7 +27,7 @@ import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protecte
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
 import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
-import { bridgeQuoteKey, canReviewSwap, checkSwapPrice, type PriceCheck } from '../wallet/swap-guard';
+import { bridgeQuoteKey, canReviewSwap, checkSwapPrice, swapBalanceGate, type PriceCheck } from '../wallet/swap-guard';
 
 function otherChainId(current: ChainId): ChainId {
   return CHAIN_LIST.find((chain) => chain.id !== current)?.id ?? current;
@@ -64,7 +65,10 @@ export function BridgeScreen() {
   const [fromToken, setFromToken] = useState<TokenConfig>(fromTokens[0]!);
   const [toToken, setToToken] = useState<TokenConfig>(toTokens[0]!);
   const [amount, setAmount] = useState('');
-  const [balance, setBalance] = useState(0n);
+  // Null while loading or after a failed read, so a previous token's balance is never reused.
+  const [balance, setBalance] = useState<bigint | null>(null);
+  // Balance-load problem, kept apart from quote/bridge errors so a later successful load clears only this one.
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteKey, setQuoteKey] = useState<string | null>(null);
   const [priceCheck, setPriceCheck] = useState<PriceCheck | null>(null);
@@ -99,6 +103,11 @@ export function BridgeScreen() {
     setReview(false);
   }, [selectedChain.id, toChainId, fromToken.address, toToken.address, amount]);
 
+  // An error belongs to the chains and tokens it happened on (build 11 kept it on screen after every switch).
+  useEffect(() => {
+    setError(null);
+  }, [selectedChain.id, toChainId, fromToken.address, toToken.address]);
+
   useEffect(() => {
     if (!session) {
       return;
@@ -116,10 +125,19 @@ export function BridgeScreen() {
     if (!session) {
       return;
     }
-    fetchTokenBalance(fromAddress, fromToken, selectedChain.id)
-      .then(setBalance)
-      .catch((err) => setError(friendlyTxError(err, { fallback: 'Balance failed.' })));
-  }, [fromAddress, fromToken, selectedChain.id, session]);
+    let live = true;
+    setBalance(null);
+    setBalanceError(null);
+    loadSpendBalance(fromAddress, fromToken, selectedChain.id).then((result) => {
+      if (live) {
+        setBalance(result.balance);
+        setBalanceError(result.error);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [fromAddress, fromToken, selectedChain.id, session, txHash]);
 
   if (!session) {
     return null;
@@ -133,10 +151,10 @@ export function BridgeScreen() {
   }
   const bridgeGasUnits =
     (quote?.transactionRequest.gasLimit ?? GAS_UNITS.bridge) + (fromToken.native ? 0n : GAS_UNITS.erc20Approve);
-  const bridgeCheck = checkPreflight({
+  const bridgeCheck = swapBalanceGate(balance, balanceError) ?? checkPreflight({
     chainId: selectedChain.id,
     amount: typedUnits,
-    spendBalance: balance,
+    spendBalance: balance ?? 0n,
     spendSymbol: fromToken.symbol,
     nativeBalance,
     feeWei: maxFeePerGas === null ? null : estimateFeeWei(selectedChain.id, bridgeGasUnits, maxFeePerGas),
@@ -189,7 +207,9 @@ export function BridgeScreen() {
     } catch (err) {
       setQuote(null);
       setQuoteKey(null);
-      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'No route available' }));
+      setError(
+        friendlyTxError(err, { chainId: selectedChain.id, step: SWAP_STEPS.bridgeQuote, fallback: 'No route available' }),
+      );
     } finally {
       setBusy(false);
     }
@@ -272,7 +292,7 @@ export function BridgeScreen() {
       <Text style={styles.copy}>
         Same-chain quotes stay on Swap. The signed transaction is sent on the source chain.
       </Text>
-      {error ? <ErrorBanner message={error} /> : null}
+      {error ?? balanceError ? <ErrorBanner message={error ?? balanceError} /> : null}
       <Text style={styles.label}>From</Text>
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
       <View style={styles.row}>
@@ -308,7 +328,7 @@ export function BridgeScreen() {
         style={styles.input}
       />
       <Text style={styles.meta}>
-        Balance {formatTokenAmount(balance, fromToken.decimals)} {fromToken.symbol}
+        Balance {balance === null ? '…' : formatTokenAmount(balance, fromToken.decimals)} {fromToken.symbol}
       </Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       <Button label="Get quote" onPress={quoteBridge} loading={busy} disabled={!bridgeCheck.ok} />

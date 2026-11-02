@@ -17,14 +17,14 @@ import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
   ensureSpendAllowance,
   fetchSwapQuote,
-  fetchTokenBalance,
+  loadSpendBalance,
   sendSwapTransaction,
   SWAP_STEPS,
   type SwapQuote,
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
-import { fetchBalance, fetchMaxFeePerGas, retryRead } from '../wallet/rpc';
+import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
 import { friendlyTxError } from '../wallet/tx-errors';
 import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protected-spend';
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
@@ -138,24 +138,12 @@ export function SwapScreen() {
     let live = true;
     setBalance(null);
     setBalanceError(null);
-    retryRead(() => fetchTokenBalance(fromAddress, fromToken, selectedChain.id))
-      .then((value) => {
-        if (live) {
-          setBalance(value);
-          setBalanceError(null);
-        }
-      })
-      .catch((err) => {
-        if (live) {
-          setBalanceError(
-            friendlyTxError(err, {
-              chainId: selectedChain.id,
-              step: SWAP_STEPS.balance(fromToken.symbol),
-              fallback: `Could not load your ${fromToken.symbol} balance. Try again in a moment.`,
-            }),
-          );
-        }
-      });
+    loadSpendBalance(fromAddress, fromToken, selectedChain.id).then((result) => {
+      if (live) {
+        setBalance(result.balance);
+        setBalanceError(result.error);
+      }
+    });
     return () => {
       live = false;
     };
