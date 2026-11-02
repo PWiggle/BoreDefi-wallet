@@ -4,7 +4,7 @@ export type DappBookmark = {
   blurb: string;
 };
 
-export const CONNECT_DEMO_URL = 'https://pwiggle.github.io/BoreDefi-wallet/connect/';
+export const CONNECT_DEMO_URL = 'https://www.boredefi.com/connect';
 
 export const DAPP_BOOKMARKS: DappBookmark[] = [
   { name: 'Connect', url: CONNECT_DEMO_URL, blurb: 'BoreDefi Connect demo' },

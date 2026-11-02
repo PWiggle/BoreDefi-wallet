@@ -1,5 +1,5 @@
 const TEST_MESSAGE = 'Hello from BoreDefi';
-const PROJECT_ID = 'c884e13aaa967e608946ee76f636f27b';
+const PROJECT_ID = 'bbd12489086c59bfdb9e0a49fc05c22f';
 const CHAINS = {
   1: { name: 'Ethereum', symbol: 'ETH' },
   10: { name: 'Optimism', symbol: 'ETH' },
@@ -194,8 +194,8 @@ async function connectWalletConnect() {
     metadata: {
       name: 'BoreDefi Connect',
       description: 'TEST-ONLY Connect page for BoreDefi Wallet',
-      url: 'https://pwiggle.github.io/BoreDefi-wallet/connect/',
-      icons: ['https://pwiggle.github.io/BoreDefi-wallet/connect/mark.png'],
+      url: 'https://www.boredefi.com/connect',
+      icons: ['https://www.boredefi.com/connect/mark.png'],
     },
     rpcMap: {
       1: 'https://ethereum-rpc.publicnode.com',

@@ -29,7 +29,7 @@ test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(classifyBrowserMethod('wallet_revokePermissions'), 'disconnect');
   assert.equal(classifyBrowserMethod('foo'), 'unsupported');
   assert.equal(DEFAULT_BROWSER_URL, 'https://app.uniswap.org');
-  assert.equal(CONNECT_DEMO_URL, 'https://pwiggle.github.io/BoreDefi-wallet/connect/');
+  assert.equal(CONNECT_DEMO_URL, 'https://www.boredefi.com/connect');
   assert.equal(
     DAPP_BOOKMARKS.some((item) => item.name === 'Connect' && item.url === CONNECT_DEMO_URL),
     true,
