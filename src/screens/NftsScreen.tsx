@@ -16,8 +16,23 @@ import type { MainNavigation } from '../navigation';
 import { checksumAddress } from '../wallet/address-safety';
 import { CHAINS } from '../wallet/chains';
 import { shortenAddress } from '../wallet/format';
-import { safeNftImageUrl } from '../wallet/nft-media';
-import { classifyNftSpam, nftStorageKey, type NftSpamAssessment } from '../wallet/nft-spam';
+import { protectedNftImageUrl, safeNftImageUrl } from '../wallet/nft-media';
+import {
+  classifyNftSpam,
+  displayCollectionName,
+  displayNftName,
+  nftStorageKey,
+  type NftSpamAssessment,
+} from '../wallet/nft-spam';
+import { protectedAssetFor } from '../wallet/yuga-allowlist';
+
+/** Protected collections only show content-addressed IPFS images; everything else uses the normal filter. */
+function nftImage(item: NftItem): string | undefined {
+  if (protectedAssetFor(item.chainId, item.contract)) {
+    return protectedNftImageUrl(item) ?? undefined;
+  }
+  return item.imageUrl;
+}
 import { fetchNfts, groupNftsByCollection, mergeNftLists, nftAutodetectLabel, type NftItem } from '../wallet/nfts';
 import {
   loadHiddenNfts,
@@ -98,6 +113,16 @@ function nftStyles({ colors, type, card, radius, spacing }: Theme) {
       fontWeight: '700' as const,
     },
     tileMeta: type.meta,
+    badgeVerified: {
+      color: colors.accent,
+      fontSize: 11,
+      fontWeight: '900' as const,
+    },
+    badgeFake: {
+      color: colors.danger,
+      fontSize: 11,
+      fontWeight: '900' as const,
+    },
     pickerRow: {
       alignItems: 'center' as const,
       flexDirection: 'row' as const,
@@ -344,7 +369,10 @@ export function NftsScreen() {
       ) : null}
       {groups.map((group) => (
         <View key={`${group.contract}`} style={styles.group}>
-          <Text style={styles.groupTitle}>{group.collection}</Text>
+          <Text style={styles.groupTitle}>
+            {group.entries[0] ? displayCollectionName(group.entries[0].item) : group.collection}
+            {group.entries[0]?.risk.verified ? '  ✓ Verified' : ''}
+          </Text>
           <View style={styles.grid}>
             {group.entries.map((entry) => (
               <NftTile key={nftStorageKey(entry.item)} entry={entry} onPress={() => setSelected(entry)} />
@@ -368,7 +396,10 @@ export function NftsScreen() {
         {showHidden
           ? hiddenGroups.map((group) => (
               <View key={`hidden-${group.contract}`} style={styles.group}>
-                <Text style={styles.groupTitle}>{group.collection}</Text>
+                <Text style={styles.groupTitle}>
+                  {group.collection}
+                  {group.entries[0]?.risk.fake ? `  ⚠ ${group.entries[0].risk.label}` : ''}
+                </Text>
                 <View style={styles.grid}>
                   {group.entries.map((entry) => (
                     <NftTile
@@ -397,13 +428,14 @@ export function NftsScreen() {
                   onPress={() => openSend(entry.item)}
                   style={styles.pickerRow}
                 >
-                  <SafeNftImage url={entry.item.imageUrl} style={styles.pickerThumb} />
+                  <SafeNftImage url={nftImage(entry.item)} style={styles.pickerThumb} />
                   <View style={styles.pickerCopy}>
                     <Text numberOfLines={1} style={styles.tileName}>
-                      {entry.item.name}
+                      {displayNftName(entry.item)}
                     </Text>
                     <Text numberOfLines={1} style={styles.meta}>
-                      {entry.item.collection} · #{entry.item.tokenId}
+                      {displayCollectionName(entry.item)} · #{entry.item.tokenId}
+                      {entry.risk.verified ? ' · ✓ Verified' : ''}
                     </Text>
                   </View>
                 </Pressable>
@@ -418,14 +450,20 @@ export function NftsScreen() {
           <View style={styles.sheet}>
             {selected ? (
               <ScrollView contentContainerStyle={styles.sheetBody}>
-                <SafeNftImage url={selected.item.imageUrl} style={styles.hero} />
-                {!safeNftImageUrl(selected.item.imageUrl) ? (
+                <SafeNftImage url={nftImage(selected.item)} style={styles.hero} />
+                {!safeNftImageUrl(nftImage(selected.item)) ? (
                   <Text style={styles.warn}>
-                    Image hidden. Only https / IPFS-gateway images are shown. No HTML or SVG documents.
+                    {selected.risk.verified
+                      ? 'Image hidden. Protected collections only show images stored on IPFS by content hash, so a metadata server cannot swap in fake text.'
+                      : 'Image hidden. Only https / IPFS-gateway images are shown. No HTML or SVG documents.'}
                   </Text>
                 ) : null}
-                <Text style={styles.name}>{selected.item.name}</Text>
-                <Text style={styles.collection}>{selected.item.collection}</Text>
+                {selected.risk.verified ? (
+                  <Text style={styles.badgeVerified}>✓ Verified · official contract · protected collection</Text>
+                ) : null}
+                {selected.risk.fake ? <Text style={styles.badgeFake}>⚠ {selected.risk.label}</Text> : null}
+                <Text style={styles.name}>{displayNftName(selected.item)}</Text>
+                <Text style={styles.collection}>{displayCollectionName(selected.item)}</Text>
                 <Text style={styles.meta}>Token id #{selected.item.tokenId} · {selected.item.standard}</Text>
                 <Pressable onPress={() => copyContract(selected.item.contract)}>
                   <Text style={styles.contract}>
@@ -452,7 +490,15 @@ export function NftsScreen() {
                         'This is in Hidden / possible spam. Show anyway first. Do not send a hidden airdrop until you confirm you own it.',
                       ]}
                     />
-                    <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
+                    {selected.risk.fake ? (
+                      <WarningBanner
+                        danger
+                        title={selected.risk.label ?? 'Fake'}
+                        lines={['This copies a Yuga Labs / Bored Ape name on a contract that is not official. It stays hidden. Do not interact with it.']}
+                      />
+                    ) : (
+                      <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
+                    )}
                   </>
                 ) : (
                   <>
@@ -481,9 +527,11 @@ function NftTile({
   const styles = useThemedStyles(nftStyles);
   return (
     <Pressable onPress={onPress} style={[styles.tile, dim && styles.tileDim]}>
-      <SafeNftImage url={entry.item.imageUrl} style={styles.thumb} />
+      <SafeNftImage url={nftImage(entry.item)} style={styles.thumb} />
+      {entry.risk.verified ? <Text style={styles.badgeVerified}>✓ Verified</Text> : null}
+      {entry.risk.fake ? <Text style={styles.badgeFake}>⚠ Fake</Text> : null}
       <Text numberOfLines={1} style={styles.tileName}>
-        {entry.item.name}
+        {displayNftName(entry.item)}
       </Text>
       <Text numberOfLines={1} style={styles.tileMeta}>
         #{entry.item.tokenId}

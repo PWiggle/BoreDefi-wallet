@@ -15,6 +15,7 @@ import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webvie
 import { Button } from '../components/Button';
 import { CoinGeckoWebEmbed } from '../components/CoinGeckoWebEmbed';
 import { ConfirmSheet } from '../components/ConfirmSheet';
+import { ProtectedGuardSheet } from '../components/ProtectedGuardSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { InAppBrowserView } from '../components/InAppBrowserView';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
@@ -35,6 +36,8 @@ import { formatNative } from '../wallet/format';
 import { sendRpc } from '../wallet/rpc';
 import { parseSwitchChainId } from '../wallet/wc';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
+import type { ProtectedVerdict } from '../wallet/protected-guard';
+import { evaluateProtectedRequest } from '../wallet/protected-runtime';
 
 type BrowserConfirm = {
   title: string;
@@ -112,6 +115,16 @@ export function BrowserScreen() {
   const [connectedOrigin, setConnectedOrigin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
+
+  const [pendingProtected, setPendingProtected] = useState<{
+    verdict: ProtectedVerdict;
+    resolve: (clearance: string | null) => void;
+  } | null>(null);
+
+  const requestProtected = (verdict: ProtectedVerdict): Promise<string | null> =>
+    new Promise((resolve) => {
+      setPendingProtected({ verdict, resolve });
+    });
 
   const requestConfirm = (spec: Omit<BrowserConfirm, 'resolve'>): Promise<boolean> =>
     new Promise((resolve) => {
@@ -247,8 +260,22 @@ export function BrowserScreen() {
       if (kind === 'sign') {
         const tx = params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
         const isSend = method === 'eth_sendTransaction' || method === 'eth_signTransaction';
+        const verdict = await evaluateProtectedRequest({
+          method,
+          params,
+          chainId: selectedChain.id,
+          owner: session.address,
+        });
+        let clearance: string | null = null;
+        if (verdict?.protected) {
+          clearance = await requestProtected(verdict);
+          if (!clearance) {
+            resolve(id, null, 'User rejected.');
+            return;
+          }
+        }
         const risk = inspectDappApproval(method, params);
-        const approved = await requestConfirm({
+        const approved = clearance !== null || await requestConfirm({
           title: risk?.danger ? 'Danger: collection-wide approval' : 'Approve request',
           network: selectedChain.name,
           from: tx?.from ?? session.address,
@@ -280,6 +307,7 @@ export function BrowserScreen() {
           method,
           params,
           chainId: selectedChain.id,
+          clearance,
         });
         if (result.kind === 'switch') {
           await setSelectedChain(result.chainId);
@@ -351,6 +379,21 @@ export function BrowserScreen() {
           onError={(message) => setError(message)}
         />
       )}
+      {pendingProtected ? (
+        <ProtectedGuardSheet
+          verdict={pendingProtected.verdict}
+          network={selectedChain.name}
+          dapp={connectedOrigin ?? url}
+          onApprove={(clearance) => {
+            pendingProtected.resolve(clearance);
+            setPendingProtected(null);
+          }}
+          onReject={() => {
+            pendingProtected.resolve(null);
+            setPendingProtected(null);
+          }}
+        />
+      ) : null}
       <ConfirmSheet
         visible={Boolean(pendingConfirm)}
         title={pendingConfirm?.title ?? ''}

@@ -2,6 +2,8 @@ import { getAddress } from 'ethers';
 
 import { logger } from '../logger';
 import { type ChainId } from './chains';
+import { assertProtectedClearance } from './protected-guard';
+import { evaluateProtectedRequest } from './protected-runtime';
 import { connectedWallet } from './rpc';
 import { hexToUtf8, parseSwitchChainId, pickSignMessage } from './wc';
 
@@ -33,8 +35,15 @@ export async function handleWalletConnectRequest(input: {
   method: string;
   params: unknown[];
   chainId: ChainId;
+  /** Fingerprint returned by the red protected-asset warning after typed confirm + re-auth. */
+  clearance?: string | null;
 }): Promise<WalletConnectRequestResult> {
   const { mnemonic, address, method, params, chainId } = input;
+  // Last line of defense: recompute the Yuga / BAYC guard right before the key is used.
+  const verdict = await evaluateProtectedRequest({ method, params, chainId, owner: address });
+  if (verdict) {
+    assertProtectedClearance(verdict, input.clearance);
+  }
   const wallet = await connectedWallet(mnemonic, chainId);
 
   switch (method) {

@@ -29,6 +29,7 @@ export type MainStackParamList = {
   NftReceive: undefined;
   NftImport: undefined;
   WalletConnect: { uri?: string };
+  ProtectedCollections: undefined;
 };
 
 export type MainNavigation = CompositeNavigationProp<

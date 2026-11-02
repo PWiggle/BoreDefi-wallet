@@ -25,6 +25,8 @@ export type NftItem = {
   name: string;
   collection: string;
   imageUrl?: string;
+  /** The token's own image URI from metadata (ipfs://…), before any CDN cache. Used for protected collections. */
+  imageOriginal?: string;
 };
 
 type BlockscoutNft = {
@@ -101,6 +103,7 @@ export function parseBlockscoutNfts(items: BlockscoutNft[], chainId: ChainId): N
       name: item.metadata?.name ?? `#${tokenId}`,
       collection: item.token?.name ?? 'NFT',
       imageUrl: item.image_url ?? item.metadata?.image,
+      ...((item.metadata?.image ?? item.image_url) ? { imageOriginal: item.metadata?.image ?? item.image_url } : {}),
     });
   }
   return parsed;

@@ -96,6 +96,11 @@ type WalletContextValue = {
   revealMnemonic: (pin: string) => Promise<string | null>;
   revealWithBiometrics: () => Promise<string | null>;
   resetWallet: (pin: string) => Promise<boolean>;
+  /**
+   * Fresh re-authentication right at signing time, even when the wallet is already unlocked.
+   * With a PIN it verifies the PIN (lockout rules apply); without one it asks for biometrics.
+   */
+  reauthenticate: (input: { pin?: string; reason: string }) => Promise<boolean>;
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -562,6 +567,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return true;
   }, [assertPinAvailable, notePinFailure, persistSettings]);
 
+  const reauthenticate = useCallback(
+    async ({ pin, reason }: { pin?: string; reason: string }) => {
+      if (!session) {
+        return false;
+      }
+      if (pin !== undefined) {
+        if (!assertPinAvailable()) {
+          return false;
+        }
+        const ok = await verifyPin(pin);
+        if (!ok) {
+          await notePinFailure();
+          return false;
+        }
+        await notePinSuccess();
+        return true;
+      }
+      if (!settingsRef.current.biometricsEnabled) {
+        return false;
+      }
+      return authenticateBiometrics(reason);
+    },
+    [assertPinAvailable, notePinFailure, notePinSuccess, session],
+  );
+
   const value = useMemo<WalletContextValue>(
     () => ({
       phase,
@@ -591,8 +621,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       revealMnemonic,
       revealWithBiometrics,
       resetWallet,
+      reauthenticate,
     }),
     [
+      reauthenticate,
       biometricsReady,
       cancelOnboarding,
       changePin,

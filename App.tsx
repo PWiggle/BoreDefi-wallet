@@ -24,6 +24,7 @@ import { LedgerScreen } from './src/screens/LedgerScreen';
 import { NftImportScreen } from './src/screens/NftImportScreen';
 import { NftReceiveScreen } from './src/screens/NftReceiveScreen';
 import { NftSendScreen } from './src/screens/NftSendScreen';
+import { ProtectedCollectionsScreen } from './src/screens/ProtectedCollectionsScreen';
 import { ReceiveScreen } from './src/screens/ReceiveScreen';
 import { ResetWalletScreen } from './src/screens/ResetWalletScreen';
 import { RevealSeedScreen } from './src/screens/RevealSeedScreen';
@@ -129,6 +130,11 @@ function RootNavigator() {
         <MainStack.Screen name="NftReceive" component={NftReceiveScreen} options={{ title: 'Receive NFT' }} />
         <MainStack.Screen name="NftImport" component={NftImportScreen} options={{ title: 'Import NFT' }} />
         <MainStack.Screen name="WalletConnect" component={WalletConnectScreen} options={{ title: 'WalletConnect' }} />
+        <MainStack.Screen
+          name="ProtectedCollections"
+          component={ProtectedCollectionsScreen}
+          options={{ title: 'Protected collections' }}
+        />
         <MainStack.Screen name="Activity" component={ActivityScreen} />
         <MainStack.Screen
           name="RevealSeed"

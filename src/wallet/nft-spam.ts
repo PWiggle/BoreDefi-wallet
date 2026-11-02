@@ -2,21 +2,23 @@ import { getAddress, isAddress } from 'ethers';
 
 import { safeNftImageUrl } from './nft-media';
 import { type NftItem } from './nfts';
+import {
+  FAKE_LABEL,
+  protectedAssetFor,
+  yugaLookalikeMatch,
+  type ProtectedAsset,
+} from './yuga-allowlist';
 
 type FamousCollection = {
   aliases: string[];
   contracts: string[];
 };
 
+/**
+ * Other famous (non-Yuga) collections. Every Yuga Labs / BAYC contract lives in yuga-allowlist.ts and is
+ * matched by address there, with a stricter lookalike check.
+ */
 export const FAMOUS: FamousCollection[] = [
-  {
-    aliases: ['bored ape', 'bored ape yacht', 'bayc', 'boredapeyachtclub'],
-    contracts: ['0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D'],
-  },
-  {
-    aliases: ['mutant ape', 'mayc', 'mutantape'],
-    contracts: ['0x60E4d786628Fea6478F785A6d7e704777c86a7c6'],
-  },
   {
     aliases: ['azuki'],
     contracts: ['0xED5AF388653567Af2F388E6224dC7C4b3241C544'],
@@ -28,10 +30,6 @@ export const FAMOUS: FamousCollection[] = [
   {
     aliases: ['lil pudgy', 'lil pudgys'],
     contracts: ['0x524cAB2ec69124574082676e6F654a18df49A048'],
-  },
-  {
-    aliases: ['cryptopunk', 'crypto punk', 'cryptopunks'],
-    contracts: ['0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB'],
   },
   {
     aliases: ['doodles', 'doodle'],
@@ -58,6 +56,13 @@ export type NftSpamAssessment = {
   reasons: string[];
   impersonation: boolean;
   canonical: boolean;
+  /** Official Yuga Labs / BAYC contract (badge comes only from chain + address). */
+  verified: boolean;
+  /** Name looks like a Yuga / BAYC brand but the contract is not on the allowlist. */
+  fake: boolean;
+  /** Short label for the tile / sheet: 'Verified', 'Fake: not the official contract', or null. */
+  label: string | null;
+  protectedAsset: ProtectedAsset | null;
 };
 
 export function nftStorageKey(item: Pick<NftItem, 'chainId' | 'contract' | 'tokenId'>): string {
@@ -74,10 +79,16 @@ function checksumSet(addresses: string[]): Set<string> {
   );
 }
 
-export function famousMatch(name: string, collection: string, contract: string): {
+export function famousMatch(name: string, collection: string, contract: string, chainId = 1): {
   impersonation: boolean;
   canonical: boolean;
 } {
+  if (protectedAssetFor(chainId, contract)) {
+    return { impersonation: false, canonical: true };
+  }
+  if (yugaLookalikeMatch(name, collection)) {
+    return { impersonation: true, canonical: false };
+  }
   const haystack = `${normalizeName(name)} ${normalizeName(collection)}`;
   const checksum = isAddress(contract) ? getAddress(contract) : contract;
   for (const famous of FAMOUS) {
@@ -95,12 +106,30 @@ export function famousMatch(name: string, collection: string, contract: string):
 }
 
 export function classifyNftSpam(item: NftItem, revealed: ReadonlySet<string>): NftSpamAssessment {
+  const asset = protectedAssetFor(item.chainId, item.contract);
+  if (asset && asset.standard !== 'ERC-20') {
+    // Verified by address. Never hidden as spam, whatever the metadata says.
+    return {
+      hidden: false,
+      reasons: [],
+      impersonation: false,
+      canonical: true,
+      verified: true,
+      fake: false,
+      label: 'Verified',
+      protectedAsset: asset,
+    };
+  }
+
   const reasons: string[] = [];
   const image = safeNftImageUrl(item.imageUrl);
   const collection = item.collection.trim() || 'NFT';
-  const fame = famousMatch(item.name, collection, item.contract);
+  const yugaFake = yugaLookalikeMatch(item.name, item.collection);
+  const fame = yugaFake ? { impersonation: true, canonical: false } : famousMatch(item.name, collection, item.contract);
 
-  if (fame.impersonation) {
+  if (yugaFake) {
+    reasons.push(`${FAKE_LABEL}. Its name looks like a Yuga Labs / Bored Ape collection, but this contract is not on the verified list.`);
+  } else if (fame.impersonation) {
     reasons.push('Name looks like a famous collection, but the contract is not the canonical one.');
   }
   if (!image) {
@@ -113,11 +142,36 @@ export function classifyNftSpam(item: NftItem, revealed: ReadonlySet<string>): N
   }
 
   const key = nftStorageKey(item);
-  const hidden = reasons.length > 0 && !revealed.has(key);
+  // A Yuga lookalike stays hidden even after "Show anyway" was tapped before this check existed.
+  const hidden = yugaFake ? true : reasons.length > 0 && !revealed.has(key);
   return {
     hidden,
     reasons,
     impersonation: fame.impersonation,
     canonical: fame.canonical,
+    verified: false,
+    fake: Boolean(yugaFake),
+    label: yugaFake ? FAKE_LABEL : null,
+    protectedAsset: null,
   };
+}
+
+/**
+ * The name to show. For a protected collection it is always the verified name plus the token id;
+ * tokenURI / marketplace metadata names are never shown over it.
+ */
+export function displayNftName(item: Pick<NftItem, 'chainId' | 'contract' | 'tokenId' | 'name'>): string {
+  const asset = protectedAssetFor(item.chainId, item.contract);
+  if (asset && asset.standard !== 'ERC-20') {
+    return `${asset.name} #${item.tokenId}`;
+  }
+  return item.name;
+}
+
+export function displayCollectionName(item: Pick<NftItem, 'chainId' | 'contract' | 'collection'>): string {
+  const asset = protectedAssetFor(item.chainId, item.contract);
+  if (asset && asset.standard !== 'ERC-20') {
+    return asset.name;
+  }
+  return item.collection.trim() || 'Collection';
 }

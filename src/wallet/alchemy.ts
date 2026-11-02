@@ -96,6 +96,7 @@ export function parseAlchemyNfts(items: AlchemyNft[], chainId: ChainId): NftItem
       name: item.name ?? item.raw?.metadata?.name ?? `#${tokenId}`,
       collection: item.contract?.name ?? item.contract?.openSeaMetadata?.collectionName ?? 'NFT',
       imageUrl: item.image?.cachedUrl ?? item.image?.originalUrl ?? item.raw?.metadata?.image,
+      ...((item.raw?.metadata?.image ?? item.image?.originalUrl) ? { imageOriginal: item.raw?.metadata?.image ?? item.image?.originalUrl } : {}),
     });
   }
   return out;

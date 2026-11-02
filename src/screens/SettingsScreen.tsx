@@ -143,6 +143,11 @@ export function SettingsScreen() {
         />
       </View>
       <SettingsRow
+        label="Protected collections"
+        detail="Yuga Labs / BAYC / ApeCoin · approvals, revoke, address book"
+        onPress={() => navigation.navigate('ProtectedCollections')}
+      />
+      <SettingsRow
         label="Change PIN"
         detail="Old PIN required · re-wraps the vault"
         onPress={() => navigation.navigate('ChangePin')}

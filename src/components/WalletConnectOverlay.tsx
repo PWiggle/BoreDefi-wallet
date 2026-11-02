@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { describeRequest, useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
@@ -6,7 +6,10 @@ import { inspectDappApproval } from '../wallet/approval-risk';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
 import { hexToUtf8, pickSignMessage } from '../wallet/wc';
+import { evaluateProtectedRequest } from '../wallet/protected-runtime';
+import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { ConfirmSheet } from './ConfirmSheet';
+import { ProtectedGuardSheet } from './ProtectedGuardSheet';
 
 function txValue(value: unknown, symbol: string): string | undefined {
   if (typeof value !== 'string' || !value) {
@@ -25,6 +28,37 @@ export function WalletConnectOverlay() {
     useWalletConnect();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [verdict, setVerdict] = useState<ProtectedVerdict | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setVerdict(null);
+    if (!pendingRequest || !session) {
+      return;
+    }
+    setChecking(true);
+    evaluateProtectedRequest({
+      method: pendingRequest.method,
+      params: pendingRequest.params,
+      chainId: pendingRequest.chainId,
+      owner: session.address,
+    })
+      .then((next) => {
+        if (!cancelled) {
+          setVerdict(next);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setChecking(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingRequest, session]);
 
   if (phase !== 'unlocked') {
     return null;
@@ -67,6 +101,20 @@ export function WalletConnectOverlay() {
     return null;
   }
 
+  if (verdict?.protected) {
+    return (
+      <ProtectedGuardSheet
+        verdict={verdict}
+        network={CHAINS[pendingRequest.chainId].name}
+        dapp={pendingRequest.peerName}
+        busy={busy}
+        error={error}
+        onApprove={(clearance) => run(() => approveRequest(clearance))}
+        onReject={() => run(rejectRequest)}
+      />
+    );
+  }
+
   const tx = pendingRequest.params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
   const isSend = pendingRequest.method === 'eth_sendTransaction' || pendingRequest.method === 'eth_signTransaction';
   const risk = inspectDappApproval(pendingRequest.method, pendingRequest.params);
@@ -98,10 +146,10 @@ export function WalletConnectOverlay() {
       ]}
       warnings={[...(risk?.warnings ?? []), ...(error ? [error] : [])]}
       variant={risk?.danger ? 'danger' : 'default'}
-      loading={busy}
+      loading={busy || checking}
       confirmLabel={risk?.danger ? 'Hold to approve anyway' : 'Hold to approve'}
       cancelLabel="Reject"
-      onConfirm={() => run(approveRequest)}
+      onConfirm={() => run(() => approveRequest())}
       onCancel={() => run(rejectRequest)}
     />
   );

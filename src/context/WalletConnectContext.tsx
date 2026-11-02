@@ -69,7 +69,7 @@ type WalletConnectContextValue = {
   pair: (uri: string) => Promise<void>;
   approveProposal: () => Promise<void>;
   rejectProposal: () => Promise<void>;
-  approveRequest: () => Promise<void>;
+  approveRequest: (clearance?: string) => Promise<void>;
   rejectRequest: () => Promise<void>;
   disconnect: (topic: string) => Promise<void>;
 };
@@ -230,7 +230,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     setPendingProposal(null);
   }, [pendingProposal]);
 
-  const approveRequest = useCallback(async () => {
+  const approveRequest = useCallback(async (clearance?: string) => {
     const client = clientRef.current;
     if (!client || !pendingRequest) {
       return;
@@ -245,6 +245,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
         method: pendingRequest.method,
         params: pendingRequest.params,
         chainId: pendingRequest.chainId,
+        clearance,
       });
       if (result.kind === 'switch') {
         await setSelectedChain(result.chainId);
