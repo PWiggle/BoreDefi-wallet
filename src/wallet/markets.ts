@@ -6,12 +6,16 @@ const BASE = 'https://api.coingecko.com/api/v3';
 
 /**
  * BoreDash market-data API (CoinGecko-shaped responses). Market calls try BoreDash first and fall back
- * to CoinGecko after BOREDASH_TIMEOUT_MS or on any error, including a response that does not parse.
+ * to CoinGecko if the response headers take longer than BOREDASH_TIMEOUT_MS, if the body takes longer than
+ * BOREDASH_BODY_TIMEOUT_MS to download and parse, or on any error, including a response that does not parse.
  * fetchUsdPrices (swap/bridge price guard) always goes straight to CoinGecko.
  */
 export const BOREDASH_API_ENABLED = true;
 export const BOREDASH_API_BASE = 'https://www.boredash.com';
-export const BOREDASH_TIMEOUT_MS = 4_000;
+/** Connect + response-headers limit for a BoreDash call. */
+export const BOREDASH_TIMEOUT_MS = 6_000;
+/** Separate, generous limit for downloading and parsing the body once headers have arrived (slow phones, 3G). */
+export const BOREDASH_BODY_TIMEOUT_MS = 15_000;
 export const BOREDASH_SITE = 'https://www.boredash.com';
 /** Browser fetch forbids a custom User-Agent; only Accept is set. */
 export const COINGECKO_HEADERS = { Accept: 'application/json' } as const;
@@ -397,15 +401,20 @@ export function marketUrls(route: MarketRoute, enabled: boolean = BOREDASH_API_E
 }
 
 /**
- * GET a CoinGecko-shaped path. With BoreDash enabled, BoreDash is tried first with a 4 s timeout and
- * CoinGecko is the fallback; the last error is thrown only if every base fails.
+ * GET a CoinGecko-shaped path. With BoreDash enabled, BoreDash is tried first: the connect/headers timer
+ * (BOREDASH_TIMEOUT_MS) is cleared as soon as the response headers arrive, then the body gets its own
+ * BOREDASH_BODY_TIMEOUT_MS to download and parse. Any BoreDash failure (timeout, HTTP error, truncated or
+ * unparseable body) falls back to CoinGecko; the last error is thrown only if every base fails.
  */
 export async function fetchMarketJson<T, R = T>(
   route: string | MarketRoute,
   options: {
     enabled?: boolean;
     fetchImpl?: MarketFetch;
+    /** Connect + headers limit for BoreDash. */
     timeoutMs?: number;
+    /** Body download + parse limit for BoreDash, started once headers arrive. */
+    bodyTimeoutMs?: number;
     /** Runs per source, so a BoreDash payload that does not parse also falls back to CoinGecko. */
     parse?: (payload: T) => R;
   } = {},
@@ -417,21 +426,44 @@ export async function fetchMarketJson<T, R = T>(
   let lastError: unknown = null;
   for (const url of urls) {
     const primary = url.startsWith(BOREDASH_API_BASE);
-    const controller = primary ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs ?? BOREDASH_TIMEOUT_MS) : null;
+    const controller = primary && typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let timedOut: 'headers' | 'body' | null = null;
+    const arm = (phase: 'headers' | 'body', ms: number) => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = controller
+        ? setTimeout(() => {
+            timedOut = phase;
+            controller.abort();
+          }, ms)
+        : null;
+    };
     try {
+      arm('headers', options.timeoutMs ?? BOREDASH_TIMEOUT_MS);
       const response = await fetchImpl(url, {
         headers: COINGECKO_HEADERS,
         ...(controller ? { signal: controller.signal } : {}),
       });
+      // Headers are in: stop the connect timer and give the body its own, longer limit.
+      arm('body', options.bodyTimeoutMs ?? BOREDASH_BODY_TIMEOUT_MS);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      return parse((await response.json()) as T);
+      const payload = (await response.json()) as T;
+      if (timedOut) {
+        throw new Error(`BoreDash ${timedOut} timeout`);
+      }
+      return parse(payload);
     } catch (error) {
       lastError = error;
       if (primary) {
-        logger.warn('markets: BoreDash failed, falling back to CoinGecko', { url, error: String(error) });
+        logger.warn('markets: BoreDash failed, falling back to CoinGecko', {
+          url,
+          error: String(error),
+          ...(timedOut ? { timedOut } : {}),
+        });
       }
     } finally {
       if (timer) {

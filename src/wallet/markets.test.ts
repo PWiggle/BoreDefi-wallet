@@ -165,6 +165,8 @@ test('builds CoinGecko coin URLs and ranks gainers from live rows', () => {
 import {
   BOREDASH_API_BASE,
   BOREDASH_API_ENABLED,
+  BOREDASH_BODY_TIMEOUT_MS,
+  BOREDASH_TIMEOUT_MS,
   boreDashUrl,
   fetchCoinPage,
   fetchMarketDetails,
@@ -188,7 +190,7 @@ test('BoreDash coin pages: taps open boredash.com/coins/<id>', () => {
   assert.equal(isCoinGeckoUrl('https://www.boredash.com/about'), false);
 });
 
-test('BoreDash enabled: BoreDash first, CoinGecko fallback on error or 4s timeout', async () => {
+test('BoreDash enabled: BoreDash first, CoinGecko fallback on error or headers timeout', async () => {
   assert.deepEqual(marketBases(true), [BOREDASH_API_BASE, 'https://api.coingecko.com/api/v3']);
   const ok = await fetchMarketJson<string>('/x', {
     enabled: true,
@@ -325,4 +327,97 @@ test('Phase B: both sources down surfaces a plain error', async () => {
   try {
     await assert.rejects(fetchTopMarkets(100), /Could not load market stats/);
   } finally { m.restore(); }
+});
+
+// ---- BoreDash timeouts: headers vs body ----
+
+test('BoreDash limits: 6s for headers, 15s for the body', () => {
+  assert.equal(BOREDASH_TIMEOUT_MS, 6_000);
+  assert.equal(BOREDASH_BODY_TIMEOUT_MS, 15_000);
+});
+
+test('BoreDash: a slow body after fast headers is NOT cut off by the headers timeout', async () => {
+  const calls: string[] = [];
+  const out = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    timeoutMs: 30,
+    bodyTimeoutMs: 1_000,
+    fetchImpl: async (url, init) => {
+      calls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise((resolve, reject) => {
+            const t = setTimeout(() => resolve('boredash'), 120); // well past the 30 ms headers limit
+            init?.signal?.addEventListener('abort', () => {
+              clearTimeout(t);
+              reject(new Error('aborted'));
+            });
+          }),
+      };
+    },
+  });
+  assert.equal(out, 'boredash');
+  assert.deepEqual(calls, [`${BOREDASH_API_BASE}/x`]);
+});
+
+test('BoreDash: a body that exceeds the body limit falls back to CoinGecko', async () => {
+  const started = Date.now();
+  const out = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    timeoutMs: 1_000,
+    bodyTimeoutMs: 40,
+    fetchImpl: async (url, init) =>
+      url.startsWith(BOREDASH_API_BASE)
+        ? {
+            ok: true,
+            status: 200,
+            json: () =>
+              new Promise((_, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))),
+          }
+        : { ok: true, status: 200, json: async () => 'gecko' },
+  });
+  assert.equal(out, 'gecko');
+  assert.ok(Date.now() - started < 1_000);
+});
+
+test('BoreDash: an aborted stream that still resolves (truncated) is treated as a failure', async () => {
+  const out = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    timeoutMs: 1_000,
+    bodyTimeoutMs: 30,
+    fetchImpl: async (url) =>
+      url.startsWith(BOREDASH_API_BASE)
+        ? { ok: true, status: 200, json: () => new Promise((resolve) => setTimeout(() => resolve('partial'), 90)) }
+        : { ok: true, status: 200, json: async () => 'gecko' },
+  });
+  assert.equal(out, 'gecko');
+});
+
+test('BoreDash: truncated JSON or a payload that does not parse falls back to CoinGecko', async () => {
+  const truncated = await fetchMarketJson<string>('/x', {
+    enabled: true,
+    fetchImpl: async (url) =>
+      url.startsWith(BOREDASH_API_BASE)
+        ? { ok: true, status: 200, json: async () => JSON.parse('[{"id":"bitc') }
+        : { ok: true, status: 200, json: async () => 'gecko' },
+  });
+  assert.equal(truncated, 'gecko');
+
+  const badShape = await fetchMarketJson<unknown, string>('/x', {
+    enabled: true,
+    parse: (payload) => {
+      if (payload !== 'gecko-shape') {
+        throw new Error('bad shape');
+      }
+      return 'parsed';
+    },
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => (url.startsWith(BOREDASH_API_BASE) ? { nope: true } : 'gecko-shape'),
+    }),
+  });
+  assert.equal(badShape, 'parsed');
 });

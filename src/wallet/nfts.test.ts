@@ -6,6 +6,7 @@ import {
   fetchNfts,
   groupNftsByCollection,
   mergeNftLists,
+  nftAutodetectLabel,
   normalizeNftStandard,
   parseBlockscoutNfts,
 } from './nfts';
@@ -150,4 +151,15 @@ test('parses a real NFT list into items', async () => {
   assert.equal(result.autodetect, 'ok');
   assert.equal(result.items.length, 1);
   assert.equal(result.items[0]?.chainId, 10);
+});
+
+test('NFT autodetect label: Alchemy-first wording on Alchemy chains, Blockscout elsewhere', () => {
+  const key = 'test-key';
+  for (const id of [8453, 137, 42161, 56] as const) {
+    assert.equal(nftAutodetectLabel(id, 'X', key), 'Autodetect is on. Pull down or tap Refresh after you receive.');
+  }
+  assert.match(nftAutodetectLabel(1, 'Ethereum', key), /public Blockscout catalog/);
+  // Without a key, Alchemy chains fall back to Blockscout wording, and BNB has no public catalog.
+  assert.match(nftAutodetectLabel(8453, 'Base', null), /public Blockscout catalog/);
+  assert.equal(nftAutodetectLabel(56, 'BNB Chain', null), 'No public catalog on BNB Chain · import a collectible you own');
 });

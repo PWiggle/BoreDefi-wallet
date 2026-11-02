@@ -246,3 +246,18 @@ export async function sendNft(input: {
     '0x',
   ) as Promise<TransactionResponse>;
 }
+
+/** One-line status under the NFT chain picker: Alchemy first where it is enabled, Blockscout otherwise. */
+export function nftAutodetectLabel(
+  chainId: ChainId,
+  chainName: string,
+  alchemyKey: string | null = getAlchemyKey(),
+): string {
+  if (alchemyEnabledFor(chainId, alchemyKey)) {
+    return 'Autodetect is on. Pull down or tap Refresh after you receive.';
+  }
+  if (CHAINS[chainId].nftApi) {
+    return 'Autodetect is on · public Blockscout catalog. Pull down or tap Refresh after you receive.';
+  }
+  return `No public catalog on ${chainName} · import a collectible you own`;
+}

@@ -18,7 +18,7 @@ import { CHAINS } from '../wallet/chains';
 import { shortenAddress } from '../wallet/format';
 import { safeNftImageUrl } from '../wallet/nft-media';
 import { classifyNftSpam, nftStorageKey, type NftSpamAssessment } from '../wallet/nft-spam';
-import { fetchNfts, groupNftsByCollection, mergeNftLists, type NftItem } from '../wallet/nfts';
+import { fetchNfts, groupNftsByCollection, mergeNftLists, nftAutodetectLabel, type NftItem } from '../wallet/nfts';
 import {
   loadHiddenNfts,
   loadImportedNfts,
@@ -312,9 +312,7 @@ export function NftsScreen() {
       </View>
       <View style={styles.toolbar}>
         <Text style={styles.autodetect}>
-          {CHAINS[selectedChain.id].nftApi
-            ? 'Autodetect is on · public Blockscout catalog. Pull down or tap Refresh after you receive.'
-            : `No public catalog on ${selectedChain.name} · import a collectible you own`}
+          {nftAutodetectLabel(selectedChain.id, selectedChain.name)}
         </Text>
         <Pressable onPress={() => void load()}>
           <Text style={styles.importLink}>Refresh</Text>
