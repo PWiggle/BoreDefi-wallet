@@ -108,14 +108,27 @@ export function isPlainMessage(message: string): boolean {
   return !RAW_MARKERS.some((pattern) => pattern.test(trimmed));
 }
 
-export function friendlyTxError(
-  error: unknown,
-  context: { chainId?: ChainId; fallback?: string } = {},
-): string {
+export type TxErrorContext = {
+  chainId?: ChainId;
+  fallback?: string;
+  /**
+   * What the app was doing, lower-case, e.g. "loading your ETH balance". Network and timeout messages name it,
+   * so a "Network problem" always says which step failed.
+   */
+  step?: string;
+};
+
+export function friendlyTxError(error: unknown, context: TxErrorContext = {}): string {
   if (error instanceof UserFacingError) {
     return error.message;
   }
-  switch (classifyTxError(error)) {
+  const kind = classifyTxError(error);
+  if (context.step && (kind === 'network' || kind === 'timeout')) {
+    return kind === 'network'
+      ? `Network problem while ${context.step}. Check your connection and try again.`
+      : `The network took too long while ${context.step}. Try again in a moment.`;
+  }
+  switch (kind) {
     case 'insufficient-funds':
       return context.chainId !== undefined
         ? `Not enough ${CHAINS[context.chainId].symbol} on ${CHAINS[context.chainId].name} for this amount plus network fees. Nothing was sent.`
@@ -147,11 +160,7 @@ export function logTxError(label: string, error: unknown, extra: Record<string, 
 }
 
 /** Map + log in one step for screens and wallet helpers. */
-export function toUserError(
-  label: string,
-  error: unknown,
-  context: { chainId?: ChainId; fallback?: string } = {},
-): UserFacingError {
+export function toUserError(label: string, error: unknown, context: TxErrorContext = {}): UserFacingError {
   if (error instanceof UserFacingError) {
     return error;
   }

@@ -13,6 +13,15 @@ import { toUserError } from './tx-errors';
 
 const providers = new Map<ChainId, AbstractProvider>();
 
+/**
+ * One JSON-RPC request per HTTP call. ethers batches calls made in the same tick by default, and free public
+ * RPCs cap batches (drpc's free plan answers HTTP 500 to a batch of more than 3), which ethers reports as
+ * SERVER_ERROR ("Network problem").
+ */
+export const RPC_PROVIDER_OPTIONS = { staticNetwork: true, batchMaxCount: 1 } as const;
+/** Per-endpoint limit inside readWithFallback, so one hanging public RPC cannot stall a screen. */
+export const READ_ATTEMPT_TIMEOUT_MS = 8_000;
+
 export async function sendRpc(
   chainId: ChainId,
   method: string,
@@ -53,7 +62,7 @@ export function getProvider(chainId: ChainId): AbstractProvider {
   const chain = CHAINS[chainId];
   const urls = chain.rpcUrls.length > 0 ? chain.rpcUrls : [chain.rpcUrl];
   const configs = urls.map((url, index) => ({
-    provider: new JsonRpcProvider(url, chain.id, { staticNetwork: true }),
+    provider: new JsonRpcProvider(url, chain.id, RPC_PROVIDER_OPTIONS),
     priority: index + 1,
     stallTimeout: 1500,
     weight: 1,
@@ -76,7 +85,7 @@ export function getEndpointProviders(chainId: ChainId): JsonRpcProvider[] {
     const key = `${chainId}:${url}`;
     let provider = singleProviders.get(key);
     if (!provider) {
-      provider = new JsonRpcProvider(url, chain.id, { staticNetwork: true });
+      provider = new JsonRpcProvider(url, chain.id, RPC_PROVIDER_OPTIONS);
       singleProviders.set(key, provider);
     }
     return provider;
@@ -89,19 +98,39 @@ export function isDeterministicReadError(error: unknown): boolean {
   return code === 'INVALID_ARGUMENT' || code === 'MISSING_ARGUMENT' || code === 'UNEXPECTED_ARGUMENT';
 }
 
+function withAttemptTimeout<T>(run: Promise<T>, ms: number): Promise<T> {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return run;
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error('RPC read timed out'), { code: 'TIMEOUT' })), ms);
+  });
+  return Promise.race([run, limit]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
+}
+
 /**
  * Runs a read-only call on the chain's FallbackProvider, then on each public endpoint in order.
  * The first success wins. Deterministic input errors are thrown at once instead of retried.
+ *
+ * Needed because ethers' FallbackProvider with quorum 1 counts an *error* from one backend as a quorum
+ * result and throws it (a single 429/5xx/dropped connection fails the read even when other RPCs are fine),
+ * and it permanently skips a backend whose first block-number check failed (e.g. app opened offline).
  */
 export async function readWithFallback<T>(
   chainId: ChainId,
   read: (provider: AbstractProvider) => Promise<T>,
   providers: AbstractProvider[] = [getProvider(chainId), ...getEndpointProviders(chainId)],
+  attemptTimeoutMs: number = READ_ATTEMPT_TIMEOUT_MS,
 ): Promise<T> {
   let lastError: unknown;
   for (const provider of providers) {
     try {
-      return await read(provider);
+      return await withAttemptTimeout(read(provider), attemptTimeoutMs);
     } catch (error) {
       if (isDeterministicReadError(error)) {
         throw error;
@@ -146,7 +175,7 @@ export async function connectedWallet(mnemonic: string, chainId: ChainId): Promi
 
 export async function fetchBalance(address: string, chainId: ChainId): Promise<bigint> {
   try {
-    return await getProvider(chainId).getBalance(address);
+    return await readWithFallback(chainId, (provider) => provider.getBalance(address));
   } catch (error) {
     logger.error('Balance request failed', {
       chainId,
@@ -158,7 +187,7 @@ export async function fetchBalance(address: string, chainId: ChainId): Promise<b
 
 /** Current max fee per gas (EIP-1559 maxFeePerGas, or legacy gasPrice). */
 export async function fetchMaxFeePerGas(chainId: ChainId): Promise<bigint> {
-  const feeData = await getProvider(chainId).getFeeData();
+  const feeData = await readWithFallback(chainId, (provider) => provider.getFeeData());
   return feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
 }
 

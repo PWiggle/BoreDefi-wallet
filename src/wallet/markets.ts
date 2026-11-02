@@ -608,15 +608,34 @@ export async function fetchCoinPage(id: string): Promise<CoinPage> {
 }
 
 /** USD prices for CoinGecko ids, used by the swap price guard. Missing ids are left out. */
-export async function fetchUsdPrices(ids: string[]): Promise<Record<string, number>> {
+export async function fetchUsdPrices(
+  ids: string[],
+  options: { fetchImpl?: MarketFetch; retryDelayMs?: number } = {},
+): Promise<Record<string, number>> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0) {
     return {};
   }
-  // Price guard stays on CoinGecko directly (no BoreDash hop).
-  const payload = await fetchMarketJson<Record<string, { usd?: number }>>(MARKET_ROUTES.usdPrices(unique), {
-    enabled: false,
-  });
+  // Price guard stays on CoinGecko directly (no BoreDash hop). One retry for a dropped request or a 429/5xx,
+  // so a single blip does not leave the guard on its fallback (the aggregator's own USD estimate).
+  let payload: Record<string, { usd?: number }> | null = null;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2 && payload === null; attempt += 1) {
+    try {
+      payload = await fetchMarketJson<Record<string, { usd?: number }>>(MARKET_ROUTES.usdPrices(unique), {
+        enabled: false,
+        fetchImpl: options.fetchImpl,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, options.retryDelayMs ?? 700));
+      }
+    }
+  }
+  if (payload === null) {
+    throw lastError instanceof Error ? lastError : new Error('Price feed unavailable.');
+  }
   const out: Record<string, number> = {};
   for (const [id, value] of Object.entries(payload ?? {})) {
     if (typeof value?.usd === 'number' && Number.isFinite(value.usd)) {

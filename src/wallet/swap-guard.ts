@@ -38,6 +38,10 @@ export function isWrapperRoute(tool: string | undefined, steps: Array<{ type?: s
 
 export const PRICE_DEVIATION_LIMIT = 0.2;
 
+/** Shown when neither CoinGecko nor the route's own USD values can price the swap. The swap stays blocked. */
+export const UNVERIFIED_PRICE_MESSAGE =
+  "Couldn't verify this price with CoinGecko or LI.FI, so the swap is blocked to protect your funds. Try again in a moment.";
+
 export type PriceCheck =
   | { ok: true; deviation: number; source: 'feed' | 'aggregator' }
   | { ok: false; reason: 'deviation'; deviation: number; message: string }
@@ -74,7 +78,7 @@ export function checkSwapPrice(input: {
     source = 'aggregator';
   }
   if (inUsd === null || outUsd === null || !Number.isFinite(inUsd) || !Number.isFinite(outUsd) || inUsd <= 0) {
-    return { ok: false, reason: 'unverified', message: 'Could not check this price right now. Try again in a moment.' };
+    return { ok: false, reason: 'unverified', message: UNVERIFIED_PRICE_MESSAGE };
   }
   const deviation = Math.abs(outUsd - inUsd) / inUsd;
   if (deviation > PRICE_DEVIATION_LIMIT) {
@@ -113,4 +117,18 @@ export function bridgeQuoteKey(
   amount: bigint,
 ): string {
   return `${fromChainId}>${toChainId}:${from.address.toLowerCase()}:${to.address.toLowerCase()}:${amount.toString()}`;
+}
+
+/**
+ * Swap/Bridge cannot run the balance pre-flight until the spent token's balance has loaded. Returns the
+ * blocking result while it is loading or failed (the failure itself is shown in the error banner), or null once known.
+ */
+export function swapBalanceGate(
+  balance: bigint | null,
+  balanceError: string | null,
+): { ok: false; reason: 'loading'; message: string } | null {
+  if (balance !== null) {
+    return null;
+  }
+  return { ok: false, reason: 'loading', message: balanceError ? 'Your balance has not loaded yet.' : 'Checking your balance…' };
 }

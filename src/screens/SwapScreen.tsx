@@ -19,15 +19,16 @@ import {
   fetchSwapQuote,
   fetchTokenBalance,
   sendSwapTransaction,
+  SWAP_STEPS,
   type SwapQuote,
 } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wallet/preflight';
-import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
+import { fetchBalance, fetchMaxFeePerGas, retryRead } from '../wallet/rpc';
 import { friendlyTxError } from '../wallet/tx-errors';
 import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protected-spend';
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
-import { canReviewSwap, checkSwapPrice, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
+import { canReviewSwap, checkSwapPrice, swapBalanceGate, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
 
 function swapStyles({ colors, card, chip, field, spacing }: Theme) {
   return {
@@ -80,7 +81,10 @@ export function SwapScreen() {
   const [fromToken, setFromToken] = useState<TokenConfig>(tokens[0]!);
   const [toToken, setToToken] = useState<TokenConfig>(tokens[1] ?? tokens[0]!);
   const [amount, setAmount] = useState('');
-  const [balance, setBalance] = useState<bigint>(0n);
+  // Null while loading or after a failed read, so a previous token's balance is never reused.
+  const [balance, setBalance] = useState<bigint | null>(null);
+  // Balance-load problem, kept apart from quote/swap errors so a later successful load clears only this one.
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
   const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
@@ -106,6 +110,8 @@ export function SwapScreen() {
     setQuoteKey(null);
     setPriceCheck(null);
     setTxHash(null);
+    // A quote/swap error belongs to the chain it happened on; build 11 kept it on screen for every chain.
+    setError(null);
   }, [route.params?.fromSymbol, selectedChain.id]);
 
   // Any change to the pair invalidates the quote (build 4 kept an ETH→WETH quote after switching to USDT).
@@ -113,6 +119,7 @@ export function SwapScreen() {
     setQuote(null);
     setQuoteKey(null);
     setPriceCheck(null);
+    setError(null);
   }, [fromToken.address, toToken.address]);
 
   useEffect(() => {
@@ -128,10 +135,31 @@ export function SwapScreen() {
     if (!session) {
       return;
     }
-    fetchTokenBalance(fromAddress, fromToken, selectedChain.id)
-      .then(setBalance)
-      .catch((err) => setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Could not load balance.' })));
-  }, [fromAddress, fromToken, selectedChain.id, session]);
+    let live = true;
+    setBalance(null);
+    setBalanceError(null);
+    retryRead(() => fetchTokenBalance(fromAddress, fromToken, selectedChain.id))
+      .then((value) => {
+        if (live) {
+          setBalance(value);
+          setBalanceError(null);
+        }
+      })
+      .catch((err) => {
+        if (live) {
+          setBalanceError(
+            friendlyTxError(err, {
+              chainId: selectedChain.id,
+              step: SWAP_STEPS.balance(fromToken.symbol),
+              fallback: `Could not load your ${fromToken.symbol} balance. Try again in a moment.`,
+            }),
+          );
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [fromAddress, fromToken, selectedChain.id, session, txHash]);
 
   useEffect(() => {
     if (!session) {
@@ -158,10 +186,10 @@ export function SwapScreen() {
   }
   const swapGasUnits =
     (quote?.transactionRequest.gasLimit ?? GAS_UNITS.swap) + (fromToken.native ? 0n : GAS_UNITS.erc20Approve);
-  const swapCheck = checkPreflight({
+  const swapCheck = swapBalanceGate(balance, balanceError) ?? checkPreflight({
     chainId: selectedChain.id,
     amount: typedUnits,
-    spendBalance: balance,
+    spendBalance: balance ?? 0n,
     spendSymbol: fromToken.symbol,
     nativeBalance,
     feeWei: maxFeePerGas === null ? null : estimateFeeWei(selectedChain.id, swapGasUnits, maxFeePerGas),
@@ -212,7 +240,9 @@ export function SwapScreen() {
     } catch (err) {
       setQuote(null);
       setQuoteKey(null);
-      setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'No route available' }));
+      setError(
+        friendlyTxError(err, { chainId: selectedChain.id, step: SWAP_STEPS.quote, fallback: 'No route available' }),
+      );
     } finally {
       setBusy(false);
     }
@@ -286,6 +316,7 @@ export function SwapScreen() {
       setTxHash(tx.hash);
     } catch (err) {
       setReview(false);
+      // No step here on purpose: a timed-out broadcast may have gone through, so keep "Check Activity first".
       setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Swap failed. Nothing was swapped.' }));
     } finally {
       setBusy(false);
@@ -304,7 +335,7 @@ export function SwapScreen() {
   return (
     <Screen title="Swap" subtitle="Best same-chain route via LI.FI (aggregates 1inch, 0x, Kyber, and others).">
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
-      <ErrorBanner message={error} />
+      <ErrorBanner message={error ?? balanceError} />
       <Text style={styles.label}>From</Text>
       <TokenRow tokens={tokens} selected={fromToken} onSelect={setFromToken} />
       <TextInput
@@ -316,7 +347,7 @@ export function SwapScreen() {
         placeholderTextColor={colors.muted}
       />
       <Text style={styles.meta}>
-        Balance {formatTokenAmount(balance, fromToken.decimals)} {fromToken.symbol}
+        Balance {balance === null ? '…' : formatTokenAmount(balance, fromToken.decimals)} {fromToken.symbol}
       </Text>
       <Text style={styles.label}>To</Text>
       <TokenRow tokens={tokens.filter((token) => token.address !== fromToken.address)} selected={toToken} onSelect={setToToken} />

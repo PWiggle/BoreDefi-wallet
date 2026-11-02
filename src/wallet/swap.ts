@@ -4,7 +4,7 @@ import { logger } from '../logger';
 import { toUserError, UserFacingError } from './tx-errors';
 import { isWrapPair, isWrapperRoute, sameTokenAddress } from './swap-guard';
 import { type ChainId } from './chains';
-import { connectedWallet, getProvider } from './rpc';
+import { connectedWallet, getProvider, readWithFallback } from './rpc';
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
 
 const QUOTE_URL = 'https://li.quest/v1/quote';
@@ -197,17 +197,54 @@ export async function fetchSwapQuote(input: {
   url.searchParams.set('integrator', 'boredefi');
 
   try {
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
-    });
+    const response = await fetchWithRetry(() =>
+      fetch(url.toString(), {
+        headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
+      }),
+    );
     const payload = (await response.json()) as LiFiQuote;
     if (!response.ok) {
       throw new UserFacingError(liFiFailureMessage(response.status, payload.message));
     }
     return parseLiFiQuote(payload, input.chainId, input.chainId, { from: input.fromToken, to: input.toToken });
   } catch (error) {
-    throw toUserError('Swap quote failed', error, { chainId: input.chainId, fallback: NO_ROUTE_MESSAGE });
+    throw toUserError('Swap quote failed', error, {
+      chainId: input.chainId,
+      fallback: NO_ROUTE_MESSAGE,
+      step: SWAP_STEPS.quote,
+    });
   }
+}
+
+/** Step names shown in Swap errors ("Network problem while …"). */
+export const SWAP_STEPS = {
+  quote: 'getting a swap quote from LI.FI',
+  balance: (symbol: string) => `loading your ${symbol} balance`,
+  prices: 'checking the market price',
+} as const;
+
+/**
+ * One retry for a request that never got an HTTP answer (dropped cellular connection, "Network request failed").
+ * HTTP error statuses are returned as-is; the caller maps them.
+ */
+export async function fetchWithRetry<R>(
+  run: () => Promise<R>,
+  options: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<R> {
+  const attempts = Math.max(1, options.attempts ?? 2);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await sleep(options.delayMs ?? 800);
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function fetchTokenBalance(
@@ -215,11 +252,14 @@ export async function fetchTokenBalance(
   token: TokenConfig,
   chainId: ChainId,
 ): Promise<bigint> {
+  // readWithFallback: one failing public RPC must not fail the read (see rpc.ts).
   if (token.native || isNativeTokenAddress(token.address)) {
-    return getProvider(chainId).getBalance(owner);
+    return readWithFallback(chainId, (provider) => provider.getBalance(owner));
   }
-  const contract = new Contract(token.address, ERC20_ABI, getProvider(chainId));
-  return contract.balanceOf(owner) as Promise<bigint>;
+  return readWithFallback(
+    chainId,
+    (provider) => new Contract(token.address, ERC20_ABI, provider).balanceOf(owner) as Promise<bigint>,
+  );
 }
 
 export type ExternalTxSender = (tx: {
