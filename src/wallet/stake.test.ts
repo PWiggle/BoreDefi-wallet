@@ -143,3 +143,46 @@ test('spent balance per action', () => {
   assert.deepEqual(stakeSpend(aave, 'stake'), { source: 'wallet', symbol: 'USDC', native: false });
   assert.deepEqual(stakeSpend(aave, 'unstake'), { source: 'position', symbol: 'aUSDC', native: false });
 });
+
+import { getAddress } from 'ethers';
+import { AAVE_V3_POOL, checkStakeScreenPreflight, LIDO_STETH, LIDO_WITHDRAWAL_QUEUE, positionText } from './stake';
+import { FAMOUS } from './nft-spam';
+
+test('every hardcoded stake and NFT contract address has a valid EIP-55 checksum', () => {
+  const addresses = [
+    LIDO_STETH,
+    LIDO_WITHDRAWAL_QUEUE,
+    ...Object.values(AAVE_V3_POOL),
+    ...listStakeMarkets().map((market) => market.asset.address),
+    ...FAMOUS.flatMap((item) => item.contracts),
+  ] as string[];
+  for (const address of addresses) {
+    assert.equal(getAddress(address), address, `bad checksum: ${address}`);
+  }
+});
+
+test('Base Aave V3 pool is the address from the Base PoolAddressesProvider', () => {
+  assert.equal(AAVE_V3_POOL[8453], '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5');
+});
+
+test('positionText never shows a fake 0 while loading or after a failed read', () => {
+  const lido = findStakeMarket('lido-eth')!;
+  const aave = findStakeMarket('aave-usdc-8453')!;
+  assert.equal(positionText(lido, 'ok', 0n), 'Position: 0 stETH');
+  assert.equal(positionText(lido, 'loading', null), 'Position: checking stETH…');
+  assert.equal(positionText(lido, 'unknown', null), "Position: couldn't check stETH right now");
+  assert.equal(positionText(aave, 'unknown', null), "Position: couldn't check aUSDC right now");
+  assert.doesNotMatch(positionText(aave, 'unknown', null), /\b0\b/);
+});
+
+test('checkStakeScreenPreflight treats an unknown balance as loading, not as 0', () => {
+  const lido = findStakeMarket('lido-eth')!;
+  const base = { market: lido, amount: 10n ** 16n, nativeBalance: 10n ** 18n, maxFeePerGas: 30n * GWEI };
+  const unstake = checkStakeScreenPreflight({ ...base, action: 'unstake', walletBalance: 10n ** 18n, positionBalance: null });
+  assert.equal(!unstake.ok && unstake.reason, 'loading');
+  const stakeUnknownWallet = checkStakeScreenPreflight({ ...base, action: 'stake', walletBalance: null, positionBalance: 0n });
+  assert.equal(!stakeUnknownWallet.ok && stakeUnknownWallet.reason, 'loading');
+  // Staking only spends wallet ETH, so an unknown position does not block it.
+  const stakeOk = checkStakeScreenPreflight({ ...base, action: 'stake', walletBalance: 10n ** 18n, positionBalance: null });
+  assert.deepEqual(stakeOk, { ok: true });
+});

@@ -8,18 +8,18 @@ type FamousCollection = {
   contracts: string[];
 };
 
-const FAMOUS: FamousCollection[] = [
+export const FAMOUS: FamousCollection[] = [
   {
     aliases: ['bored ape', 'bored ape yacht', 'bayc', 'boredapeyachtclub'],
     contracts: ['0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D'],
   },
   {
     aliases: ['mutant ape', 'mayc', 'mutantape'],
-    contracts: ['0x60E4d786628Fea6478F785A6d7e704777c86A7c6'],
+    contracts: ['0x60E4d786628Fea6478F785A6d7e704777c86a7c6'],
   },
   {
     aliases: ['azuki'],
-    contracts: ['0xED5AF388Ae54bC31Dd3Df730d16179AD4aC56170'],
+    contracts: ['0xED5AF388653567Af2F388E6224dC7C4b3241C544'],
   },
   {
     aliases: ['pudgy penguin', 'pudgy penguins', 'pudgy'],

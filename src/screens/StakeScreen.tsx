@@ -11,26 +11,24 @@ import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
-import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
+import { fetchBalance, fetchMaxFeePerGas, retryRead } from '../wallet/rpc';
 import { friendlyTxError } from '../wallet/tx-errors';
 import { preflightLine, type PreflightResult } from '../wallet/preflight';
 import {
-  checkStakePreflight,
+  checkStakeScreenPreflight,
   claimLidoRequests,
   fetchStakedBalance,
   listLidoRequests,
   listStakeMarkets,
+  positionText,
   stake,
   unstake,
+  type BalanceStatus,
   type StakeAction,
   type StakeMarket,
   type WithdrawalRequest,
 } from '../wallet/stake';
 import { fetchTokenBalance } from '../wallet/swap';
-
-function stakedLabel(market: StakeMarket): string {
-  return market.protocol === 'lido' ? 'stETH' : `a${market.asset.symbol}`;
-}
 
 function safeAmount(value: string, decimals: number): bigint {
   try {
@@ -57,6 +55,8 @@ function stakeStyles({ colors, card, chip, field, spacing }: Theme) {
     boxTitle: { color: colors.text, fontWeight: '700' as const },
     hash: { color: colors.accent },
     hint: { color: colors.text, fontWeight: '600' as const },
+    positionRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm, flexWrap: 'wrap' as const },
+    retry: { color: colors.accent, fontWeight: '700' as const },
   };
 }
 
@@ -74,8 +74,11 @@ export function StakeScreen() {
     : undefined;
   const [market, setMarket] = useState<StakeMarket | undefined>(hinted ?? markets[0]);
   const [amount, setAmount] = useState('');
-  const [walletBalance, setWalletBalance] = useState(0n);
-  const [stakedBalance, setStakedBalance] = useState(0n);
+  const [walletBalance, setWalletBalance] = useState<bigint | null>(null);
+  const [walletStatus, setWalletStatus] = useState<BalanceStatus>('loading');
+  const [stakedBalance, setStakedBalance] = useState<bigint | null>(null);
+  const [positionStatus, setPositionStatus] = useState<BalanceStatus>('loading');
+  const [reloadKey, setReloadKey] = useState(0);
   const [nativeBalance, setNativeBalance] = useState<bigint | null>(null);
   const [maxFeePerGas, setMaxFeePerGas] = useState<bigint | null>(null);
   const [requests, setRequests] = useState<WithdrawalRequest[]>([]);
@@ -106,26 +109,63 @@ export function StakeScreen() {
     if (!session || !market) {
       return;
     }
+    // A read error belongs to the market it came from. Clear it so it never sticks to another chain.
+    let active = true;
+    setError(null);
+    setWalletBalance(null);
+    setWalletStatus('loading');
+    setStakedBalance(null);
+    setPositionStatus('loading');
     setNativeBalance(null);
     setMaxFeePerGas(null);
-    fetchTokenBalance(session.address, market.asset, market.chainId)
-      .then(setWalletBalance)
-      .catch((err) => setError(friendlyTxError(err, { chainId: market.chainId, fallback: 'Could not load your balance.' })));
-    fetchStakedBalance(market, session.address)
-      .then(setStakedBalance)
-      .catch((err) => setError(friendlyTxError(err, { chainId: market.chainId, fallback: 'Could not load your position.' })));
+    retryRead(() => fetchTokenBalance(session.address, market.asset, market.chainId))
+      .then((value) => {
+        if (active) {
+          setWalletBalance(value);
+          setWalletStatus('ok');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setWalletStatus('unknown');
+        }
+      });
+    retryRead(() => fetchStakedBalance(market, session.address))
+      .then((value) => {
+        if (active) {
+          setStakedBalance(value);
+          setPositionStatus('ok');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPositionStatus('unknown');
+        }
+      });
     fetchBalance(session.address, market.chainId)
-      .then(setNativeBalance)
-      .catch(() => setNativeBalance(null));
+      .then((value) => active && setNativeBalance(value))
+      .catch(() => active && setNativeBalance(null));
     fetchMaxFeePerGas(market.chainId)
-      .then(setMaxFeePerGas)
-      .catch(() => setMaxFeePerGas(null));
+      .then((value) => active && setMaxFeePerGas(value))
+      .catch(() => active && setMaxFeePerGas(null));
     if (market.protocol === 'lido') {
       listLidoRequests(session.address)
-        .then(setRequests)
-        .catch(() => setRequests([]));
+        .then((value) => active && setRequests(value))
+        .catch(() => active && setRequests([]));
     }
-  }, [market, session]);
+    return () => {
+      active = false;
+    };
+  }, [market, session, reloadKey]);
+
+  useEffect(() => {
+    if (positionStatus !== 'unknown' && walletStatus !== 'unknown') {
+      return;
+    }
+    // Quiet background retry while the screen is open; no red banner for a read that may recover.
+    const timer = setTimeout(() => setReloadKey((key) => key + 1), 15_000);
+    return () => clearTimeout(timer);
+  }, [positionStatus, walletStatus]);
 
   if (!session) {
     return null;
@@ -145,7 +185,7 @@ export function StakeScreen() {
 
   const amountUnits = safeAmount(amount, market.asset.decimals);
   const check = (action: StakeAction): PreflightResult =>
-    checkStakePreflight({
+    checkStakeScreenPreflight({
       market,
       action,
       amount: amountUnits,
@@ -210,11 +250,21 @@ export function StakeScreen() {
       </View>
       <Text style={styles.copy}>{market.subtitle}</Text>
       <Text style={styles.meta}>
-        Wallet {market.asset.symbol}: {formatTokenAmount(walletBalance, market.asset.decimals)}
+        Wallet {market.asset.symbol}:{' '}
+        {walletStatus === 'ok' && walletBalance !== null
+          ? formatTokenAmount(walletBalance, market.asset.decimals)
+          : walletStatus === 'loading'
+            ? 'checking…'
+            : "couldn't check right now"}
       </Text>
-      <Text style={styles.meta}>
-        Position: {formatTokenAmount(stakedBalance, market.asset.decimals)} {stakedLabel(market)}
-      </Text>
+      <View style={styles.positionRow}>
+        <Text style={styles.meta}>{positionText(market, positionStatus, stakedBalance)}</Text>
+        {positionStatus === 'unknown' || walletStatus === 'unknown' ? (
+          <Pressable onPress={() => setReloadKey((key) => key + 1)} hitSlop={8}>
+            <Text style={styles.retry}>Retry</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <TextInput
         value={amount}
         onChangeText={setAmount}

@@ -1,9 +1,10 @@
-import { Contract, type TransactionResponse } from 'ethers';
+import { type AbstractProvider, Contract, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
 import { CHAINS, type ChainId } from './chains';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, type PreflightResult } from './preflight';
-import { connectedWallet, fetchMaxFeePerGas, getProvider } from './rpc';
+import { connectedWallet, fetchMaxFeePerGas, getProvider, readWithFallback } from './rpc';
+import { formatTokenAmount } from './format';
 import { findToken, type TokenConfig } from './tokens';
 import { toUserError, UserFacingError } from './tx-errors';
 
@@ -12,13 +13,14 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 export const LIDO_STETH = '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84';
 export const LIDO_WITHDRAWAL_QUEUE = '0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1';
 
-const AAVE_V3_POOL: Partial<Record<ChainId, string>> = {
+export const AAVE_V3_POOL: Partial<Record<ChainId, string>> = {
   1: '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2',
   137: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
   42161: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
   10: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
   43114: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
-  8453: '0xA238Dd80C259a72c79Bd56434e4eC5138f2Bc59B',
+  // From Base PoolAddressesProvider 0xe20fCBdBfFC4Dd138cE8b2E6FBb6CB49777ad64D getPool(), checked 2026-11-01.
+  8453: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
 };
 
 const STETH_ABI = [
@@ -123,25 +125,39 @@ export function findStakeMarket(id: string): StakeMarket | undefined {
 
 export async function fetchStakedBalance(market: StakeMarket, owner: string): Promise<bigint> {
   if (market.protocol === 'lido') {
-    const steth = new Contract(LIDO_STETH, STETH_ABI, getProvider(1));
-    return steth.balanceOf(owner) as Promise<bigint>;
+    return readWithFallback(1, (provider) => stethBalance(provider, owner));
   }
-  const aToken = await aaveAToken(market.chainId, market.asset.address);
-  const token = new Contract(aToken, ERC20_ABI, getProvider(market.chainId));
-  return token.balanceOf(owner) as Promise<bigint>;
+  return readWithFallback(market.chainId, async (provider) => {
+    const aToken = await aaveAToken(provider, market.chainId, market.asset.address);
+    const token = new Contract(aToken, ERC20_ABI, provider);
+    return (await token.balanceOf(owner)) as bigint;
+  });
 }
 
-async function aaveAToken(chainId: ChainId, asset: string): Promise<string> {
+async function stethBalance(provider: AbstractProvider, owner: string): Promise<bigint> {
+  const steth = new Contract(LIDO_STETH, STETH_ABI, provider);
+  return (await steth.balanceOf(owner)) as bigint;
+}
+
+const aTokenCache = new Map<string, string>();
+
+async function aaveAToken(provider: AbstractProvider, chainId: ChainId, asset: string): Promise<string> {
   const poolAddress = AAVE_V3_POOL[chainId];
   if (!poolAddress) {
     throw new Error('Aave V3 is not configured on this chain.');
   }
-  const pool = new Contract(poolAddress, AAVE_POOL_ABI, getProvider(chainId));
+  const cacheKey = `${chainId}:${asset.toLowerCase()}`;
+  const cached = aTokenCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const pool = new Contract(poolAddress, AAVE_POOL_ABI, provider);
   const data = await pool.getReserveData(asset);
   const address = (data.aTokenAddress ?? data[8]) as string;
   if (!address || address === ZERO) {
     throw new Error('Aave does not list that reserve.');
   }
+  aTokenCache.set(cacheKey, address);
   return address;
 }
 
@@ -223,6 +239,46 @@ async function walletBalanceOf(market: StakeMarket, owner: string): Promise<bigi
   }
   const token = new Contract(market.asset.address, ERC20_ABI, getProvider(market.chainId));
   return token.balanceOf(owner) as Promise<bigint>;
+}
+
+export type BalanceStatus = 'loading' | 'ok' | 'unknown';
+
+/** Position line for the Stake screen. Never shows a made-up 0 while the read is pending or failed. */
+export function positionText(market: StakeMarket, status: BalanceStatus, balance: bigint | null): string {
+  const label = market.protocol === 'lido' ? 'stETH' : `a${market.asset.symbol}`;
+  if (status === 'ok' && balance !== null) {
+    return `Position: ${formatTokenAmount(balance, market.asset.decimals)} ${label}`;
+  }
+  if (status === 'loading') {
+    return `Position: checking ${label}…`;
+  }
+  return `Position: couldn't check ${label} right now`;
+}
+
+/** Stake screen pre-flight that treats a balance that is still loading or failed as unknown, not as 0. */
+export function checkStakeScreenPreflight(input: {
+  market: StakeMarket;
+  action: StakeAction;
+  amount: bigint | null;
+  walletBalance: bigint | null;
+  positionBalance: bigint | null;
+  nativeBalance: bigint | null;
+  maxFeePerGas: bigint | null;
+}): PreflightResult {
+  const spend = stakeSpend(input.market, input.action);
+  const needed = spend.source === 'wallet' ? input.walletBalance : spend.source === 'position' ? input.positionBalance : 0n;
+  if (needed === null) {
+    return {
+      ok: false,
+      reason: 'loading',
+      message: spend.source === 'position' ? 'Checking your position…' : 'Checking your balance…',
+    };
+  }
+  return checkStakePreflight({
+    ...input,
+    walletBalance: input.walletBalance ?? 0n,
+    positionBalance: input.positionBalance ?? 0n,
+  });
 }
 
 /** Re-checks balances right before broadcast so a stale screen can never send a doomed transaction. */
