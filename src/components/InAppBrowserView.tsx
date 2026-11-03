@@ -57,6 +57,11 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
       originWhitelist={['*']}
       setSupportMultipleWindows={false}
       injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
+      // Same script again after load as a safety net (it is idempotent: it returns early when
+      // window.ethereum.isBoreDefi is already there). Main frame only, like the early injection.
+      injectedJavaScript={injectedJavaScriptBeforeContentLoaded}
+      injectedJavaScriptForMainFrameOnly
+      injectedJavaScriptBeforeContentLoadedForMainFrameOnly
       onLoadEnd={onLoadEnd}
       onMessage={onMessage}
       onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}

@@ -78,14 +78,22 @@ export const INJECTED_PROVIDER_SOURCE = `
     rdns: 'com.boredefi.wallet'
   };
   function announce() {
-    window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
-      detail: Object.freeze({ info: Object.freeze(info), provider: provider })
-    }));
+    try {
+      window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+        detail: Object.freeze({ info: Object.freeze(info), provider: provider })
+      }));
+    } catch (e) {}
+  }
+  // Set window.ethereum first so nothing below (a listener that throws, an old WebKit
+  // without CustomEvent) can leave the page without a provider.
+  try {
+    window.ethereum = provider;
+  } catch (e) {
+    try { Object.defineProperty(window, 'ethereum', { value: provider, configurable: true, writable: true }); } catch (e2) {}
   }
   window.addEventListener('eip6963:requestProvider', announce);
   announce();
-  window.ethereum = provider;
-  window.dispatchEvent(new Event('ethereum#initialized'));
+  try { window.dispatchEvent(new Event('ethereum#initialized')); } catch (e) {}
 })();
 true;
 `;
@@ -114,4 +122,9 @@ export function providerSyncScript(address: string, chainId: number): string {
     }
     true;
   `;
+}
+
+/** True only when the request's frame origin is the origin the user approved. */
+export function isOriginConnected(connectedOrigin: string | null, origin: string | null | undefined): boolean {
+  return Boolean(connectedOrigin && origin && connectedOrigin === origin);
 }

@@ -35,6 +35,7 @@ import { isCoinGeckoUrl } from '../wallet/markets';
 import {
   chainIdHex,
   INJECTED_PROVIDER_SOURCE,
+  isOriginConnected,
   providerEmitScript,
   providerResolveScript,
   providerSyncScript,
@@ -123,7 +124,14 @@ export function BrowserScreen() {
   // The page actually loaded (follows redirects). Origins on prompts come from here, never from the typed URL.
   const [pageUrl, setPageUrl] = useState(startUrl);
   const editingRef = useRef(false);
-  const [connectedOrigin, setConnectedOrigin] = useState<string | null>(null);
+  // DO NOT REVERT to reading connection state from a render closure. On iOS the page's
+  // follow-up eth_accounts arrives before React re-renders after Connect is approved, so the
+  // old onMessage closure answered [] -> the Connect page reset itself and crashed with
+  // "null is not an object (evaluating 'provider.request')". The ref is updated synchronously.
+  const connectedOriginRef = useRef<string | null>(null);
+  const setConnectedOrigin = useCallback((next: string | null) => {
+    connectedOriginRef.current = next;
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
 
@@ -195,7 +203,7 @@ export function BrowserScreen() {
       // Origin of the frame that sent this request (falls back to the last navigated page, never the typed URL).
       const origin = dappOrigin(event.nativeEvent.url) ?? dappOrigin(pageUrl);
       const site = dappHost(event.nativeEvent.url) ?? dappHost(pageUrl) ?? 'Unknown site';
-      const isConnected = Boolean(connectedOrigin && origin && connectedOrigin === origin);
+      const isConnected = isOriginConnected(connectedOriginRef.current, origin);
       const method = parsed.payload?.method ?? '';
       const params = parsed.payload?.params ?? [];
       const kind = classifyBrowserMethod(method);
@@ -237,14 +245,15 @@ export function BrowserScreen() {
         }
         setConnectedOrigin(origin);
         webRef.current?.injectJavaScript(providerSyncScript(session.address, selectedChain.id));
-        webRef.current?.injectJavaScript(
-          providerEmitScript('accountsChanged', [session.address]),
-        );
+        // Answer the request before announcing accountsChanged so pages see one consistent state.
         resolve(
           id,
           method === 'wallet_requestPermissions'
             ? [{ parentCapability: 'eth_accounts' }]
             : [session.address],
+        );
+        webRef.current?.injectJavaScript(
+          providerEmitScript('accountsChanged', [session.address]),
         );
         return;
       }
@@ -419,6 +428,7 @@ export function BrowserScreen() {
             setPageUrl(nav.url);
             setDraft((current) => urlBarAfterNavigation(current, nav.url, editingRef.current));
             // Leaving the connected site drops the connection, so a redirect cannot inherit it.
+            const connectedOrigin = connectedOriginRef.current;
             if (connectedOrigin && nextOrigin !== connectedOrigin) {
               setConnectedOrigin(null);
               webRef.current?.injectJavaScript(providerEmitScript('accountsChanged', []));

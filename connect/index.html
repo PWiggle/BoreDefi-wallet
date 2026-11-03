@@ -5,7 +5,7 @@
     <link rel="canonical" href="https://www.boredefi.com/connect" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>BoreDefi Connect</title>
-    <meta name="description" content="TEST-ONLY BoreDefi Connect page. Throwaway wallet only." />
+    <meta name="description" content="Connect your BoreDefi Wallet to boredefi.com with the in-app Browser or WalletConnect." />
     <link rel="icon" type="image/png" href="/connect/favicon.png" />
     <link rel="apple-touch-icon" href="/connect/mark.png" />
     <style>
@@ -20,8 +20,6 @@
   --accent: #2ee59d;
   --accent-text: #04140e;
   --danger: #ff5c7a;
-  --banner-surface: #3b2a08;
-  --banner-text: #f8e3b0;
 }
 
 * {
@@ -46,27 +44,6 @@ body {
   min-height: 100vh;
   padding: 16px 16px 32px;
   background: var(--bg);
-}
-
-.banner {
-  background: var(--banner-surface);
-  color: var(--banner-text);
-  border-radius: 12px;
-  padding: 12px 14px;
-  margin-bottom: 20px;
-}
-
-.banner strong {
-  display: block;
-  letter-spacing: 0.08em;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-
-.banner p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.4;
 }
 
 .hero {
@@ -239,15 +216,10 @@ a.secondary {
   </head>
   <body>
     <main class="wrap">
-      <aside class="banner" role="alert">
-        <strong>TEST-ONLY</strong>
-        <p>Throwaway wallet only. Never enter a real recovery phrase or send real funds.</p>
-      </aside>
-
       <header class="hero">
         <img class="mark" src="/connect/mark.png" alt="BoreDefi" width="148" height="148" />
         <h1>Connect</h1>
-        <p class="lede">Talk to BoreDefi. No server, no vault sync — this page only asks the wallet for a public address, the current network, and an optional test signature.</p>
+        <p class="lede">Connect your BoreDefi Wallet. This page only sees your public address and network. Your keys never leave your device.</p>
       </header>
 
       <section class="card">
@@ -271,7 +243,7 @@ a.secondary {
           <span class="label">Balance</span>
           <span id="balance" class="value">—</span>
         </div>
-        <p id="message" class="status">Prefer BoreDefi in the in-app Browser, WalletConnect QR, or the Chrome extension.</p>
+        <p id="message" class="status">Open this page in the BoreDefi app Browser, or connect from any browser with WalletConnect QR.</p>
         <p id="error" class="error" hidden></p>
         <div id="qr-box" class="qr">
           <canvas id="qr" width="240" height="240"></canvas>
@@ -281,14 +253,14 @@ a.secondary {
         <div class="actions">
           <button id="connect" class="primary" type="button">Connect BoreDefi</button>
           <button id="connect-wc" class="secondary" type="button">WalletConnect QR</button>
-          <button id="sign" class="secondary" type="button" disabled>Sign test message</button>
+          <button id="sign" class="secondary" type="button" disabled>Sign a message</button>
           <button id="disconnect" class="ghost" type="button" disabled>Disconnect</button>
         </div>
       </section>
 
       <p class="help">
-        In the wallet: Browser tab → <strong>Connect</strong> bookmark, or Settings → WalletConnect to scan this QR.
-        Extension users unlock the popup first. Back to
+        In the BoreDefi app: Browser tab → <strong>Connect</strong>, or Settings → WalletConnect to scan the QR.
+        Using the BoreDefi browser extension? Unlock it first. Back to
         <a href="/">boredefi.com</a>.
       </p>
     </main>
