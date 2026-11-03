@@ -8,7 +8,6 @@ import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
-import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
 import { parsePaymentUri } from '../wallet/qr';
 import { extractWalletConnectUri } from '../wallet/wc';
@@ -34,7 +33,6 @@ export function ScanQrScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'ScanQr'>>();
   const purpose = route.params?.purpose ?? 'payment';
-  const { pair } = useWalletConnect();
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -70,13 +68,9 @@ export function ScanQrScreen() {
             const wcUri = extractWalletConnectUri(data);
             if (wcUri && purpose !== 'payment') {
               setDone(true);
-              try {
-                await pair(wcUri);
-                navigation.navigate('WalletConnect', { uri: wcUri });
-              } catch (err) {
-                setDone(false);
-                setError(err instanceof Error ? err.message : 'Could not pair.');
-              }
+              // The WalletConnect screen pairs this URI once (it de-duplicates); pairing here too
+              // made the second attempt fail.
+              navigation.navigate('WalletConnect', { uri: wcUri });
               return;
             }
             if (wcUri) {

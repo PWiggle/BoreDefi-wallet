@@ -120,6 +120,34 @@ function waitForBoreDefi(timeoutMs = 1500) {
   });
 }
 
+// True inside the BoreDefi app's own Browser tab. react-native-webview adds
+// window.ReactNativeWebView to every page it loads, even if the wallet script is late.
+// Inside the app the page must NEVER start WalletConnect: a wc:/boredefi:// link would bounce
+// out to iOS and back into the wallet's WalletConnect screen instead of connecting here.
+function inBoreDefiApp() {
+  try {
+    if (window.ReactNativeWebView || window.ethereum?.isBoreDefi) {
+      return true;
+    }
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    return /BoreDefi/i.test(ua);
+  } catch {
+    return false;
+  }
+}
+
+const IN_APP_MISSING =
+  'The BoreDefi wallet did not load on this page. Pull down to reload, or reopen it from the Browser tab → Connect.';
+
+function applyInAppMode() {
+  if (!inBoreDefiApp()) {
+    return;
+  }
+  els.connectWc.hidden = true;
+  els.wcOpen.hidden = true;
+  els.qrBox.classList.remove('visible');
+}
+
 function otherInjected() {
   if (window.ethereum && !window.ethereum.isBoreDefi) {
     return window.ethereum;
@@ -248,9 +276,15 @@ async function connectInjected(target, label) {
 
 async function connectBoreDefi() {
   els.message.textContent = 'Looking for BoreDefi…';
-  const boredefi = await waitForBoreDefi();
+  const inApp = inBoreDefiApp();
+  const boredefi = await waitForBoreDefi(inApp ? 4000 : 1500);
   if (boredefi) {
     await connectInjected(boredefi, 'injected');
+    return;
+  }
+  if (inApp || inBoreDefiApp()) {
+    applyInAppMode();
+    els.message.textContent = IN_APP_MISSING;
     return;
   }
   els.message.textContent = 'BoreDefi wallet not found in this browser. Open this page in the BoreDefi app (Browser tab), or use WalletConnect QR below.';
@@ -258,6 +292,9 @@ async function connectBoreDefi() {
 }
 
 async function renderQr(uri) {
+  if (inBoreDefiApp()) {
+    return;
+  }
   els.qrBox.classList.add('visible');
   els.wcUri.textContent = uri;
   els.wcOpen.href = `boredefi://wc?uri=${encodeURIComponent(uri)}`;
@@ -268,6 +305,11 @@ async function renderQr(uri) {
 
 async function connectWalletConnect() {
   setError('');
+  if (inBoreDefiApp()) {
+    applyInAppMode();
+    els.message.textContent = "You're already in BoreDefi. Tap Connect BoreDefi.";
+    return;
+  }
   els.message.textContent = 'Starting WalletConnect… scan the QR in BoreDefi (Settings → WalletConnect).';
   const { EthereumProvider } = await import('https://esm.sh/@walletconnect/ethereum-provider@2.21.1');
   const wc = await EthereumProvider.init({
@@ -364,12 +406,15 @@ els.disconnect.addEventListener('click', () => {
   disconnect().catch((err) => setError(friendlyError(err)));
 });
 
-waitForBoreDefi().then((detected) => {
+applyInAppMode();
+waitForBoreDefi(inBoreDefiApp() ? 4000 : 1500).then((detected) => {
   if (provider) {
     return;
   }
   if (detected) {
     els.message.textContent = 'BoreDefi wallet detected. Tap Connect BoreDefi.';
+  } else if (inBoreDefiApp()) {
+    els.message.textContent = IN_APP_MISSING;
   } else if (otherInjected()) {
     els.message.textContent = 'Another wallet is installed in this browser. To use BoreDefi, open this page in the BoreDefi app or use WalletConnect QR.';
   }

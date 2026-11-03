@@ -176,9 +176,12 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     if (!client) {
       throw new Error('Set EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild to use WalletConnect.');
     }
+    if (!uri || !uri.trim()) {
+      throw new Error('Paste or scan a WalletConnect link first. It starts with wc:');
+    }
     const extracted = extractWalletConnectUri(uri);
     if (!extracted) {
-      throw new Error('That is not a WalletConnect URI.');
+      throw new Error("That isn't a WalletConnect link. Copy the wc: link from the dApp, or tap Scan QR.");
     }
     setError(null);
     await client.pair({ uri: extracted });

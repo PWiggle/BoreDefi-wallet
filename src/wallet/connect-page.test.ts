@@ -142,14 +142,25 @@ function racyProvider(emitData = true) {
   };
 }
 
-async function runConnectPage(source: string, injected: unknown | null, injectDelayMs = 0) {
+async function runConnectPage(
+  source: string,
+  injected: unknown | null,
+  injectDelayMs = 0,
+  opts: { inApp?: boolean; click?: string; waitMs?: number } = {},
+) {
   const els: Record<string, El> = {};
   const document = {
     getElementById(id: string) {
       return (els[id] ||= makeEl());
     },
   };
+  const navigations: string[] = [];
   const win = makeWindow({ document, setTimeout, clearInterval, setInterval, TextEncoder });
+  if (opts.inApp) {
+    // What react-native-webview adds to every page in the app's Browser tab.
+    win.ReactNativeWebView = { postMessage() {} };
+  }
+  (win as Record<string, unknown>).__navigations = navigations;
   if (injected && injectDelayMs === 0) {
     win.ethereum = injected;
   }
@@ -160,8 +171,8 @@ async function runConnectPage(source: string, injected: unknown | null, injectDe
       (win.dispatchEvent as EventTarget['dispatchEvent'])(new Event('ethereum#initialized'));
     }, injectDelayMs);
   }
-  els.connect.click();
-  await new Promise((r) => setTimeout(r, 400));
+  els[opts.click ?? 'connect'].click();
+  await new Promise((r) => setTimeout(r, opts.waitMs ?? 400));
   return els;
 }
 
@@ -204,4 +215,43 @@ test('Connect page copy has no test-page leftovers', () => {
   assert.doesNotMatch(html, /TEST-ONLY|Throwaway|test signature|Sign test message/i);
   assert.doesNotMatch(html, /pwiggle|github/i);
   assert.doesNotMatch(html, /™|&trade;/);
+});
+
+// REGRESSION (iOS build 12, 11:14 PM): inside the app's Browser the page must never start
+// WalletConnect. A wc:/boredefi:// hand-off bounced out to iOS and landed on the wallet's
+// WalletConnect screen ("That is not a WalletConnect URI.").
+test('in the BoreDefi app, WalletConnect QR never starts WalletConnect', async () => {
+  const els = await runConnectPage(readFileSync(CONNECT_JS, 'utf8'), racyProvider(), 0, {
+    inApp: true,
+    click: 'connect-wc',
+  });
+  assert.equal(els['connect-wc'].hidden, true);
+  assert.equal(els['wc-open'].hidden, true);
+  assert.equal(els['wc-open'].href, '');
+  assert.doesNotMatch(els['message'].textContent, /Starting WalletConnect/);
+  assert.equal(els['error'].textContent, '');
+});
+
+test('in the BoreDefi app with no provider, Connect shows a clear message and never falls back to WalletConnect', async () => {
+  const els = await runConnectPage(readFileSync(CONNECT_JS, 'utf8'), null, 0, { inApp: true, waitMs: 4600 });
+  assert.match(els['message'].textContent, /did not load on this page/);
+  assert.equal(els['wc-open'].href, '');
+  assert.equal(els['error'].textContent, '');
+});
+
+test('in the BoreDefi app, a provider that arrives late (3s) still connects', async () => {
+  const els = await runConnectPage(readFileSync(CONNECT_JS, 'utf8'), racyProvider(), 3000, { inApp: true, waitMs: 3600 });
+  assert.equal(els['status-label'].textContent, 'Connected');
+});
+
+test('the d97b2e9 page really did fall back to WalletConnect inside the app (guards this test)', async (t) => {
+  let old: string;
+  try {
+    old = execFileSync('git', ['show', 'd97b2e9:connect/app.js'], { cwd: ROOT, encoding: 'utf8' });
+  } catch {
+    t.skip('git history not available');
+    return;
+  }
+  const els = await runConnectPage(old, null, 0, { inApp: true, waitMs: 2000 });
+  assert.match(els['message'].textContent + els['error'].textContent, /WalletConnect|import|Could not reach/i);
 });

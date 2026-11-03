@@ -43,7 +43,7 @@ import {
 import { inspectDappApproval } from '../wallet/approval-risk';
 import { formatNative } from '../wallet/format';
 import { sendRpc } from '../wallet/rpc';
-import { parseSwitchChainId } from '../wallet/wc';
+import { extractWalletConnectUri, isWalletConnectNavigation, parseSwitchChainId } from '../wallet/wc';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { evaluateProtectedRequest } from '../wallet/protected-runtime';
@@ -365,8 +365,15 @@ export function BrowserScreen() {
   };
 
   const intercept = (request: WebViewNavigation) => {
-    if (request.url.startsWith('wc:')) {
-      pair(request.url).catch((err) =>
+    const target = request.url || '';
+    if (isWalletConnectNavigation(target)) {
+      const wcUri = extractWalletConnectUri(target);
+      if (!wcUri) {
+        // Never hand an empty/malformed link to the WalletConnect screen.
+        setError('This page tried to open WalletConnect without a valid link. Use Connect on the page instead.');
+        return false;
+      }
+      pair(wcUri).catch((err) =>
         setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
       );
       return false;

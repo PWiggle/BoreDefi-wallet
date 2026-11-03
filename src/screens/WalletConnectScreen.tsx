@@ -9,6 +9,7 @@ import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
+import { extractWalletConnectUri } from '../wallet/wc';
 
 function wcStyles({ colors, card, field, spacing }: Theme) {
   return {
@@ -45,12 +46,21 @@ export function WalletConnectScreen() {
   const [busy, setBusy] = useState(false);
   const autoPaired = useRef<string | null>(null);
 
+  const [notice, setNotice] = useState<string | null>(null);
+
   const connect = async (value = uri) => {
+    if (!value || !value.trim()) {
+      setLocalError(null);
+      setNotice('Paste a wc: link from the dApp, or tap Scan QR.');
+      return;
+    }
     setBusy(true);
     setLocalError(null);
+    setNotice(null);
     try {
       await pair(value);
       setUri('');
+      setNotice('Paired. Approve the connection when the dApp asks.');
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Could not pair.');
     } finally {
@@ -59,7 +69,7 @@ export function WalletConnectScreen() {
   };
 
   useEffect(() => {
-    const incoming = route.params?.uri;
+    const incoming = extractWalletConnectUri(route.params?.uri);
     if (!incoming || !ready || !projectId || autoPaired.current === incoming) {
       return;
     }
@@ -84,6 +94,7 @@ export function WalletConnectScreen() {
           {ready ? 'Relay is ready. Scan or paste a wc: URI from a dApp.' : 'Starting WalletConnect…'}
         </Text>
       )}
+      {notice ? <Text style={styles.help}>{notice}</Text> : null}
       <TextInput
         value={uri}
         onChangeText={setUri}
