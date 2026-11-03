@@ -6,10 +6,13 @@ import { inspectDappApproval } from '../wallet/approval-risk';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
 import { hexToUtf8, pickSignMessage } from '../wallet/wc';
-import { evaluateProtectedRequest } from '../wallet/protected-runtime';
+import { formatNetworkFee } from '../wallet/network-fee';
+import { reviewDappRequest } from '../wallet/request-review';
+import type { TxPreview } from '../wallet/tx-simulate';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { ConfirmSheet } from './ConfirmSheet';
 import { ProtectedGuardSheet } from './ProtectedGuardSheet';
+import { networkFeeLabel, useNetworkFee } from './useNetworkFee';
 
 function txValue(value: unknown, symbol: string): string | undefined {
   if (typeof value !== 'string' || !value) {
@@ -30,15 +33,19 @@ export function WalletConnectOverlay() {
   const [busy, setBusy] = useState(false);
   const [verdict, setVerdict] = useState<ProtectedVerdict | null>(null);
   const [checking, setChecking] = useState(false);
+  const [preview, setPreview] = useState<TxPreview | null>(null);
+  const fee = useNetworkFee(pendingRequest?.chainId ?? 1, preview?.gasUsed ?? null, Boolean(pendingRequest));
 
   useEffect(() => {
     let cancelled = false;
     setVerdict(null);
+    setPreview(null);
     if (!pendingRequest || !session) {
       return;
     }
     setChecking(true);
-    evaluateProtectedRequest({
+    // Simulate first (transaction preview), then run the protected guard with what the simulation found.
+    reviewDappRequest({
       method: pendingRequest.method,
       params: pendingRequest.params,
       chainId: pendingRequest.chainId,
@@ -46,7 +53,8 @@ export function WalletConnectOverlay() {
     })
       .then((next) => {
         if (!cancelled) {
-          setVerdict(next);
+          setVerdict(next.verdict);
+          setPreview(next.preview);
         }
       })
       .catch(() => undefined)
@@ -107,6 +115,7 @@ export function WalletConnectOverlay() {
         verdict={verdict}
         network={CHAINS[pendingRequest.chainId].name}
         dapp={pendingRequest.peerName}
+        preview={preview}
         busy={busy}
         error={error}
         onApprove={(clearance) => run(() => approveRequest(clearance))}
@@ -118,7 +127,7 @@ export function WalletConnectOverlay() {
   const tx = pendingRequest.params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
   const isSend = pendingRequest.method === 'eth_sendTransaction' || pendingRequest.method === 'eth_signTransaction';
   const risk = inspectDappApproval(pendingRequest.method, pendingRequest.params);
-  const preview =
+  const requestText =
     pendingRequest.method === 'personal_sign' || pendingRequest.method === 'eth_sign'
       ? safePreview(pendingRequest.params)
       : describeRequest(pendingRequest);
@@ -137,9 +146,11 @@ export function WalletConnectOverlay() {
             ? txValue(tx?.value, selectedChain.symbol) ?? pendingRequest.method
             : pendingRequest.method
       }
-      fee={isSend ? 'Network gas (quoted at sign)' : 'None (signature only)'}
+      fee={isSend ? (checking ? 'Estimating…' : networkFeeLabel(fee, 'Network gas (quoted at sign)', formatNetworkFee)) : 'None (signature only)'}
+      preview={preview}
+      previewLoading={checking}
       extra={[
-        { label: 'Request', value: preview },
+        { label: 'Request', value: requestText },
         ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
         ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
         { label: 'dApp', value: pendingRequest.peerName },

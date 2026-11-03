@@ -4,10 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
-import { getAddress, isAddress } from 'ethers';
+import { getAddress, Interface, isAddress } from 'ethers';
 
 import { Button } from '../components/Button';
 import { ConfirmSheet } from '../components/ConfirmSheet';
+import { TxPreviewCard } from '../components/TxPreviewCard';
+import { previewInAppCalls } from '../wallet/tx-preview-runtime';
+import type { TxPreview } from '../wallet/tx-simulate';
+import { unexpectedProtectedMoves } from '../wallet/swap-preview';
+
 import { ErrorBanner } from '../components/ErrorBanner';
 import { ProtectedReauth } from '../components/ProtectedReauth';
 import { Screen } from '../components/Screen';
@@ -44,6 +49,11 @@ function nftSendStyles({ colors, chip, field, spacing, type }: Theme) {
   };
 }
 
+const NFT_SEND_IFACE = new Interface([
+  'function safeTransferFrom(address from, address to, uint256 tokenId)',
+  'function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes data)',
+]);
+
 export function NftSendScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(nftSendStyles);
@@ -62,6 +72,8 @@ export function NftSendScreen() {
   const [review, setReview] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [tail, setTail] = useState('');
+  const [nftPreview, setNftPreview] = useState<TxPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const chainForAsset = preset?.chainId ?? selectedChain.id;
   const protectedAsset = isAddress(contract) ? protectedAssetFor(chainForAsset, contract) : null;
 
@@ -146,7 +158,28 @@ export function NftSendScreen() {
       'On-chain ownerOf / balanceOf matches this wallet. Send is blocked if it does not.',
       'This cannot be undone. The NFT leaves this wallet when the transaction confirms.',
     ]);
+    setNftPreview(null);
+    setPreviewLoading(true);
     setReview(true);
+    try {
+      const data =
+        standard === 'ERC-721'
+          ? NFT_SEND_IFACE.encodeFunctionData('safeTransferFrom(address,address,uint256)', [session.address, getAddress(to), BigInt(tokenId)])
+          : NFT_SEND_IFACE.encodeFunctionData('safeTransferFrom(address,address,uint256,uint256,bytes)', [session.address, getAddress(to), BigInt(tokenId), quantity, '0x']);
+      const { preview, simulation } = await previewInAppCalls(chainForAsset, session.address, [
+        { from: session.address, to: getAddress(contract), value: 0n, data },
+      ]);
+      const expected = new Set(protectedAsset ? [protectedAsset.key] : []);
+      const unexpected = unexpectedProtectedMoves(chainForAsset, simulation, session.address, expected);
+      if (unexpected.length) {
+        setReview(false);
+        setError(`Blocked: the preview shows this would also move your ${unexpected.map((item) => item.name).join(', ')}. Nothing was sent.`);
+        return;
+      }
+      setNftPreview(preview);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const confirm = async () => {
@@ -286,6 +319,7 @@ export function NftSendScreen() {
                 • {line}
               </Text>
             ))}
+            <TxPreviewCard preview={nftPreview} loading={previewLoading} />
             <Text style={styles.redLabel}>Check twice: type the last 4 characters of the recipient</Text>
             <TextInput
               value={tail}
@@ -299,7 +333,7 @@ export function NftSendScreen() {
             />
             <ProtectedReauth
               reason={`Send ${protectedAsset?.name ?? 'NFT'}`}
-              disabled={!recipientTailMatches(to, tail) || busy}
+              disabled={!recipientTailMatches(to, tail) || busy || previewLoading}
               busy={busy}
               confirmLabel="Send"
               onVerified={() => void confirm()}
@@ -316,6 +350,8 @@ export function NftSendScreen() {
         to={checksumAddress(to) ?? to}
         amount={standard === 'ERC-1155' ? `${amount || '1'} × #${tokenId}` : `#${tokenId}`}
         fee="Network gas (quoted at broadcast)"
+        preview={nftPreview}
+        previewLoading={previewLoading}
         extra={[
           { label: 'Collection', value: protectedAsset?.name ?? preset?.collection ?? 'Unknown collection' },
           { label: 'Standard', value: standard },
@@ -328,7 +364,7 @@ export function NftSendScreen() {
           ...warnings,
           'Do not tap claim links. BoreDefi will not open metadata websites from this send.',
         ]}
-        loading={busy}
+        loading={busy || previewLoading}
         onConfirm={confirm}
         onCancel={() => setReview(false)}
       />

@@ -29,6 +29,11 @@ import {
 import { fetchTokenBalance } from '../wallet/swap';
 import { tokensForChain, type TokenConfig } from '../wallet/tokens';
 import { friendlyTxError } from '../wallet/tx-errors';
+import { formatNetworkFee } from '../wallet/network-fee';
+import { unexpectedProtectedMoves } from '../wallet/swap-preview';
+import { previewInAppCalls } from '../wallet/tx-preview-runtime';
+import type { TxPreview } from '../wallet/tx-simulate';
+import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
 
 function sendStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -79,6 +84,11 @@ export function SendScreen() {
   const { gate: protectedGate, sheet: protectedSheet } = useProtectedGate(selectedChain.name);
   // Exact (token, to, amount) that passed the ApeCoin guard; confirm refuses anything else.
   const [clearedSend, setClearedSend] = useState<string | null>(null);
+  // Transaction preview of the exact send, plus the expected fee in native + $.
+  const [sendPreview, setSendPreview] = useState<TxPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [gasUnits, setGasUnits] = useState<bigint | null>(null);
+  const networkFee = useNetworkFee(selectedChain.id, previewLoading ? null : (sendPreview?.gasUsed ?? gasUnits), review);
 
   useEffect(() => {
     if (route.params?.to) {
@@ -196,8 +206,25 @@ export function SendScreen() {
         setClearedSend(sendKey(recipient, units));
       }
       setFeeWei(estimate.feeWei);
+      setGasUnits(estimate.gasLimit);
+      setSendPreview(null);
+      setPreviewLoading(true);
       setReview(true);
+      const { preview, simulation } = await previewInAppCalls(selectedChain.id, fromAddress, [
+        token.native
+          ? { from: fromAddress, to: recipient, value: units, data: null }
+          : { from: fromAddress, to: token.address, value: 0n, data: erc20TransferData(recipient, units) },
+      ]);
+      const unexpected = unexpectedProtectedMoves(selectedChain.id, simulation, fromAddress, new Set(protectedAsset ? [protectedAsset.key] : []));
+      setPreviewLoading(false);
+      if (unexpected.length) {
+        setReview(false);
+        setError(`Blocked: the preview shows this would also move your ${unexpected.map((item) => item.name).join(', ')}. Nothing was sent.`);
+        return;
+      }
+      setSendPreview(preview);
     } catch (err) {
+      setPreviewLoading(false);
       setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Could not estimate the network fee.' }));
     }
   };
@@ -313,10 +340,12 @@ export function SendScreen() {
         from={fromAddress}
         to={checksumAddress(to) ?? to}
         amount={`${amount} ${symbol}`}
-        fee={feeWei !== null ? `${formatNative(feeWei)} ${selectedChain.symbol}` : '—'}
+        fee={previewLoading ? 'Estimating…' : networkFeeLabel(networkFee, feeWei !== null ? `up to ${formatNative(feeWei)} ${selectedChain.symbol}` : '—', formatNetworkFee)}
+        preview={sendPreview}
+        previewLoading={previewLoading}
         extra={token.native ? undefined : [{ label: 'Token contract', value: token.address }]}
         warnings={warnings}
-        loading={busy}
+        loading={busy || previewLoading}
         onConfirm={confirm}
         onCancel={() => setReview(false)}
       />

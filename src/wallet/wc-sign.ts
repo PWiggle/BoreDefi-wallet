@@ -40,7 +40,7 @@ export async function handleWalletConnectRequest(input: {
 }): Promise<WalletConnectRequestResult> {
   const { mnemonic, address, method, params, chainId } = input;
   // Last line of defense: recompute the Yuga / BAYC guard right before the key is used.
-  const verdict = await evaluateProtectedRequest({ method, params, chainId, owner: address });
+  const verdict = await evaluateProtectedRequest({ method, params, chainId, owner: address, simulation: 'auto' });
   if (verdict) {
     assertProtectedClearance(verdict, input.clearance);
   }

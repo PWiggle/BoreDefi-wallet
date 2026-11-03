@@ -21,6 +21,7 @@ export const KNOWN_OPERATORS: { address: string; label: string }[] = [
   { address: '0xF849de01B080aDC3A814FaBE1E2087475cF2E354', label: 'X2Y2 ERC-721 delegate' },
   { address: '0x000000000022D473030F116dDEE9F6B43aC78BA3', label: 'Permit2' },
   { address: '0x2dea447e7dc6cd2f10b31bF10dCB30F87E838417', label: 'LI.FI (ApeChain)' },
+  { address: '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE', label: 'LI.FI' },
 ];
 
 export const TOPIC_APPROVAL_FOR_ALL = '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31';

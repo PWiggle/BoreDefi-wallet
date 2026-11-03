@@ -9,6 +9,7 @@ import type { MainNavigation } from '../navigation';
 import { BOREDEFI_SUPPORT_URL, CONNECT_DEMO_URL } from '../wallet/dapps';
 import { AUTO_LOCK_OPTIONS } from '../wallet/auto-lock';
 import { shortenAddress } from '../wallet/format';
+import { PROOF_MODE } from '../proof-mode';
 
 function settingsStyles({ colors, type, card, spacing }: Theme) {
   return {
@@ -174,6 +175,7 @@ export function SettingsScreen() {
       {Platform.OS === 'ios' ? null : (
         <SettingsRow label="Ledger" detail="Hardware signing" onPress={() => navigation.navigate('Ledger')} />
       )}
+      <SettingsRow label="Gas tracker" detail="Live gwei, costs in $, 24h chart" onPress={() => navigation.navigate('Gas')} />
       <Text style={styles.section}>Support</Text>
       <SettingsRow
         label="Help & support"
@@ -185,6 +187,9 @@ export function SettingsScreen() {
         detail="Checks that sites can connect in the Browser"
         onPress={() => navigation.navigate('Browser', { url: CONNECT_DEMO_URL })}
       />
+      {PROOF_MODE ? (
+        <SettingsRow label="Proof screens (test build)" detail="Live previews, nothing is sent" onPress={() => navigation.navigate('Proof')} />
+      ) : null}
       <Text style={styles.note}>
         Keys stay on this device. The vault is encrypted at rest with a PIN-derived key. There is no fiat
         on-ramp. Market data via BoreDash (source: CoinGecko).

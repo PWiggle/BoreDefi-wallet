@@ -24,6 +24,9 @@ export type MainStackParamList = {
   Swap: { fromSymbol?: string };
   Stake: { marketId?: string };
   Bridge: undefined;
+  Gas: undefined;
+  /** Screenshot-proof builds only (EXPO_PUBLIC_PROOF_MODE=1). */
+  Proof: undefined;
   Ledger: undefined;
   NftSend: { nft?: NftItem; to?: string };
   NftReceive: undefined;

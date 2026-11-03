@@ -19,6 +19,9 @@ import { ActivityScreen } from './src/screens/ActivityScreen';
 import { BackupSeedScreen } from './src/screens/BackupSeedScreen';
 import { BridgeScreen } from './src/screens/BridgeScreen';
 import { ChangePinScreen } from './src/screens/ChangePinScreen';
+import { GasScreen } from './src/screens/GasScreen';
+import { ProofScreen } from './src/screens/ProofScreen';
+import { PROOF_MODE } from './src/proof-mode';
 import { ImportWalletScreen } from './src/screens/ImportWalletScreen';
 import { LedgerScreen } from './src/screens/LedgerScreen';
 import { NftImportScreen } from './src/screens/NftImportScreen';
@@ -125,6 +128,8 @@ function RootNavigator() {
         <MainStack.Screen name="Swap" component={SwapScreen} initialParams={{}} />
         <MainStack.Screen name="Stake" component={StakeScreen} initialParams={{}} />
         <MainStack.Screen name="Bridge" component={BridgeScreen} />
+        <MainStack.Screen name="Gas" component={GasScreen} options={{ title: 'Gas' }} />
+        {PROOF_MODE ? <MainStack.Screen name="Proof" component={ProofScreen} options={{ title: 'Proof' }} /> : null}
         <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />
         <MainStack.Screen name="NftReceive" component={NftReceiveScreen} options={{ title: 'Receive NFT' }} />

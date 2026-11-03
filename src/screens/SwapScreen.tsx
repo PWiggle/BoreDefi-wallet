@@ -4,7 +4,7 @@ import { useRoute, type RouteProp } from '@react-navigation/native';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
-import { ConfirmSheet } from '../components/ConfirmSheet';
+import { SwapConfirmSheet } from '../components/SwapConfirmSheet';
 import { useProtectedGate } from '../components/useProtectedGate';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { WarningBanner } from '../components/WarningBanner';
@@ -29,6 +29,10 @@ import { friendlyTxError } from '../wallet/tx-errors';
 import { protectedApproveRequest, protectedTokenAsset } from '../wallet/protected-spend';
 import { fetchUsdPrices, geckoIdForToken } from '../wallet/markets';
 import { balanceKeyFor, initialSpendView, spendBanner, spendViewReducer } from '../wallet/spend-view';
+import { formatNetworkFee } from '../wallet/network-fee';
+import { prepareSwapReview, swapFeeGasUnits } from '../wallet/swap-preview';
+import type { TxPreview } from '../wallet/tx-simulate';
+import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
 import { canReviewSwap, checkSwapPrice, swapBalanceGate, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
 
 function swapStyles({ colors, card, chip, field, spacing }: Theme) {
@@ -100,6 +104,12 @@ export function SwapScreen() {
   const { gate: protectedGate, sheet: protectedSheet } = useProtectedGate(selectedChain.name);
   // Quote key that passed the ApeCoin (Yuga-protected) guard; confirm refuses any other quote.
   const [clearedKey, setClearedKey] = useState<string | null>(null);
+  // Transaction preview of the swap (approve + swap simulated together) and its live network fee.
+  const [swapPreview, setSwapPreview] = useState<TxPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const feeGas = review && quote ? swapFeeGasUnits(quote, swapPreview?.gasUsed ?? null, needsApproval) : null;
+  const networkFee = useNetworkFee(selectedChain.id, previewLoading ? null : feeGas, review);
 
   useEffect(() => {
     const next = tokensForChain(selectedChain.id);
@@ -256,7 +266,21 @@ export function SwapScreen() {
       }
       setClearedKey(quoteKey);
     }
+    setSwapPreview(null);
+    setPreviewLoading(true);
     setReview(true);
+    try {
+      const result = await prepareSwapReview({ chainId: selectedChain.id, owner: fromAddress, fromToken, quote });
+      if (!result.ok) {
+        setReview(false);
+        setError(result.message);
+        return;
+      }
+      setNeedsApproval(result.needsApproval);
+      setSwapPreview(result.preview);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const confirm = async () => {
@@ -357,24 +381,15 @@ export function SwapScreen() {
       )}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {protectedSheet}
-      <ConfirmSheet
+      <SwapConfirmSheet
         visible={review && Boolean(quote) && reviewEnabled}
-        title="Confirm swap"
         network={selectedChain.name}
-        from={fromAddress}
-        to={quote?.transactionRequest.to}
-        amount={
-          quote
-            ? `${formatTokenAmount(quote.fromAmount, quote.fromToken.decimals)} ${quote.fromToken.symbol} → ${formatTokenAmount(quote.toAmount, quote.toToken.decimals)} ${quote.toToken.symbol}`
-            : undefined
-        }
-        fee={
-          quote?.transactionRequest.gasLimit
-            ? `Gas limit ${quote.transactionRequest.gasLimit.toString()}`
-            : 'Network gas (quoted at broadcast)'
-        }
-        extra={quote ? [{ label: 'Route', value: quote.toolName }] : []}
-        loading={busy}
+        fromAddress={fromAddress}
+        quote={quote}
+        fee={previewLoading ? 'Estimating…' : networkFeeLabel(networkFee, 'Network gas (quoted at broadcast)', formatNetworkFee)}
+        preview={swapPreview}
+        previewLoading={previewLoading}
+        loading={busy || previewLoading}
         onConfirm={confirm}
         onCancel={() => setReview(false)}
       />

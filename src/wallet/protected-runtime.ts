@@ -3,6 +3,8 @@ import { approvalsAllowed, type ProtectedPolicy } from './protected-policy';
 import { analyzeProtectedRequest, type ProtectedVerdict } from './protected-guard';
 import { cachedFloorWei, fetchFloorWei } from './protected-floor';
 import { loadProtectedPolicy } from './storage';
+import { applySimulationToVerdict, simulationEffects, type Simulation } from './tx-simulate';
+import { simulateRequest } from './tx-preview-runtime';
 import { PROTECTED_ASSETS } from './yuga-allowlist';
 
 const SIGNING_METHODS = new Set([
@@ -20,6 +22,43 @@ const SIGNING_METHODS = new Set([
  * Used by the confirm UI and again by wc-sign right before the key signs.
  */
 export async function evaluateProtectedRequest(input: {
+  method: string;
+  params: unknown[];
+  chainId: number;
+  owner: string;
+  policy?: ProtectedPolicy;
+  /**
+   * Transaction preview: 'auto' simulates the request (free eth_simulateV1, cached ~90s) and adds any hidden
+   * protected move it finds. Pass a Simulation to reuse one. Omit for in-app synthetic requests.
+   */
+  simulation?: Simulation | null | 'auto';
+}): Promise<ProtectedVerdict | null> {
+  const verdict = await evaluateStatic(input);
+  if (!verdict || input.simulation === undefined || input.simulation === null) {
+    return verdict;
+  }
+  let simulation: Simulation | null = null;
+  if (input.simulation === 'auto') {
+    try {
+      simulation = await simulateRequest(input);
+    } catch {
+      simulation = null;
+    }
+  } else {
+    simulation = input.simulation;
+  }
+  if (!simulation) {
+    return verdict;
+  }
+  const policy = input.policy ?? (await loadProtectedPolicy());
+  const now = Date.now();
+  return applySimulationToVerdict(verdict, simulationEffects(simulation, input.owner), {
+    chainId: input.chainId,
+    approvalsAllowed: (key) => approvalsAllowed(policy, key, now),
+  });
+}
+
+async function evaluateStatic(input: {
   method: string;
   params: unknown[];
   chainId: number;

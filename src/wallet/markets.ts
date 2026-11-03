@@ -428,6 +428,11 @@ export const MARKET_ROUTES = {
     boredash: `/api/wallet/coin/${q(id)}`,
     gecko: `/coins/${q(id)}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`,
   }),
+  /** Fee display prices (network fee in $): BoreDash first, CoinGecko fallback. */
+  walletPrices: (ids: string[]): MarketRoute => ({
+    boredash: `/api/wallet/prices?ids=${q(ids.join(','))}`,
+    gecko: `/simple/price?ids=${q(ids.join(','))}&vs_currencies=usd`,
+  }),
   usdPrices: (ids: string[]): MarketRoute => ({
     boredash: null,
     gecko: `/simple/price?ids=${q(ids.join(','))}&vs_currencies=usd`,
@@ -644,6 +649,30 @@ export async function fetchUsdPrices(
   if (payload === null) {
     throw lastError instanceof Error ? lastError : new Error('Price feed unavailable.');
   }
+  const out: Record<string, number> = {};
+  for (const [id, value] of Object.entries(payload ?? {})) {
+    if (typeof value?.usd === 'number' && Number.isFinite(value.usd)) {
+      out[id] = value.usd;
+    }
+  }
+  return out;
+}
+
+/**
+ * USD prices for fee display (swap confirm "about $0.18", Gas screen). BoreDash /api/wallet/prices first,
+ * CoinGecko /simple/price as the fallback. The swap price guard keeps using fetchUsdPrices (CoinGecko direct).
+ */
+export async function fetchWalletUsdPrices(
+  ids: string[],
+  options: { fetchImpl?: MarketFetch } = {},
+): Promise<Record<string, number>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) {
+    return {};
+  }
+  const payload = await fetchMarketJson<Record<string, { usd?: number }>>(MARKET_ROUTES.walletPrices(unique), {
+    fetchImpl: options.fetchImpl,
+  });
   const out: Record<string, number> = {};
   for (const [id, value] of Object.entries(payload ?? {})) {
     if (typeof value?.usd === 'number' && Number.isFinite(value.usd)) {

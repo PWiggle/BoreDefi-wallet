@@ -29,6 +29,8 @@ import {
 import { fetchBalance } from '../wallet/rpc';
 import { fetchTokenBalance } from '../wallet/swap';
 import { type TokenConfig } from '../wallet/tokens';
+import { useGas } from '../components/useGas';
+import { GasSummary } from './GasScreen';
 
 type TokenRow = {
   token: TokenConfig;
@@ -180,6 +182,8 @@ export function HomeScreen() {
       load();
     }, [load]),
   );
+  // One gas read each time Home is focused (the Gas screen itself refreshes every 12 s).
+  const gas = useGas({ poll: false });
 
   if (!session) {
     return null;
@@ -230,6 +234,13 @@ export function HomeScreen() {
         <CircleAction label="Stake" name="stake" onPress={() => navigation.navigate('Stake', {})} />
         <CircleAction label="Bridge" name="bridge" onPress={() => navigation.navigate('Bridge')} />
       </View>
+      <Pressable onPress={() => navigation.navigate('Gas')} style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Ethereum gas</Text>
+          <Text style={styles.link}>Live chart</Text>
+        </View>
+        <GasSummary snapshot={gas.snapshot} />
+      </Pressable>
       <ErrorBanner message={error} />
       <ErrorBanner message={marketsError} />
       <View style={styles.section}>

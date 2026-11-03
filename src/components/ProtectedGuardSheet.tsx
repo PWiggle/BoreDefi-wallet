@@ -6,6 +6,8 @@ import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { confirmPhraseMatches, type ProtectedVerdict } from '../wallet/protected-guard';
 import { Button } from './Button';
 import { ProtectedReauth } from './ProtectedReauth';
+import { TxPreviewCard } from './TxPreviewCard';
+import type { TxPreview } from '../wallet/tx-simulate';
 
 function guardStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -41,6 +43,7 @@ export function ProtectedGuardSheet({
   verdict,
   network,
   dapp,
+  preview,
   busy,
   error,
   onApprove,
@@ -49,6 +52,8 @@ export function ProtectedGuardSheet({
   verdict: ProtectedVerdict | null;
   network: string;
   dapp?: string;
+  /** Transaction preview of the same request, shown under the warning. */
+  preview?: TxPreview | null;
   busy?: boolean;
   error?: string | null;
   onApprove: (clearance: string) => void;
@@ -102,6 +107,7 @@ export function ProtectedGuardSheet({
               • {line}
             </Text>
           ))}
+          {preview ? <TxPreviewCard preview={preview} /> : null}
           {error ? <Text style={styles.blockTitle}>{error}</Text> : null}
           {verdict.blocked ? (
             <View style={styles.blockBox}>

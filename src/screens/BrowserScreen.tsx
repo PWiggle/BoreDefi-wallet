@@ -47,7 +47,9 @@ import { sendRpc } from '../wallet/rpc';
 import { extractWalletConnectUri, isWalletConnectNavigation, parseSwitchChainId } from '../wallet/wc';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
-import { evaluateProtectedRequest } from '../wallet/protected-runtime';
+import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
+import { reviewDappRequest } from '../wallet/request-review';
+import type { TxPreview } from '../wallet/tx-simulate';
 
 type BrowserConfirm = {
   title: string;
@@ -62,6 +64,7 @@ type BrowserConfirm = {
   cancelLabel?: string;
   warnings?: string[];
   danger?: boolean;
+  preview?: TxPreview | null;
   resolve: (ok: boolean) => void;
 };
 
@@ -139,12 +142,13 @@ export function BrowserScreen() {
   const [pendingProtected, setPendingProtected] = useState<{
     verdict: ProtectedVerdict;
     site: string;
+    preview: TxPreview | null;
     resolve: (clearance: string | null) => void;
   } | null>(null);
 
-  const requestProtected = (verdict: ProtectedVerdict, site: string): Promise<string | null> =>
+  const requestProtected = (verdict: ProtectedVerdict, site: string, preview: TxPreview | null): Promise<string | null> =>
     new Promise((resolve) => {
-      setPendingProtected({ verdict, site, resolve });
+      setPendingProtected({ verdict, site, preview, resolve });
     });
 
   const requestConfirm = (spec: Omit<BrowserConfirm, 'resolve'>): Promise<boolean> =>
@@ -298,7 +302,8 @@ export function BrowserScreen() {
         }
         const tx = params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
         const isSend = method === 'eth_sendTransaction' || method === 'eth_signTransaction';
-        const verdict = await evaluateProtectedRequest({
+        // Transaction preview: simulate before anything is shown, then the protected guard with its findings.
+        const { verdict, preview } = await reviewDappRequest({
           method,
           params,
           chainId: selectedChain.id,
@@ -306,13 +311,14 @@ export function BrowserScreen() {
         });
         let clearance: string | null = null;
         if (verdict?.protected) {
-          clearance = await requestProtected(verdict, site);
+          clearance = await requestProtected(verdict, site, preview);
           if (!clearance) {
             resolve(id, null, 'User rejected.');
             return;
           }
         }
         const risk = inspectDappApproval(method, params);
+        const networkFee = isSend && preview.gasUsed ? await estimateNetworkFee(selectedChain.id, preview.gasUsed) : null;
         const approved = clearance !== null || await requestConfirm({
           title: risk?.danger ? 'Danger: collection-wide approval' : 'Approve request',
           network: selectedChain.name,
@@ -323,7 +329,8 @@ export function BrowserScreen() {
             : isSend
               ? txAmount(tx?.value, selectedChain.symbol) ?? method
               : method,
-          fee: isSend ? 'Network gas (quoted at sign)' : 'None (signature only)',
+          fee: isSend ? (networkFee ? formatNetworkFee(networkFee) : 'Network gas (quoted at sign)') : 'None (signature only)',
+          preview,
           extra: [
             { label: 'Site', value: site },
             { label: 'Method', value: method },
@@ -450,6 +457,7 @@ export function BrowserScreen() {
           verdict={pendingProtected.verdict}
           network={selectedChain.name}
           dapp={pendingProtected.site}
+          preview={pendingProtected.preview}
           onApprove={(clearance) => {
             pendingProtected.resolve(clearance);
             setPendingProtected(null);
@@ -468,6 +476,7 @@ export function BrowserScreen() {
         to={pendingConfirm?.to}
         amount={pendingConfirm?.amount}
         fee={pendingConfirm?.fee}
+        preview={pendingConfirm?.preview}
         extra={pendingConfirm?.extra}
         warnings={pendingConfirm?.warnings}
         variant={pendingConfirm?.danger ? 'danger' : 'default'}
