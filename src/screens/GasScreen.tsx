@@ -72,7 +72,7 @@ export function GasScreen() {
     <Screen title="Gas tracker" subtitle="Ethereum gas right now, in gwei and dollars. Refreshes every 12 seconds.">
       {snapshot ? <GasNow snapshot={snapshot} ago={ago} /> : <Text style={styles.meta}>{error ?? 'Loading live gas…'}</Text>}
       {snapshot ? <GasCosts snapshot={snapshot} /> : null}
-      <GasChart history={history} current={snapshot?.average.gwei ?? null} />
+      <GasChart history={history} current={snapshot?.baseFeeGwei ?? null} />
       {snapshot?.apeChain ? <ApeChainGas snapshot={snapshot} /> : null}
       <Text style={styles.meta}>
         {`Source: ${snapshot?.source === 'rpc' ? 'public Ethereum RPCs (direct)' : 'boredefi.com gas API'} · free public data, no account needed.`}
@@ -175,7 +175,7 @@ function GasChart({ history, current }: { history: GasHistory | null; current: n
       </Svg>
       <View style={styles.axis}>
         <Text style={styles.meta}>{`${Math.round(history.coveredHours)}h ago`}</Text>
-        <Text style={styles.meta}>{current !== null ? `now ${formatGwei(current)} gwei` : 'now'}</Text>
+        <Text style={styles.meta}>{current !== null ? `now: base fee ${formatGwei(current)} gwei` : 'now'}</Text>
       </View>
     </View>
   );

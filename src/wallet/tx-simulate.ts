@@ -21,7 +21,8 @@ export type SimLog = { address: string; topics: string[]; data: string };
 export type SimCallResult = { ok: boolean; gasUsed: bigint | null; logs: SimLog[]; error: string | null };
 
 export type Simulation =
-  | { kind: 'simulated'; calls: SimCallResult[]; at: number }
+  /** fundedOverride: the wallet could not pay the value, so the preview ran with a temporary balance override. */
+  | { kind: 'simulated'; calls: SimCallResult[]; at: number; fundedOverride?: boolean }
   | { kind: 'estimated'; ok: boolean; gasUsed: bigint | null; error: string | null; at: number }
   | { kind: 'unavailable'; error: string; at: number };
 
@@ -79,6 +80,21 @@ function callJson(call: SimCall): Record<string, string> {
   return out;
 }
 
+const INSUFFICIENT_FUNDS = /insufficient funds|-38014/i;
+
+/** Balance override for each sender: the total value it sends plus 1,000 native for fees (preview only). */
+export function fundingOverride(calls: SimCall[]): Record<string, { balance: string }> {
+  const totals = new Map<string, bigint>();
+  for (const call of calls) {
+    totals.set(call.from, (totals.get(call.from) ?? 0n) + (call.value ?? 0n));
+  }
+  const out: Record<string, { balance: string }> = {};
+  for (const [from, total] of totals) {
+    out[from] = { balance: hex(total + 1000n * 10n ** 18n) };
+  }
+  return out;
+}
+
 /** Parses an eth_simulateV1 result (one block). Throws when the shape is wrong, so the next RPC is tried. */
 export function parseSimulateV1(result: unknown): SimCallResult[] {
   const block = Array.isArray(result) ? (result[0] as Record<string, unknown> | undefined) : undefined;
@@ -116,15 +132,26 @@ export function cleanRevert(message: string): string {
  */
 export async function simulateCalls(sends: RpcSend[], calls: SimCall[], now: () => number = Date.now): Promise<Simulation> {
   let lastError = 'No RPC available';
+  const body = (overrides?: Record<string, { balance: string }>) => [
+    { blockStateCalls: [{ calls: calls.map(callJson), ...(overrides ? { stateOverrides: overrides } : {}) }], traceTransfers: true, validation: false },
+    'latest',
+  ];
   for (const send of sends) {
     try {
-      const result = await send('eth_simulateV1', [
-        { blockStateCalls: [{ calls: calls.map(callJson) }], traceTransfers: true, validation: false },
-        'latest',
-      ]);
-      return { kind: 'simulated', calls: parseSimulateV1(result), at: now() };
+      return { kind: 'simulated', calls: parseSimulateV1(await send('eth_simulateV1', body())), at: now() };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
+      if (!INSUFFICIENT_FUNDS.test(lastError)) {
+        continue;
+      }
+      // The wallet cannot pay the value right now (eth_simulateV1 checks balances even with validation off).
+      // Preview what the request would do anyway, with a temporary balance override, and say so.
+      try {
+        const result = await send('eth_simulateV1', body(fundingOverride(calls)));
+        return { kind: 'simulated', calls: parseSimulateV1(result), at: now(), fundedOverride: true };
+      } catch (retryError) {
+        lastError = retryError instanceof Error ? retryError.message : String(retryError);
+      }
     }
   }
   // Fallback: eth_call + eth_estimateGas on the last call (earlier calls such as an approve cannot be chained here).
@@ -138,7 +165,7 @@ export async function simulateCalls(sends: RpcSend[], calls: SimCall[], now: () 
       return { kind: 'estimated', ok: true, gasUsed: gas, error: null, at: now() };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/revert|execution|insufficient/i.test(message)) {
+      if (/revert|execution/i.test(message) && !INSUFFICIENT_FUNDS.test(message)) {
         return { kind: 'estimated', ok: false, gasUsed: null, error: cleanRevert(message), at: now() };
       }
       lastError = message;
@@ -564,6 +591,9 @@ export function buildTxPreview(input: {
       lines.unshift({ tone: 'danger', text: `This would fail: ${failed.error ?? 'reverted'}. Nothing would move, but a fee could still be charged.` });
     } else if (!lines.length) {
       lines.push({ tone: 'info', text: 'No tokens or NFTs move. Only the network fee is paid.' });
+    }
+    if (simulation.fundedOverride) {
+      lines.push({ tone: 'info', text: `Your wallet does not hold enough ${CHAINS[input.chainId as ChainId]?.symbol ?? 'ETH'} for this right now. The preview shows what would happen if it did.` });
     }
     const gasUsed = simulation.calls.reduce<bigint | null>((sum, call) => (call.gasUsed === null || sum === null ? sum : sum + call.gasUsed), 0n);
     return {

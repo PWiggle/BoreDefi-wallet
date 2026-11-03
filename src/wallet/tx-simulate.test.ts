@@ -109,6 +109,25 @@ test('simulateCalls: eth_simulateV1 with traceTransfers, validation off; tries t
   assert.equal(seen[0]!.params[1], 'latest');
 });
 
+test('simulateCalls: wallet cannot pay the value -> re-simulates with a temporary balance override and says so', async () => {
+  const bodies: unknown[] = [];
+  const node = async (_method: string, params: unknown[]) => {
+    bodies.push(params[0]);
+    const block = (params[0] as { blockStateCalls: { stateOverrides?: Record<string, { balance: string }> }[] }).blockStateCalls[0]!;
+    if (!block.stateOverrides) {
+      throw new Error('insufficient funds for gas * price + value: have 0 want 10000000000000000');
+    }
+    return [{ calls: [{ status: '0x1', gasUsed: '0x5208', logs: [nativeTransfer(OWNER, ROUTER, 10n ** 16n)] }] }];
+  };
+  const result = await simulateCalls([node], [{ from: OWNER, to: ROUTER, value: 10n ** 16n }]);
+  assert.equal(result.kind === 'simulated' && result.fundedOverride, true);
+  const override = (bodies[1] as { blockStateCalls: { stateOverrides: Record<string, { balance: string }> }[] }).blockStateCalls[0]!.stateOverrides;
+  assert.equal(BigInt(override[OWNER]!.balance), 10n ** 16n + 1000n * 10n ** 18n);
+  const preview = buildTxPreview({ method: 'eth_sendTransaction', params: [{}], chainId: 1, owner: OWNER, simulation: result });
+  assert.match(preview.lines[preview.lines.length - 1]!.text, /does not hold enough ETH/);
+  assert.equal(preview.lines[0]!.text, 'You send 0.01 ETH to LI.FI (0x1231…4EaE)');
+});
+
 test('simulateCalls falls back to eth_estimateGas, then reports unavailable', async () => {
   const noSimulate = async (method: string) => {
     if (method === 'eth_simulateV1') {

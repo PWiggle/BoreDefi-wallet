@@ -44,12 +44,17 @@ export function swapFeeGasUnits(quote: SwapQuote | null, simulatedGas: bigint | 
   return base + (needsApproval ? GAS_UNITS.erc20Approve : 0n);
 }
 
+/** 1234567 -> "1,234,567" (Hermes has no BigInt toLocaleString grouping). */
+export function groupDigits(value: bigint): string {
+  return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 /** Small detail under the fee: the gas limit, explained. */
 export function gasLimitDetail(gasLimit: bigint | undefined | null): string | undefined {
   if (!gasLimit || gasLimit <= 0n) {
     return undefined;
   }
-  return `Gas limit ${gasLimit.toLocaleString('en-US')} (the most this swap can use; you pay only what it uses)`;
+  return `Gas limit ${groupDigits(gasLimit)} (the most this swap can use; you pay only what it uses)`;
 }
 
 export async function readAllowance(chainId: ChainId, token: string, owner: string, spender: string): Promise<bigint> {
