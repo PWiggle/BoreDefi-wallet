@@ -10,6 +10,7 @@ export const WRAPPED_NATIVE: Record<ChainId, string> = {
   137: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', // WPOL (Polygon "WETH" 0x7ceB… is bridged ETH, not a wrap)
   56: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', // WBNB
   43114: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX
+  33139: '0x48b62137EdfA95a428D35C09E44256a739F6B557', // WAPE (docs.apechain.com)
 };
 
 const EEEE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
@@ -23,7 +24,7 @@ export function isWrappedNative(chainId: ChainId, address: string): boolean {
   return sameTokenAddress(WRAPPED_NATIVE[chainId], address);
 }
 
-/** True only for native ↔ wrapped-native on the same chain (ETH↔WETH, POL↔WPOL, BNB↔WBNB, AVAX↔WAVAX). */
+/** True only for native ↔ wrapped-native on the same chain (ETH↔WETH, POL↔WPOL, BNB↔WBNB, AVAX↔WAVAX, APE↔WAPE). */
 export function isWrapPair(chainId: ChainId, from: Pick<TokenConfig, 'address' | 'native'>, to: Pick<TokenConfig, 'address' | 'native'>): boolean {
   const fromNative = from.native || isNativeTokenAddress(from.address);
   const toNative = to.native || isNativeTokenAddress(to.address);

@@ -44,7 +44,9 @@ test('builds CAIP identifiers and decodes hex messages', () => {
   assert.equal(hexToUtf8('0x68656c6c6f'), 'hello');
   assert.equal(pickSignMessage(['0x68656c6c6f', '0x9858EfFD232B4033E47d90003D41EC34EcaEda94']), '0x68656c6c6f');
   assert.equal(parseSwitchChainId([{ chainId: '0x2105' }]), 8453);
-  assert.equal(supportedCaipAccounts('0xabc').length, 7);
+  assert.equal(parseSwitchChainId([{ chainId: '0x8173' }]), 33139);
+  assert.equal(supportedCaipAccounts('0xabc').length, 8);
+  assert.ok(supportedCaipAccounts('0xabc').includes('eip155:33139:0xabc'));
 });
 
 test('defaults to the live public WalletConnect project ID', () => {

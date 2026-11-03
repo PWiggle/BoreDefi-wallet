@@ -1,17 +1,20 @@
 import { Interface } from 'ethers';
 
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
-import { protectedAssetFor, type ProtectedAsset } from './yuga-allowlist';
+import { protectedAssetFor, protectedNativeFor, type ProtectedAsset } from './yuga-allowlist';
 
 const ERC20 = new Interface([
   'function approve(address spender, uint256 amount)',
   'function transfer(address to, uint256 amount)',
 ]);
 
-/** The Yuga-protected asset behind a wallet token (ApeCoin on Ethereum / Arbitrum / BNB Chain), if any. */
+/**
+ * The Yuga-protected asset behind a wallet token, if any: ApeCoin on Ethereum / Arbitrum / BNB Chain, WAPE on
+ * ApeChain, and native APE (the ApeChain gas token).
+ */
 export function protectedTokenAsset(token: Pick<TokenConfig, 'chainId' | 'address' | 'native'>): ProtectedAsset | null {
   if (token.native || isNativeTokenAddress(token.address)) {
-    return null;
+    return protectedNativeFor(token.chainId);
   }
   return protectedAssetFor(token.chainId, token.address);
 }
@@ -23,11 +26,15 @@ export type GuardRequest = { method: 'eth_sendTransaction'; params: unknown[]; c
  * same red warning, approval block and typed-name + PIN step apply as for a dApp asking for it.
  */
 export function protectedApproveRequest(
-  token: Pick<TokenConfig, 'chainId' | 'address'>,
+  token: Pick<TokenConfig, 'chainId' | 'address'> & { native?: boolean },
   owner: string,
   spender: string,
   amount: bigint,
 ): GuardRequest {
+  if (isNativeSpend(token)) {
+    // Native APE has no approve(): the swap/bridge sends the APE as value to the router, so check that.
+    return nativeValueRequest(token.chainId, owner, spender, amount);
+  }
   return {
     method: 'eth_sendTransaction',
     params: [{ from: owner, to: token.address, value: '0x0', data: ERC20.encodeFunctionData('approve', [spender, amount]) }],
@@ -42,15 +49,32 @@ export function erc20TransferData(to: string, amount: bigint): string {
 }
 
 export function protectedTransferRequest(
-  token: Pick<TokenConfig, 'chainId' | 'address'>,
+  token: Pick<TokenConfig, 'chainId' | 'address'> & { native?: boolean },
   owner: string,
   to: string,
   amount: bigint,
 ): GuardRequest {
+  if (isNativeSpend(token)) {
+    return nativeValueRequest(token.chainId, owner, to, amount);
+  }
   return {
     method: 'eth_sendTransaction',
     params: [{ from: owner, to: token.address, value: '0x0', data: erc20TransferData(to, amount) }],
     chainId: token.chainId,
+    owner,
+  };
+}
+
+function isNativeSpend(token: Pick<TokenConfig, 'address'> & { native?: boolean }): boolean {
+  return Boolean(token.native) || isNativeTokenAddress(token.address);
+}
+
+/** A plain native-value transaction (APE on ApeChain) as a guard request. */
+function nativeValueRequest(chainId: number, owner: string, to: string, amount: bigint): GuardRequest {
+  return {
+    method: 'eth_sendTransaction',
+    params: [{ from: owner, to, value: `0x${amount.toString(16)}`, data: '0x' }],
+    chainId,
     owner,
   };
 }

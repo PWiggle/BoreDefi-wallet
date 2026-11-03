@@ -29,14 +29,15 @@ test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(classifyBrowserMethod('eth_call'), 'read');
   assert.equal(classifyBrowserMethod('personal_sign'), 'sign');
   assert.equal(classifyBrowserMethod('wallet_switchEthereumChain'), 'switch');
+  assert.equal(classifyBrowserMethod('wallet_addEthereumChain'), 'switch');
   assert.equal(classifyBrowserMethod('wallet_revokePermissions'), 'disconnect');
   assert.equal(classifyBrowserMethod('foo'), 'unsupported');
   assert.equal(DEFAULT_BROWSER_URL, 'https://app.uniswap.org');
   assert.equal(CONNECT_DEMO_URL, 'https://www.boredefi.com/connect');
-  assert.equal(
-    DAPP_BOOKMARKS.some((item) => item.name === 'Connect' && item.url === CONNECT_DEMO_URL),
-    true,
-  );
+  // The first bookmark is the BoreDefi site; the connect check moved to Settings → Support.
+  assert.equal(DAPP_BOOKMARKS[0]?.name, 'BoreDefi');
+  assert.equal(DAPP_BOOKMARKS[0]?.url, 'https://www.boredefi.com');
+  assert.equal(DAPP_BOOKMARKS.some((item) => item.url === CONNECT_DEMO_URL || item.name === 'Connect'), false);
   assert.equal(
     DAPP_BOOKMARKS.some((item) => item.name === 'BoreDash' && item.url === 'https://www.boredash.com'),
     true,

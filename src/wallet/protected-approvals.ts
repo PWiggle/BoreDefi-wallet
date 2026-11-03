@@ -20,6 +20,7 @@ export const KNOWN_OPERATORS: { address: string; label: string }[] = [
   { address: '0x000000000060C4Ca14CfC4325359062ace33Fe3D', label: 'LooksRare transfer manager' },
   { address: '0xF849de01B080aDC3A814FaBE1E2087475cF2E354', label: 'X2Y2 ERC-721 delegate' },
   { address: '0x000000000022D473030F116dDEE9F6B43aC78BA3', label: 'Permit2' },
+  { address: '0x2dea447e7dc6cd2f10b31bF10dCB30F87E838417', label: 'LI.FI (ApeChain)' },
 ];
 
 export const TOPIC_APPROVAL_FOR_ALL = '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31';
@@ -192,7 +193,7 @@ export async function scanProtectedApprovals(input: {
   const fromLogs = candidatesFromLogs(logs, 1);
   const approvals: LiveApproval[] = [];
   const failedChains: number[] = [];
-  for (const chainId of [1, 42161, 56]) {
+  for (const chainId of [1, 42161, 56, 33139]) {
     const probes = buildApprovalProbes(owner, chainId, chainId === 1 ? fromLogs : new Map());
     if (!probes.length) {
       continue;

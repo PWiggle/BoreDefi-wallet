@@ -3,6 +3,7 @@ import { getAddress, id, Interface, isAddress, ZeroAddress } from 'ethers';
 import {
   PROTECTED_ADDRESSES_LOWER,
   protectedAssetFor,
+  protectedNativeFor,
   type ProtectedAsset,
 } from './yuga-allowlist';
 
@@ -68,6 +69,15 @@ const ETH_EQUIVALENT: ReadonlySet<string> = new Set([
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH (Ethereum)
   '0x0000000000a39bb272e79075ade125fd351887ac', // Blur Pool
 ]);
+
+/**
+ * ETH-equivalent payment only counts on Ethereum. On ApeChain the zero address means native APE, which is worth a
+ * tiny fraction of ETH, so a "10 native" listing there must never pass the ETH floor check: it is treated as a
+ * currency the wallet cannot price (blocked).
+ */
+function ethEquivalent(ctx: { chainId: number }, token: string): boolean {
+  return ctx.chainId === 1 && ETH_EQUIVALENT.has(token.toLowerCase());
+}
 
 const CALL_IFACE = new Interface([
   'function setApprovalForAll(address operator, bool approved)',
@@ -153,6 +163,12 @@ function push(ctx: Ctx, finding: ProtectedFinding): void {
 
 function isOwner(ctx: Ctx, address: string | null): boolean {
   return Boolean(address && ctx.ownerChecksum && address === ctx.ownerChecksum);
+}
+
+function formatNative(wei: bigint): string {
+  const whole = wei / 10n ** 18n;
+  const frac = (wei % 10n ** 18n).toString().padStart(18, '0').slice(0, 4).replace(/0+$/, '');
+  return `${whole}${frac ? `.${frac}` : ''}`;
 }
 
 function eth(wei: bigint): string {
@@ -412,7 +428,7 @@ function analyzeSeaportOrder(ctx: Ctx, raw: unknown, venue: string): void {
     const start = toBig(item.startAmount) ?? 0n;
     const end = toBig(item.endAmount) ?? start;
     const amount = start < end ? start : end;
-    if ((itemType === 0 || itemType === 1) && ETH_EQUIVALENT.has(token)) {
+    if ((itemType === 0 || itemType === 1) && ethEquivalent(ctx, token)) {
       proceeds = proceeds === null ? null : proceeds + amount;
     } else if (amount > 0n) {
       proceeds = null; // Paid in something the wallet cannot price.
@@ -478,7 +494,7 @@ function analyzeTypedData(ctx: Ctx, payload: unknown, rawText: string): boolean 
           const price = toBig(message.price) ?? 0n;
           const feeRate = asArray(message.fees).reduce<bigint>((sum, fee) => sum + (toBig(asRec(fee).rate) ?? 0n), 0n);
           const token = String(message.paymentToken ?? ZeroAddress).toLowerCase();
-          const net = ETH_EQUIVALENT.has(token) ? (price * (10000n - (feeRate > 10000n ? 10000n : feeRate))) / 10000n : null;
+          const net = ethEquivalent(ctx, token) ? (price * (10000n - (feeRate > 10000n ? 10000n : feeRate))) / 10000n : null;
           checkSalePrice(ctx, [{ asset: collection, count: toBig(message.amount) ?? 1n }], net, 'Blur listing');
         }
       }
@@ -493,7 +509,7 @@ function analyzeTypedData(ctx: Ctx, payload: unknown, rawText: string): boolean 
       const count = asArray(message.amounts).reduce<bigint>((sum, item) => sum + (toBig(item) ?? 1n), 0n) || 1n;
       push(ctx, { asset: collection, action: 'listing', counterparty: null, tokenIds: ids, detail: `LooksRare: sells your ${collection.name}.` });
       const token = String(message.currency ?? ZeroAddress).toLowerCase();
-      checkSalePrice(ctx, [{ asset: collection, count }], ETH_EQUIVALENT.has(token) ? toBig(message.price) ?? 0n : null, 'LooksRare listing');
+      checkSalePrice(ctx, [{ asset: collection, count }], ethEquivalent(ctx, token) ? toBig(message.price) ?? 0n : null, 'LooksRare listing');
     }
     return true;
   }
@@ -587,6 +603,19 @@ export function analyzeProtectedRequest(input: GuardInput): ProtectedVerdict {
   if (method === 'eth_sendTransaction' || method === 'eth_signTransaction') {
     const tx = asRec(params[0]);
     decodeCall(ctx, checksum(tx.to), typeof tx.data === 'string' ? tx.data : typeof tx.input === 'string' ? tx.input : '', 0);
+    // Native APE on ApeChain: any transaction that carries APE value is a protected move (send, swap, bridge, dApp).
+    const nativeAsset = protectedNativeFor(input.chainId);
+    const value = toBig(tx.value);
+    if (nativeAsset && value !== null && value > 0n) {
+      const recipient = checksum(tx.to);
+      push(ctx, {
+        asset: nativeAsset,
+        action: 'transfer',
+        counterparty: recipient,
+        tokenIds: [],
+        detail: `Sends ${formatNative(value)} APE to ${recipient ?? 'a new contract'}.`,
+      });
+    }
   } else if (method === 'eth_sign') {
     blind = true;
   } else if (method === 'personal_sign') {

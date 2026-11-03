@@ -85,7 +85,8 @@ export async function handleWalletConnectRequest(input: {
       const response = await wallet.sendTransaction(tx);
       return { kind: 'hash', value: response.hash };
     }
-    case 'wallet_switchEthereumChain': {
+    case 'wallet_switchEthereumChain':
+    case 'wallet_addEthereumChain': {
       const next = parseSwitchChainId(params);
       if (!next) {
         throw new Error('That chain is not supported.');

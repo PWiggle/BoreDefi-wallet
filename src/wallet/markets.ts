@@ -112,6 +112,7 @@ const NATIVE_BY_ID: Record<string, ChainId> = {
   'polygon-ecosystem-token': 137,
   binancecoin: 56,
   'avalanche-2': 43114,
+  apecoin: 33139,
 };
 
 const SWAP_SYMBOL: Record<string, string> = {
@@ -127,6 +128,7 @@ const SWAP_SYMBOL: Record<string, string> = {
   apecoin: 'APE',
   wbnb: 'WBNB',
   'wrapped-avax': 'WAVAX',
+  'wrapped-apecoin': 'WAPE',
   wmatic: 'WPOL',
 };
 
@@ -313,6 +315,8 @@ export function geckoIdForNative(chainId: ChainId): string {
       return 'binancecoin';
     case 43114:
       return 'avalanche-2';
+    case 33139:
+      return 'apecoin';
     default:
       return 'ethereum';
   }
@@ -340,6 +344,10 @@ export function geckoIdForToken(token: TokenConfig): string | null {
       return 'staked-ether';
     case 'APE':
       return 'apecoin';
+    case 'WAPE':
+      return 'wrapped-apecoin';
+    case 'APEUSD':
+      return 'apeusd';
     default:
       return null;
   }

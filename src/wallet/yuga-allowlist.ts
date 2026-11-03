@@ -17,7 +17,7 @@ export type ProtectedAsset = {
   key: string;
   name: string;
   short: string;
-  chainId: 1 | 42161 | 56;
+  chainId: 1 | 42161 | 56 | 33139;
   address: string;
   standard: ProtectedStandard;
   onchainName: string;
@@ -50,7 +50,30 @@ export const PROTECTED_ASSETS: readonly ProtectedAsset[] = [
   { key: 'ape-eth', name: 'ApeCoin', short: 'APE', chainId: 1, address: '0x4d224452801ACEd8B2F0aebE155379bb5D594381', standard: 'ERC-20', onchainName: 'ApeCoin / APE / 18', source: 'docs.apechain.com/ape-oft; apecoin.com' },
   { key: 'ape-arb', name: 'ApeCoin (Arbitrum)', short: 'APE', chainId: 42161, address: '0x7f9FBf9bDd3F4105C478b996B648FE6e828a1e98', standard: 'ERC-20', onchainName: 'ApeCoin / APE / 18', source: 'docs.apechain.com/ape-oft; ApeChain nativeToken in docs.apechain.com contract-information' },
   { key: 'ape-bsc', name: 'ApeCoin (BNB Chain)', short: 'APE', chainId: 56, address: '0x8f86a15EC17cb3369d8b3E666dAdBC11daA82b79', standard: 'ERC-20', onchainName: 'ApeCoin / APE / 18', source: 'docs.apechain.com/ape-oft' },
+  // ApeChain (33139). Yuga "Shadow" collections mirror Ethereum ownership on ApeChain. Checked on-chain on Nov 3, 2026
+  // via rpc.apechain.com: name()/symbol(), ERC-721 supportsInterface(0x80ac58cd), and owner(). BAYC / MAYC / BAKC / Koda
+  // shadows sit at the SAME addresses as the Ethereum originals and were created by the same deployer accounts as on
+  // Ethereum (Blockscout creator_address_hash). All six share one owner() 0x58a766b3210cee94ca150f767d842eb87a8d7ae8.
+  { key: 'bayc-apechain', name: 'Bored Ape Yacht Club Shadow', short: 'BAYC', chainId: 33139, address: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D', standard: 'ERC-721', onchainName: 'Bored Ape Yacht Club Shadow / BAYC', source: 'ApeScan "Yuga Labs: BAYC Token"; creator 0xaBA7161A… (Ethereum BAYC deployer)' },
+  { key: 'mayc-apechain', name: 'Mutant Ape Yacht Club Shadow', short: 'MAYC', chainId: 33139, address: '0x60E4d786628Fea6478F785A6d7e704777c86a7c6', standard: 'ERC-721', onchainName: 'Mutant Ape Yacht Club Shadow / MAYC', source: 'ApeScan "Yuga Labs: MAYC Token", creator "Yuga Labs: Deployer" 0x9056D15C… (Ethereum MAYC deployer)' },
+  { key: 'bakc-apechain', name: 'Bored Ape Kennel Club Shadow', short: 'BAKC', chainId: 33139, address: '0xba30E5F9Bb24caa003E9f2f0497Ad287FDF95623', standard: 'ERC-721', onchainName: 'Bored Ape Kennel Club Shadow / BAKC', source: 'ApeScan "Yuga Labs: BAKC Token"; same owner() as BAYC/MAYC shadows' },
+  { key: 'koda-apechain', name: 'Koda Shadow', short: 'KODA', chainId: 33139, address: '0xE012Baf811CF9c05c408e879C399960D1f305903', standard: 'ERC-721', onchainName: 'Koda Shadow / KODA', source: 'creator 0xCAC7c29b… (Ethereum Koda / Otherdeed Expanded deployer); same owner() as BAYC/MAYC shadows' },
+  { key: 'otherdeed-expanded-apechain', name: 'Otherdeed Expanded Shadow', short: 'EXP', chainId: 33139, address: '0x000DeeD0005b8b7d8d87BAcA43AAD032A292155E', standard: 'ERC-721', onchainName: 'Otherdeed Expanded Shadow / EXP', source: 'same owner() as BAYC/MAYC shadows; ApeScan NFT list' },
+  { key: 'punks-apechain', name: 'CryptoPunk Shadows', short: 'PUNKS', chainId: 33139, address: '0x000000000000a548CF4a87c15191945473068153', standard: 'ERC-721', onchainName: 'CryptoPunk Shadows / punks', source: 'same owner() as BAYC/MAYC shadows', note: 'Punks IP sold by Yuga in May 2025; still protected.' },
+  { key: 'wape-apechain', name: 'Wrapped ApeCoin (ApeChain)', short: 'WAPE', chainId: 33139, address: '0x48b62137EdfA95a428D35C09E44256a739F6B557', standard: 'ERC-20', onchainName: 'Wrapped ApeCoin / WAPE / 18', source: 'docs.apechain.com/contract-decoding (wAPE token)' },
 ];
+
+/**
+ * Native APE on ApeChain has no token contract, so it is not in PROTECTED_ASSETS (whose lookups are by contract).
+ * Sends, swaps and any dApp transaction that carries APE value on ApeChain get the same typed-name + PIN step.
+ */
+export const PROTECTED_NATIVE: Readonly<Partial<Record<number, ProtectedAsset>>> = {
+  33139: { key: 'ape-apechain-native', name: 'ApeCoin (ApeChain)', short: 'APE', chainId: 33139, address: '0x0000000000000000000000000000000000000000', standard: 'ERC-20', onchainName: 'native gas token APE / 18', source: 'docs.apechain.com (APE is the ApeChain gas token)' },
+};
+
+export function protectedNativeFor(chainId: number): ProtectedAsset | null {
+  return PROTECTED_NATIVE[chainId] ?? null;
+}
 
 const BY_CHAIN_ADDRESS = new Map<string, ProtectedAsset>(
   PROTECTED_ASSETS.map((asset) => [`${asset.chainId}:${asset.address.toLowerCase()}`, asset]),

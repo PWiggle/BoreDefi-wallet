@@ -19,6 +19,7 @@ export const ALCHEMY_NETWORK: Record<ChainId, string> = {
   137: 'polygon-mainnet',
   56: 'bnb-mainnet',
   43114: 'avax-mainnet',
+  33139: 'apechain-mainnet',
 };
 
 /** Chains that use Alchemy first (Blockscout blocks app clients there, or has no endpoint). */

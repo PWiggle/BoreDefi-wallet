@@ -31,6 +31,7 @@ import {
   normalizeDappUrl,
   urlBarAfterNavigation,
 } from '../wallet/dapps';
+import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
   chainIdHex,
@@ -277,7 +278,7 @@ export function BrowserScreen() {
         const approved = await requestConfirm({
           title: 'Switch network',
           network: selectedChain.name,
-          extra: [{ label: 'Next chain', value: String(next) }],
+          extra: [{ label: 'Next chain', value: CHAINS[next].name }],
           mode: 'buttons',
           confirmLabel: 'Switch',
         });

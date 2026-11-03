@@ -82,6 +82,16 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(43114, '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', 'USDC', 'USD Coin', 6),
     token(43114, '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', 'USDT', 'Tether USD', 6),
   ],
+  // ApeChain: name()/symbol()/decimals() read on-chain 2026-11-03. WAPE is named in docs.apechain.com;
+  // WETH and USDT are the addresses in LI.FI's ApeChain token list. ApeUSD is ApeChain's native yield
+  // stablecoin (not in LI.FI's list, so it cannot be swapped in-app). ApeETH is left out: no free price feed.
+  33139: [
+    native(33139),
+    token(33139, '0x48b62137EdfA95a428D35C09E44256a739F6B557', 'WAPE', 'Wrapped ApeCoin', 18),
+    token(33139, '0xA2235d059F80e176D931Ef76b6C51953Eb3fBEf4', 'ApeUSD', 'Ape USD', 18),
+    token(33139, '0xf4D9235269a96aaDaFc9aDAe454a0618eBE37949', 'WETH', 'Wrapped Ether', 18),
+    token(33139, '0x674843C06FF83502ddb4D37c2E09C01cdA38cbc8', 'USDT', 'Bridged stgUSDT', 6),
+  ],
 };
 
 export function isNativeTokenAddress(address: string): boolean {

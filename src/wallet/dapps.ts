@@ -4,10 +4,14 @@ export type DappBookmark = {
   blurb: string;
 };
 
+/** In-app connect check. No longer a bookmark; reachable from Settings → Support → Test dApp connection. */
 export const CONNECT_DEMO_URL = 'https://www.boredefi.com/connect';
 
+export const BOREDEFI_SITE_URL = 'https://www.boredefi.com';
+export const BOREDEFI_SUPPORT_URL = 'https://www.boredefi.com/support';
+
 export const DAPP_BOOKMARKS: DappBookmark[] = [
-  { name: 'Connect', url: CONNECT_DEMO_URL, blurb: 'BoreDefi Connect demo' },
+  { name: 'BoreDefi', url: BOREDEFI_SITE_URL, blurb: 'Portfolio and Safety check' },
   { name: 'BoreDash', url: 'https://www.boredash.com', blurb: 'Live markets' },
   { name: 'Uniswap', url: 'https://app.uniswap.org', blurb: 'Swap tokens' },
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
@@ -85,7 +89,9 @@ export function classifyBrowserMethod(method: string): BrowserMethodKind {
   if (DISCONNECT_METHODS.has(method)) {
     return 'disconnect';
   }
-  if (method === 'wallet_switchEthereumChain') {
+  // wallet_addEthereumChain (EIP-3085) is accepted only for chains the wallet already ships (e.g. ApeChain 0x8173):
+  // the dApp's RPC / explorer URLs are never used, it just becomes a confirmed switch.
+  if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') {
     return 'switch';
   }
   if (method === 'eth_chainId' || method === 'net_version' || method === 'wallet_getCapabilities') {

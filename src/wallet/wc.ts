@@ -11,6 +11,7 @@ export const WALLETCONNECT_METHODS = [
   'eth_signTypedData_v3',
   'eth_signTypedData_v4',
   'wallet_switchEthereumChain',
+  'wallet_addEthereumChain',
   'wallet_getCapabilities',
   'wallet_revokePermissions',
 ] as const;

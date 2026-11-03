@@ -357,7 +357,7 @@ export function describeRequest(request: RequestInfo): string {
   if (request.method.startsWith('eth_sign') || request.method === 'personal_sign') {
     return `Sign a message for ${request.peerName} on ${CHAINS[request.chainId].name}.`;
   }
-  if (request.method === 'wallet_switchEthereumChain') {
+  if (request.method === 'wallet_switchEthereumChain' || request.method === 'wallet_addEthereumChain') {
     const next = parseChainId(
       typeof request.params[0] === 'object' && request.params[0]
         ? Number.parseInt(String((request.params[0] as { chainId?: string }).chainId ?? '0x0'), 16)

@@ -40,6 +40,14 @@ const EXPECTED: Record<string, [number, string]> = {
   'ape-eth': [1, '0x4d224452801ACEd8B2F0aebE155379bb5D594381'],
   'ape-arb': [42161, '0x7f9FBf9bDd3F4105C478b996B648FE6e828a1e98'],
   'ape-bsc': [56, '0x8f86a15EC17cb3369d8b3E666dAdBC11daA82b79'],
+  // ApeChain, checked on-chain Nov 3, 2026 (name/symbol, ERC-721 interface, shared owner(), deployers match Ethereum).
+  'bayc-apechain': [33139, '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D'],
+  'mayc-apechain': [33139, '0x60E4d786628Fea6478F785A6d7e704777c86a7c6'],
+  'bakc-apechain': [33139, '0xba30E5F9Bb24caa003E9f2f0497Ad287FDF95623'],
+  'koda-apechain': [33139, '0xE012Baf811CF9c05c408e879C399960D1f305903'],
+  'otherdeed-expanded-apechain': [33139, '0x000DeeD0005b8b7d8d87BAcA43AAD032A292155E'],
+  'punks-apechain': [33139, '0x000000000000a548CF4a87c15191945473068153'],
+  'wape-apechain': [33139, '0x48b62137EdfA95a428D35C09E44256a739F6B557'],
 };
 
 test('allowlist matches the verified list exactly, EIP-55 checksummed', () => {
