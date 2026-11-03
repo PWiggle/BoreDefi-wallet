@@ -21,7 +21,7 @@ import { friendlyTxError } from '../wallet/tx-errors';
 import { checkProtectedRecipient, recipientTailMatches, rememberRecipient } from '../wallet/protected-policy';
 import { getProvider } from '../wallet/rpc';
 import { loadProtectedPolicy, saveProtectedPolicy } from '../wallet/storage';
-import { protectedAssetFor } from '../wallet/yuga-allowlist';
+import { protectedAssetFor, protectedBadgeLabel } from '../wallet/yuga-allowlist';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
@@ -264,7 +264,7 @@ export function NftSendScreen() {
         </>
       ) : null}
       {protectedAsset ? (
-        <Text style={styles.verified}>{`Verified · ${protectedAsset.name} (protected collection)`}</Text>
+        <Text style={styles.verified}>{`${protectedBadgeLabel(protectedAsset)} · ${protectedAsset.name} (protected collection)`}</Text>
       ) : null}
       <Modal
         visible={review && Boolean(protectedAsset)}

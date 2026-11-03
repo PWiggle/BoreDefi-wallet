@@ -706,6 +706,6 @@ export function assertProtectedClearance(verdict: ProtectedVerdict, clearance: s
     throw new Error(verdict.blockReasons[0] ?? 'Blocked to protect your Yuga Labs assets.');
   }
   if (verdict.protected && clearance !== verdict.fingerprint) {
-    throw new Error('This touches a protected Yuga Labs / BAYC asset. Confirm it in the red warning and re-enter your PIN or biometrics first.');
+    throw new Error('This touches a protected asset (Yuga Labs / BAYC / ApeCoin / Yaper). Confirm it in the red warning and re-enter your PIN or biometrics first.');
   }
 }

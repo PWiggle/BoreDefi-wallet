@@ -145,7 +145,7 @@ export function SettingsScreen() {
       </View>
       <SettingsRow
         label="Protected collections"
-        detail="Yuga Labs / BAYC / ApeCoin · approvals, revoke, address book"
+        detail="Yuga Labs / BAYC / ApeCoin / Yaper · approvals, revoke, address book"
         onPress={() => navigation.navigate('ProtectedCollections')}
       />
       <SettingsRow

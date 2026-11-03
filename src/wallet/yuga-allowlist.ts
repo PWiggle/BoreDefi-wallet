@@ -23,6 +23,8 @@ export type ProtectedAsset = {
   onchainName: string;
   source: string;
   note?: string;
+  /** Who the collection belongs to. Omitted = Yuga Labs / BAYC. Yaper collections get the same protections and a "Protected" badge. */
+  brand?: 'yaper';
 };
 
 export const PROTECTED_ASSETS: readonly ProtectedAsset[] = [
@@ -60,6 +62,16 @@ export const PROTECTED_ASSETS: readonly ProtectedAsset[] = [
   { key: 'koda-apechain', name: 'Koda Shadow', short: 'KODA', chainId: 33139, address: '0xE012Baf811CF9c05c408e879C399960D1f305903', standard: 'ERC-721', onchainName: 'Koda Shadow / KODA', source: 'creator 0xCAC7c29b… (Ethereum Koda / Otherdeed Expanded deployer); same owner() as BAYC/MAYC shadows' },
   { key: 'otherdeed-expanded-apechain', name: 'Otherdeed Expanded Shadow', short: 'EXP', chainId: 33139, address: '0x000DeeD0005b8b7d8d87BAcA43AAD032A292155E', standard: 'ERC-721', onchainName: 'Otherdeed Expanded Shadow / EXP', source: 'same owner() as BAYC/MAYC shadows; ApeScan NFT list' },
   { key: 'punks-apechain', name: 'CryptoPunk Shadows', short: 'PUNKS', chainId: 33139, address: '0x000000000000a548CF4a87c15191945473068153', standard: 'ERC-721', onchainName: 'CryptoPunk Shadows / punks', source: 'same owner() as BAYC/MAYC shadows', note: 'Punks IP sold by Yuga in May 2025; still protected.' },
+  // Yaper collections (Lil Apes, Lil Mutants): same top-tier NFT protections as Yuga, labeled "Protected", never "Yuga".
+  // Checked Nov 3, 2026: OpenSea verified collections lil-apes (contract 0xAa84…650F, "By Yaper", 4,998 items, 2,310 owners)
+  // and lil-mutants (contract 0x3B45…37ED, 9,999 items). Every contract below has owner() = yaper.eth
+  // (0xAf4144C200CfCB09fc7695d38fF378225ddC5118, ENS-resolved). The Lil Apes OpenSea contract mirrors ownership of the
+  // original Lil Baby Ape Club contract (same ownerOf(1); 5,000 minted, 2 at 0x…dEaD = 4,998), so both are protected.
+  { key: 'lil-apes', name: 'Lil Apes', short: 'LIL APES', chainId: 1, address: '0xAa84ae8e0534cF682855222FD9186B2bcD9A650F', standard: 'ERC-721', onchainName: 'Lil Apes / LAPE (ERC-1967 proxy)', source: 'OpenSea verified lil-apes (By Yaper); owner() yaper.eth', brand: 'yaper' },
+  { key: 'lil-apes-lbac', name: 'Lil Apes (original LBAC contract)', short: 'LBAC', chainId: 1, address: '0x918F677b3aB4B9290Ca96A95430FD228b2d84817', standard: 'ERC-721', onchainName: 'Lil Baby Ape Club / LBAC / 5,000', source: 'Etherscan "Lil Baby Ape Club: LBAC Token" (verified source); owner() yaper.eth; ownership mirrored by 0xAa84…650F', brand: 'yaper' },
+  { key: 'lil-mutants', name: 'Lil Mutants', short: 'LIL MUTANTS', chainId: 1, address: '0x3B45542f6C97FE7f7aA3BB055c95e93B2c0437ED', standard: 'ERC-721', onchainName: 'LMACEXPERIMENT / LMAC / 10,000', source: 'OpenSea verified lil-mutants (By Yaper); Blockscout verified source; owner() yaper.eth', brand: 'yaper' },
+  { key: 'lil-apes-apechain', name: 'Lil Apes Shadow', short: 'LAPE-S', chainId: 33139, address: '0x25F4b0339D6d026436342FA161fD2CE3C296A5e4', standard: 'ERC-721', onchainName: 'Lil Apes Shadow / LAPE-S', source: 'owner() yaper.eth (ApeScan: ownership accepted by yaper.eth); same deployer as the Ethereum Lil Apes proxy', brand: 'yaper' },
+  { key: 'lil-mutants-apechain', name: 'Wrapped Lil Mutants', short: 'WLM', chainId: 33139, address: '0x3569347d4186557C51ACe5894bdD02366CF027B3', standard: 'ERC-721', onchainName: 'Wrapped Lil Mutants / WLM', source: 'owner() yaper.eth', brand: 'yaper' },
   { key: 'wape-apechain', name: 'Wrapped ApeCoin (ApeChain)', short: 'WAPE', chainId: 33139, address: '0x48b62137EdfA95a428D35C09E44256a739F6B557', standard: 'ERC-20', onchainName: 'Wrapped ApeCoin / WAPE / 18', source: 'docs.apechain.com/contract-decoding (wAPE token)' },
 ];
 
@@ -131,6 +143,8 @@ const BRAND_PATTERNS: readonly string[] = [
   'boredape', 'bayc', 'mayc', 'bakc', 'bacc', 'mutantape', 'mutantserum', 'yachtclub', 'apeyacht', 'kennelclub',
   'chemistryclub', 'otherdeed', 'otherside', 'koda', 'yuga', 'apecoin', 'apechain', 'sewerpass', 'dookey',
   'hvmtl', 'meebit', 'cryptopunk', 'punks', '10ktf', 'tenktf',
+  // Yaper
+  'lilape', 'lilmutant', 'lilbabyape', 'lbac', 'yaper',
 ];
 
 /** Lowercase, fold accents and homoglyphs, drop every non-alphanumeric (spacing / punctuation / zero-width). */
@@ -167,3 +181,9 @@ export function yugaLookalikeMatch(...texts: (string | null | undefined)[]): str
 
 export const FAKE_LABEL = 'Fake: not the official contract';
 export const VERIFIED_LABEL = 'Verified';
+export const PROTECTED_LABEL = 'Protected';
+
+/** Badge for a protected collection: Yuga Labs assets say "Verified", Yaper collections say "Protected". */
+export function protectedBadgeLabel(asset: Pick<ProtectedAsset, 'brand'> | null | undefined): string {
+  return asset?.brand === 'yaper' ? PROTECTED_LABEL : VERIFIED_LABEL;
+}

@@ -138,7 +138,7 @@ export function ProtectedCollectionsScreen() {
   const nftAssets = PROTECTED_ASSETS;
 
   return (
-    <Screen title="Protected collections" subtitle="Yuga Labs · BAYC · ApeCoin" refreshing={scanning} onRefresh={() => void scan()}>
+    <Screen title="Protected collections" subtitle="Yuga Labs · BAYC · ApeCoin · Yaper" refreshing={scanning} onRefresh={() => void scan()}>
       <WarningBanner
         title="Your apes are locked down"
         lines={[

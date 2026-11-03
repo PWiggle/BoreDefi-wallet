@@ -48,6 +48,11 @@ const EXPECTED: Record<string, [number, string]> = {
   'otherdeed-expanded-apechain': [33139, '0x000DeeD0005b8b7d8d87BAcA43AAD032A292155E'],
   'punks-apechain': [33139, '0x000000000000a548CF4a87c15191945473068153'],
   'wape-apechain': [33139, '0x48b62137EdfA95a428D35C09E44256a739F6B557'],
+  'lil-apes': [1, '0xAa84ae8e0534cF682855222FD9186B2bcD9A650F'],
+  'lil-apes-lbac': [1, '0x918F677b3aB4B9290Ca96A95430FD228b2d84817'],
+  'lil-mutants': [1, '0x3B45542f6C97FE7f7aA3BB055c95e93B2c0437ED'],
+  'lil-apes-apechain': [33139, '0x25F4b0339D6d026436342FA161fD2CE3C296A5e4'],
+  'lil-mutants-apechain': [33139, '0x3569347d4186557C51ACe5894bdD02366CF027B3'],
 };
 
 test('allowlist matches the verified list exactly, EIP-55 checksummed', () => {

@@ -371,7 +371,7 @@ export function NftsScreen() {
         <View key={`${group.contract}`} style={styles.group}>
           <Text style={styles.groupTitle}>
             {group.entries[0] ? displayCollectionName(group.entries[0].item) : group.collection}
-            {group.entries[0]?.risk.verified ? '  ✓ Verified' : ''}
+            {group.entries[0]?.risk.verified ? `  ✓ ${group.entries[0].risk.label ?? 'Verified'}` : ''}
           </Text>
           <View style={styles.grid}>
             {group.entries.map((entry) => (
@@ -435,7 +435,7 @@ export function NftsScreen() {
                     </Text>
                     <Text numberOfLines={1} style={styles.meta}>
                       {displayCollectionName(entry.item)} · #{entry.item.tokenId}
-                      {entry.risk.verified ? ' · ✓ Verified' : ''}
+                      {entry.risk.verified ? ` · ✓ ${entry.risk.label ?? 'Verified'}` : ''}
                     </Text>
                   </View>
                 </Pressable>
@@ -459,7 +459,7 @@ export function NftsScreen() {
                   </Text>
                 ) : null}
                 {selected.risk.verified ? (
-                  <Text style={styles.badgeVerified}>✓ Verified · official contract · protected collection</Text>
+                  <Text style={styles.badgeVerified}>{`✓ ${selected.risk.label ?? 'Verified'} · official contract · protected collection`}</Text>
                 ) : null}
                 {selected.risk.fake ? <Text style={styles.badgeFake}>⚠ {selected.risk.label}</Text> : null}
                 <Text style={styles.name}>{displayNftName(selected.item)}</Text>
@@ -494,7 +494,7 @@ export function NftsScreen() {
                       <WarningBanner
                         danger
                         title={selected.risk.label ?? 'Fake'}
-                        lines={['This copies a Yuga Labs / Bored Ape name on a contract that is not official. It stays hidden. Do not interact with it.']}
+                        lines={['This copies a protected collection name (Yuga Labs / Bored Ape / Yaper) on a contract that is not official. It stays hidden. Do not interact with it.']}
                       />
                     ) : (
                       <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
@@ -528,7 +528,7 @@ function NftTile({
   return (
     <Pressable onPress={onPress} style={[styles.tile, dim && styles.tileDim]}>
       <SafeNftImage url={nftImage(entry.item)} style={styles.thumb} />
-      {entry.risk.verified ? <Text style={styles.badgeVerified}>✓ Verified</Text> : null}
+      {entry.risk.verified ? <Text style={styles.badgeVerified}>{`✓ ${entry.risk.label ?? 'Verified'}`}</Text> : null}
       {entry.risk.fake ? <Text style={styles.badgeFake}>⚠ Fake</Text> : null}
       <Text numberOfLines={1} style={styles.tileName}>
         {displayNftName(entry.item)}

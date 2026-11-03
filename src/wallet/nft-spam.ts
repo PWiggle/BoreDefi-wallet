@@ -5,6 +5,7 @@ import { type NftItem } from './nfts';
 import {
   FAKE_LABEL,
   protectedAssetFor,
+  protectedBadgeLabel,
   yugaLookalikeMatch,
   type ProtectedAsset,
 } from './yuga-allowlist';
@@ -116,7 +117,7 @@ export function classifyNftSpam(item: NftItem, revealed: ReadonlySet<string>): N
       canonical: true,
       verified: true,
       fake: false,
-      label: 'Verified',
+      label: protectedBadgeLabel(asset),
       protectedAsset: asset,
     };
   }
@@ -128,7 +129,7 @@ export function classifyNftSpam(item: NftItem, revealed: ReadonlySet<string>): N
   const fame = yugaFake ? { impersonation: true, canonical: false } : famousMatch(item.name, collection, item.contract);
 
   if (yugaFake) {
-    reasons.push(`${FAKE_LABEL}. Its name looks like a Yuga Labs / Bored Ape collection, but this contract is not on the verified list.`);
+    reasons.push(`${FAKE_LABEL}. Its name looks like a protected collection (Yuga Labs / Bored Ape / Yaper Lil Apes), but this contract is not on the verified list.`);
   } else if (fame.impersonation) {
     reasons.push('Name looks like a famous collection, but the contract is not the canonical one.');
   }
