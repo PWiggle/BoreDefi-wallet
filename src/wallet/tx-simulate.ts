@@ -641,3 +641,27 @@ export function simCallFromTx(owner: string, raw: unknown): SimCall {
 export function formatNativeShort(wei: bigint): string {
   return formatNative(wei, 6);
 }
+
+/**
+ * On the red guard sheet the warning list already says who gets an approve-all over which protected collection.
+ * Drop preview lines that only repeat one of those, and say once that the simulation confirms it instead.
+ */
+export function previewWithoutGuardRepeats(preview: TxPreview, verdict: ProtectedVerdict): TxPreview {
+  const approvalsAll = verdict.findings.filter((finding) => finding.action === 'approval-all' && finding.counterparty);
+  if (!approvalsAll.length) {
+    return preview;
+  }
+  const repeats = (line: PreviewLine) =>
+    line.tone === 'approval' &&
+    line.text.includes('take ALL your') &&
+    approvalsAll.some((finding) => line.text.includes(shortenAddress(finding.counterparty!)) && line.text.includes(finding.asset.name));
+  const kept = preview.lines.filter((line) => !repeats(line));
+  if (kept.length === preview.lines.length) {
+    return preview;
+  }
+  const confirm: PreviewLine = {
+    tone: 'approval',
+    text: kept.length ? 'Also confirms the approve-all warned about above.' : 'Confirms the approve-all warned about above. Nothing else moves.',
+  };
+  return { ...preview, lines: [confirm, ...kept] };
+}

@@ -672,6 +672,8 @@ export function analyzeProtectedRequest(input: GuardInput): ProtectedVerdict {
       lines.push(`This lets ${approvalAll.counterparty ?? 'an unknown address'} take ALL your ${approvalAll.asset.name} at any time, now or later, without asking again.`);
     }
     for (const finding of active) {
+      // The approve-all finding is already explained in full by the line above; listing its short detail too repeats it.
+      if (finding === approvalAll) continue;
       lines.push(finding.detail);
     }
     lines.push(...ctx.blindNotes);
@@ -689,7 +691,7 @@ export function analyzeProtectedRequest(input: GuardInput): ProtectedVerdict {
     blockReasons: ctx.blockReasons,
     confirmPhrase,
     headline,
-    lines,
+    lines: [...new Set(lines)],
     fingerprint: requestFingerprint(method, params),
   };
 }

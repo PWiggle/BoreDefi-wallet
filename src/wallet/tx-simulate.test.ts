@@ -12,6 +12,7 @@ import {
   mergeEffects,
   NATIVE_LOG_ADDRESS,
   parseSimulateV1,
+  previewWithoutGuardRepeats,
   simCallFromTx,
   simulateCalls,
   simulationEffects,
@@ -356,4 +357,43 @@ test('ApeChain: native APE leaving through a hidden path is protected', () => {
   const after = applySimulationToVerdict(before, simulationEffects(simulated([nativeTransfer(OWNER, SCAMMER, parseEther('100'))]), OWNER), { chainId: 33139, approvalsAllowed: () => false });
   assert.equal(after.blocked, true);
   assert.match(after.blockReasons[0]!, /ApeCoin \(ApeChain\)/);
+});
+
+test('BAYC approve-all block screen says "take ALL your Bored Ape Yacht Club" once, not three times', () => {
+  const data = IFACE.encodeFunctionData('setApprovalForAll', [SCAMMER, true]);
+  const verdict = guard('eth_sendTransaction', [{ from: OWNER, to: BAYC, data }]);
+  assert.equal(verdict.blocked, true);
+  const takeAll = verdict.lines.filter((line) => line.includes('take ALL your Bored Ape Yacht Club'));
+  assert.equal(takeAll.length, 1);
+  assert.match(takeAll[0]!, /at any time, now or later, without asking again/);
+  assert.equal(new Set(verdict.lines).size, verdict.lines.length);
+
+  const preview = buildTxPreview({ method: 'eth_sendTransaction', params: [{ to: BAYC, data }], chainId: 1, owner: OWNER, simulation: simulated([approvalForAll(BAYC, OWNER, SCAMMER, true)]) });
+  assert.match(preview.lines[0]!.text, /take ALL your Bored Ape Yacht Club/);
+  const shown = previewWithoutGuardRepeats(preview, verdict);
+  assert.deepEqual(shown.lines, [{ tone: 'approval', text: 'Confirms the approve-all warned about above. Nothing else moves.' }]);
+  assert.equal(shown.status, 'simulated');
+  const sheetText = [...verdict.lines, ...shown.lines.map((line) => line.text)];
+  assert.equal(sheetText.filter((line) => line.includes('take ALL your Bored Ape Yacht Club')).length, 1);
+});
+
+test('guard-sheet preview keeps other moves and unrelated approvals', () => {
+  const data = IFACE.encodeFunctionData('setApprovalForAll', [SCAMMER, true]);
+  const verdict = guard('eth_sendTransaction', [{ from: OWNER, to: BAYC, data }]);
+  const OTHER = '0x4444444444444444444444444444444444444444';
+  const preview = buildTxPreview({
+    method: 'eth_sendTransaction',
+    params: [{}],
+    chainId: 1,
+    owner: OWNER,
+    simulation: simulated([approvalForAll(BAYC, OWNER, SCAMMER, true), approvalForAll(BAYC, OWNER, OTHER, true), nftTransfer(BAYC, OWNER, SCAMMER, 42n)]),
+  });
+  const shown = previewWithoutGuardRepeats(preview, verdict);
+  assert.deepEqual(shown.lines.map((line) => line.text), [
+    'Also confirms the approve-all warned about above.',
+    '0x4444…4444 gets permission to take ALL your Bored Ape Yacht Club',
+    'You send Bored Ape Yacht Club #42 to 0x2222…2222',
+  ]);
+  const plain = buildTxPreview({ method: 'eth_sendTransaction', params: [{}], chainId: 1, owner: OWNER, simulation: simulated([nftTransfer(BAYC, OWNER, SCAMMER, 1n)]) });
+  assert.equal(previewWithoutGuardRepeats(plain, guard('personal_sign', ['0x68656c6c6f', OWNER])), plain);
 });

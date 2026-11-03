@@ -7,7 +7,7 @@ import { confirmPhraseMatches, type ProtectedVerdict } from '../wallet/protected
 import { Button } from './Button';
 import { ProtectedReauth } from './ProtectedReauth';
 import { TxPreviewCard } from './TxPreviewCard';
-import type { TxPreview } from '../wallet/tx-simulate';
+import { previewWithoutGuardRepeats, type TxPreview } from '../wallet/tx-simulate';
 
 function guardStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -107,7 +107,7 @@ export function ProtectedGuardSheet({
               • {line}
             </Text>
           ))}
-          {preview ? <TxPreviewCard preview={preview} /> : null}
+          {preview ? <TxPreviewCard preview={verdict ? previewWithoutGuardRepeats(preview, verdict) : preview} /> : null}
           {error ? <Text style={styles.blockTitle}>{error}</Text> : null}
           {verdict.blocked ? (
             <View style={styles.blockBox}>
