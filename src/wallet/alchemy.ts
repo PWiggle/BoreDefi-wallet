@@ -66,7 +66,8 @@ type AlchemyNft = {
   tokenType?: string;
   name?: string;
   image?: { cachedUrl?: string; thumbnailUrl?: string; originalUrl?: string };
-  raw?: { metadata?: { name?: string; image?: string } };
+  tokenUri?: string;
+  raw?: { tokenUri?: string; metadata?: { name?: string; image?: string } };
 };
 
 function standardOf(value: string | undefined): NftItem['standard'] | null {
@@ -98,6 +99,7 @@ export function parseAlchemyNfts(items: AlchemyNft[], chainId: ChainId): NftItem
       collection: item.contract?.name ?? item.contract?.openSeaMetadata?.collectionName ?? 'NFT',
       imageUrl: item.image?.cachedUrl ?? item.image?.originalUrl ?? item.raw?.metadata?.image,
       ...((item.raw?.metadata?.image ?? item.image?.originalUrl) ? { imageOriginal: item.raw?.metadata?.image ?? item.image?.originalUrl } : {}),
+      ...((item.tokenUri ?? item.raw?.tokenUri) ? { tokenUri: item.tokenUri ?? item.raw?.tokenUri } : {}),
     });
   }
   return out;

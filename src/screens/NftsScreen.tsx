@@ -8,6 +8,7 @@ import { ChainPicker } from '../components/ChainPicker';
 import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SafeNftImage } from '../components/SafeNftImage';
+import { useNftImage } from '../components/useNftImage';
 import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
@@ -16,7 +17,7 @@ import type { MainNavigation } from '../navigation';
 import { checksumAddress } from '../wallet/address-safety';
 import { CHAINS } from '../wallet/chains';
 import { shortenAddress } from '../wallet/format';
-import { protectedNftImageUrl, safeNftImageUrl } from '../wallet/nft-media';
+import { safeNftImageUrl } from '../wallet/nft-media';
 import {
   classifyNftSpam,
   displayCollectionName,
@@ -24,15 +25,6 @@ import {
   nftStorageKey,
   type NftSpamAssessment,
 } from '../wallet/nft-spam';
-import { protectedAssetFor } from '../wallet/yuga-allowlist';
-
-/** Protected collections only show content-addressed IPFS images; everything else uses the normal filter. */
-function nftImage(item: NftItem): string | undefined {
-  if (protectedAssetFor(item.chainId, item.contract)) {
-    return protectedNftImageUrl(item) ?? undefined;
-  }
-  return item.imageUrl;
-}
 import { fetchNfts, groupNftsByCollection, mergeNftLists, nftAutodetectLabel, type NftItem } from '../wallet/nfts';
 import {
   loadHiddenNfts,
@@ -41,6 +33,12 @@ import {
   saveHiddenNfts,
   saveRevealedNfts,
 } from '../wallet/storage';
+
+/** Protected collections only show content-addressed IPFS images (resolved from tokenURI when needed); see useNftImage. */
+function NftImage({ item, style }: { item: NftItem; style?: Parameters<typeof SafeNftImage>[0]['style'] }) {
+  const { url } = useNftImage(item);
+  return <SafeNftImage url={url} style={style} />;
+}
 
 type GalleryItem = {
   item: NftItem;
@@ -201,6 +199,7 @@ export function NftsScreen() {
   const [autodetectDown, setAutodetectDown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<GalleryItem | null>(null);
+  const selectedImage = useNftImage(selected?.item);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -428,7 +427,7 @@ export function NftsScreen() {
                   onPress={() => openSend(entry.item)}
                   style={styles.pickerRow}
                 >
-                  <SafeNftImage url={nftImage(entry.item)} style={styles.pickerThumb} />
+                  <NftImage item={entry.item} style={styles.pickerThumb} />
                   <View style={styles.pickerCopy}>
                     <Text numberOfLines={1} style={styles.tileName}>
                       {displayNftName(entry.item)}
@@ -450,8 +449,8 @@ export function NftsScreen() {
           <View style={styles.sheet}>
             {selected ? (
               <ScrollView contentContainerStyle={styles.sheetBody}>
-                <SafeNftImage url={nftImage(selected.item)} style={styles.hero} />
-                {!safeNftImageUrl(nftImage(selected.item)) ? (
+                <SafeNftImage url={selectedImage.url} style={styles.hero} />
+                {!selectedImage.resolving && !safeNftImageUrl(selectedImage.url) ? (
                   <Text style={styles.warn}>
                     {selected.risk.verified
                       ? 'Image hidden. Protected collections only show images stored on IPFS by content hash, so a metadata server cannot swap in fake text.'
@@ -527,7 +526,7 @@ function NftTile({
   const styles = useThemedStyles(nftStyles);
   return (
     <Pressable onPress={onPress} style={[styles.tile, dim && styles.tileDim]}>
-      <SafeNftImage url={nftImage(entry.item)} style={styles.thumb} />
+      <NftImage item={entry.item} style={styles.thumb} />
       {entry.risk.verified ? <Text style={styles.badgeVerified}>{`✓ ${entry.risk.label ?? 'Verified'}`}</Text> : null}
       {entry.risk.fake ? <Text style={styles.badgeFake}>⚠ Fake</Text> : null}
       <Text numberOfLines={1} style={styles.tileName}>

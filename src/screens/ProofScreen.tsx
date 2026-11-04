@@ -6,6 +6,7 @@ import { Button } from '../components/Button';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ProtectedGuardSheet } from '../components/ProtectedGuardSheet';
 import { SafeNftImage } from '../components/SafeNftImage';
+import { useNftImage } from '../components/useNftImage';
 import { Screen } from '../components/Screen';
 import { SwapConfirmSheet } from '../components/SwapConfirmSheet';
 import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
@@ -13,7 +14,8 @@ import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
-import { nftImageCandidates, protectedNftImageUrl } from '../wallet/nft-media';
+import { nftImageCandidates } from '../wallet/nft-media';
+import type { NftItem } from '../wallet/nfts';
 import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { reviewDappRequest } from '../wallet/request-review';
@@ -31,8 +33,20 @@ const BAYC = '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D';
 const TEST_OPERATOR = '0x000000000000000000000000000000000000dEaD';
 const APPROVAL_IFACE = new Interface(['function setApprovalForAll(address operator, bool approved)']);
 
-// Real token images (read-only): Lil Mutants #4632 (protected collection) and BAYC #0, as their metadata gives them.
-const LIL_MUTANT_4632 = protectedNftImageUrl({ imageOriginal: 'ipfs://QmShzmT9H3mnWxKoy3ib5aUCb2hjTUamrPPNsoFUEXPZ28/4632.png' });
+// Real token images (read-only). Lil Mutants #4632 (protected) uses the exact item shape Alchemy returns (CDN-only image
+// URLs, no raw metadata image) so the proof goes through the same useNftImage path as the NFTs tab. Build 15's proof
+// used a hand-made ipfs:// item instead, which passed while the real tab showed the "NFT" placeholder.
+const LIL_MUTANT_4632_ITEM: NftItem = {
+  chainId: 1,
+  contract: '0x3B45542f6C97FE7f7aA3BB055c95e93B2c0437ED',
+  tokenId: '4632',
+  standard: 'ERC-721',
+  name: '#4632',
+  collection: 'LMACEXPERIMENT',
+  imageUrl: 'https://nft2-cdn.alchemy.com/eth-mainnet/f12b2513a926bd518ef99b4d1eea2f7c',
+  imageOriginal: 'https://i2c.seadn.io/ethereum/0x3b45542f6c97fe7f7aa3bb055c95e93b2c0437ed/bb30a3664d1b7d388181187d11cc5368.png',
+  tokenUri: 'ipfs://QmTxEZuuWgWEfDRg4NqYs6PSuJ15GuatxEivMud7TrBXE6/4632.json',
+};
 const BAYC_0_FROM_IPFS_IO = 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ';
 
 function proofStyles({ type }: Theme) {
@@ -51,6 +65,7 @@ function gatewayHost(url: string | null | undefined): string {
 
 export function ProofScreen() {
   const styles = useThemedStyles(proofStyles);
+  const lilMutant = useNftImage(LIL_MUTANT_4632_ITEM);
   const { session } = useWallet();
   const chain = CHAINS[1];
   const [status, setStatus] = useState('Test requests only. Nothing here is ever signed or sent.');
@@ -120,8 +135,8 @@ export function ProofScreen() {
     <Screen title="Proof (test build)" subtitle="Live previews from safe test requests. Confirm buttons only close the sheet.">
       <View style={styles.nftRow}>
         <View style={styles.nftCell}>
-          <SafeNftImage url={LIL_MUTANT_4632 ?? undefined} style={styles.nftImage} />
-          <Text style={styles.meta}>{`Lil Mutants #4632 (protected) · ${gatewayHost(LIL_MUTANT_4632)}`}</Text>
+          <SafeNftImage url={lilMutant.url} style={styles.nftImage} />
+          <Text style={styles.meta}>{`Lil Mutants #4632 (protected, Alchemy item) · ${lilMutant.resolving ? 'resolving…' : gatewayHost(lilMutant.url)}`}</Text>
         </View>
         <View style={styles.nftCell}>
           <SafeNftImage url={BAYC_0_FROM_IPFS_IO} style={styles.nftImage} />

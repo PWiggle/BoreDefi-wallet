@@ -28,6 +28,11 @@ export type NftItem = {
   imageUrl?: string;
   /** The token's own image URI from metadata (ipfs://…), before any CDN cache. Used for protected collections. */
   imageOriginal?: string;
+  /**
+   * tokenURI the indexer reported (ipfs://…/4632.json). Protected collections whose indexer image is only a CDN copy
+   * (Alchemy gives i2c.seadn.io / nft-cdn for Lil Mutants, with no raw metadata) resolve their IPFS image from it.
+   */
+  tokenUri?: string;
 };
 
 type BlockscoutNft = {
