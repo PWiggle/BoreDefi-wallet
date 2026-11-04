@@ -4,6 +4,8 @@ import { logger } from '../logger';
 import { friendlyTxError, toUserError, UserFacingError } from './tx-errors';
 import { isWrapPair, isWrapperRoute, sameTokenAddress } from './swap-guard';
 import { type ChainId } from './chains';
+import { sendContractMethod, sendWithBufferedGas } from './gas-limit';
+import { GAS_UNITS } from './preflight';
 import { connectedWallet, getProvider, readWithFallback, retryRead } from './rpc';
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
 
@@ -356,13 +358,21 @@ export async function ensureSpendAllowance(input: {
         value: 0n,
         chainId: input.chainId,
       });
-      await getProvider(input.chainId).waitForTransaction(hash);
+      const receipt = await getProvider(input.chainId).waitForTransaction(hash);
+      if (receipt && receipt.status === 0) {
+        throw new Error('Token approval reverted on-chain.');
+      }
       return null;
     }
     const wallet = await connectedWallet(input.mnemonic, input.chainId);
     const contract = new Contract(input.token.address, ERC20_ABI, wallet);
-    const tx = (await contract.approve(input.spender, input.amount)) as TransactionResponse;
-    await tx.wait();
+    const tx = await sendContractMethod(contract, 'approve', [input.spender, input.amount], {
+      fallback: GAS_UNITS.erc20Approve,
+    });
+    const receipt = await tx.wait();
+    if (receipt && receipt.status === 0) {
+      throw new Error('Token approval reverted on-chain.');
+    }
     return tx;
   } catch (error) {
     throw toUserError('Token approval failed', error, {
@@ -390,12 +400,17 @@ export async function sendSwapTransaction(
       return { hash };
     }
     const wallet = await connectedWallet(mnemonic, chainId);
-    return await wallet.sendTransaction({
-      to: quote.transactionRequest.to,
-      data: quote.transactionRequest.data,
-      value: quote.transactionRequest.value,
-      gasLimit: quote.transactionRequest.gasLimit,
-    });
+    // LI.FI's gasLimit is kept, but never below our own buffered estimate (see gas-limit.ts).
+    return await sendWithBufferedGas(
+      wallet,
+      {
+        to: quote.transactionRequest.to,
+        data: quote.transactionRequest.data,
+        value: quote.transactionRequest.value,
+        gasLimit: quote.transactionRequest.gasLimit,
+      },
+      GAS_UNITS.swap,
+    );
   } catch (error) {
     throw toUserError('Swap send failed', error, {
       chainId,

@@ -2,6 +2,8 @@ import { Transaction, type TransactionLike } from 'ethers';
 
 import { logger } from '../logger';
 import { type ChainId } from './chains';
+import { resolveGasLimit } from './gas-limit';
+import { GAS_UNITS } from './preflight';
 import { getProvider } from './rpc';
 
 export const LEDGER_ETH_PATH = "44'/60'/0'/0/0";
@@ -150,12 +152,11 @@ export async function signAndBroadcastLedger(input: LedgerUnsignedTx): Promise<s
   const fee = await provider.getFeeData();
   const maxFeePerGas = input.maxFeePerGas ?? fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
   const maxPriorityFeePerGas = input.maxPriorityFeePerGas ?? fee.maxPriorityFeePerGas ?? 0n;
-  const gasLimit = input.gasLimit ?? (await provider.estimateGas({
-    from: activeAccount.address,
-    to: input.to,
-    data: input.data ?? '0x',
-    value: input.value ?? 0n,
-  }));
+  const from = activeAccount.address;
+  const gasLimit = await resolveGasLimit(
+    () => provider.estimateGas({ from, to: input.to, data: input.data ?? '0x', value: input.value ?? 0n }),
+    { fallback: input.data && input.data !== '0x' ? GAS_UNITS.swap : GAS_UNITS.nativeTransfer, provided: input.gasLimit },
+  );
   const unsignedHex = buildUnsignedLedgerTx({
     ...input,
     nonce,

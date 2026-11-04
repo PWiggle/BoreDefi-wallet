@@ -3,6 +3,7 @@ import { Contract, getAddress, isAddress, type TransactionResponse } from 'ether
 import { logger } from '../logger';
 import { alchemyEnabledFor, fetchAlchemyNfts, getAlchemyKey } from './alchemy';
 import { CHAINS, type ChainId } from './chains';
+import { sendContractMethod } from './gas-limit';
 import { connectedWallet, getProvider } from './rpc';
 
 const ERC721_ABI = [
@@ -221,6 +222,9 @@ export async function verifyNftOwnership(
   }
 }
 
+/** Used only when eth_estimateGas is unreachable (RPC down); safeTransferFrom is typically 50k-120k. */
+export const NFT_SEND_FALLBACK_GAS = 200_000n;
+
 export async function sendNft(input: {
   mnemonic: string;
   owner: string;
@@ -238,16 +242,17 @@ export async function sendNft(input: {
   });
   if (input.item.standard === 'ERC-721') {
     const nft = new Contract(input.item.contract, ERC721_ABI, wallet);
-    return nft.safeTransferFrom(input.owner, to, BigInt(input.item.tokenId)) as Promise<TransactionResponse>;
+    return sendContractMethod(nft, 'safeTransferFrom', [input.owner, to, BigInt(input.item.tokenId)], {
+      fallback: NFT_SEND_FALLBACK_GAS,
+    });
   }
   const nft = new Contract(input.item.contract, ERC1155_ABI, wallet);
-  return nft.safeTransferFrom(
-    input.owner,
-    to,
-    BigInt(input.item.tokenId),
-    input.amount ?? 1n,
-    '0x',
-  ) as Promise<TransactionResponse>;
+  return sendContractMethod(
+    nft,
+    'safeTransferFrom',
+    [input.owner, to, BigInt(input.item.tokenId), input.amount ?? 1n, '0x'],
+    { fallback: NFT_SEND_FALLBACK_GAS },
+  );
 }
 
 /** One-line status under the NFT chain picker: Alchemy first where it is enabled, Blockscout otherwise. */

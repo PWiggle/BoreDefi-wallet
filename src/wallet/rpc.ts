@@ -8,6 +8,7 @@ import {
 
 import { logger } from '../logger';
 import { CHAINS, type ChainId } from './chains';
+import { bufferGasLimit } from './gas-limit';
 import { walletFromMnemonic } from './mnemonic';
 import { toUserError } from './tx-errors';
 
@@ -194,7 +195,10 @@ export async function fetchMaxFeePerGas(chainId: ChainId): Promise<bigint> {
 }
 
 export type FeeEstimate = {
+  /** Limit that is actually sent: eth_estimateGas plus headroom (bufferGasLimit). feeWei is priced on this. */
   gasLimit: bigint;
+  /** Raw eth_estimateGas result, the realistic gas this send will use (for the fee shown to the user). */
+  gasEstimate: bigint;
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
   feeWei: bigint;
@@ -208,14 +212,16 @@ export async function estimateNativeTransfer(
 ): Promise<FeeEstimate> {
   const provider = getProvider(chainId);
   try {
-    const [feeData, gasLimit] = await Promise.all([
+    const [feeData, gasEstimate] = await Promise.all([
       provider.getFeeData(),
       provider.estimateGas({ from, to, value: amountWei }),
     ]);
+    const gasLimit = bufferGasLimit(gasEstimate);
     const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 0n;
     return {
       gasLimit,
+      gasEstimate,
       maxFeePerGas,
       maxPriorityFeePerGas,
       feeWei: gasLimit * maxFeePerGas,
@@ -255,13 +261,14 @@ export async function estimateContractCall(
 ): Promise<FeeEstimate> {
   const provider = getProvider(chainId);
   try {
-    const [feeData, gasLimit] = await Promise.all([
+    const [feeData, gasEstimate] = await Promise.all([
       provider.getFeeData(),
       provider.estimateGas({ from, to, data, value: 0n }),
     ]);
+    const gasLimit = bufferGasLimit(gasEstimate);
     const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 0n;
-    return { gasLimit, maxFeePerGas, maxPriorityFeePerGas, feeWei: gasLimit * maxFeePerGas };
+    return { gasLimit, gasEstimate, maxFeePerGas, maxPriorityFeePerGas, feeWei: gasLimit * maxFeePerGas };
   } catch (error) {
     throw toUserError('Fee estimate failed', error, { chainId, fallback: 'Could not estimate network fee.' });
   }

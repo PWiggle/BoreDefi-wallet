@@ -22,6 +22,8 @@ import {
   type ProtectedPolicy,
 } from '../wallet/protected-policy';
 import { revokeCalldata, scanProtectedApprovals, type LiveApproval } from '../wallet/protected-approvals';
+import { sendWithBufferedGas } from '../wallet/gas-limit';
+import { GAS_UNITS } from '../wallet/preflight';
 import { connectedWallet, getProvider } from '../wallet/rpc';
 import { loadProtectedPolicy, saveProtectedPolicy } from '../wallet/storage';
 import { friendlyTxError } from '../wallet/tx-errors';
@@ -124,7 +126,11 @@ export function ProtectedCollectionsScreen() {
     setError(null);
     try {
       const wallet = await connectedWallet(session.mnemonic, revoking.asset.chainId as ChainId);
-      const tx = await wallet.sendTransaction({ to: revoking.asset.address, data: revokeCalldata(revoking) });
+      const tx = await sendWithBufferedGas(
+        wallet,
+        { to: revoking.asset.address, data: revokeCalldata(revoking) },
+        GAS_UNITS.erc20Approve,
+      );
       setRevoking(null);
       setScanNote(`Revoke sent: ${tx.hash}. Pull to refresh after it confirms.`);
     } catch (err) {

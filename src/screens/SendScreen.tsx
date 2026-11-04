@@ -206,7 +206,7 @@ export function SendScreen() {
         setClearedSend(sendKey(recipient, units));
       }
       setFeeWei(estimate.feeWei);
-      setGasUnits(estimate.gasLimit);
+      setGasUnits(estimate.gasEstimate);
       setSendPreview(null);
       setPreviewLoading(true);
       setReview(true);

@@ -3,6 +3,7 @@ import { type AbstractProvider, Contract, type TransactionResponse } from 'ether
 import { logger } from '../logger';
 import { CHAINS, type ChainId } from './chains';
 import { checkPreflight, estimateFeeWei, GAS_UNITS, type PreflightResult } from './preflight';
+import { sendContractMethod } from './gas-limit';
 import { connectedWallet, fetchMaxFeePerGas, getProvider, readWithFallback } from './rpc';
 import { formatTokenAmount } from './format';
 import { findToken, type TokenConfig } from './tokens';
@@ -309,6 +310,41 @@ export async function assertStakeReady(input: {
   }
 }
 
+type ContractLike = Pick<Contract, 'getFunction'>;
+
+/**
+ * Sends approve with a buffered gas limit and waits until it is mined (status 1). The next step's gas estimate
+ * depends on the new allowance, so it must not be estimated against the pre-approval state.
+ */
+export async function approveAndConfirm(token: ContractLike, spender: string, amount: bigint): Promise<void> {
+  const approval = await sendContractMethod(token, 'approve', [spender, amount], { fallback: GAS_UNITS.erc20Approve });
+  const receipt = await approval.wait();
+  if (receipt && receipt.status === 0) {
+    throw new UserFacingError('The approval failed on-chain. Nothing was supplied.');
+  }
+}
+
+/** Aave V3 supply: optional approve (mined first), then supply with a buffered gas limit. */
+export async function sendAaveSupply(input: {
+  token: ContractLike;
+  pool: ContractLike;
+  poolAddress: string;
+  asset: string;
+  owner: string;
+  amount: bigint;
+  needsApproval: boolean;
+  chainId: ChainId;
+}): Promise<TransactionResponse> {
+  if (input.needsApproval) {
+    logger.info('Aave approve', { chainId: input.chainId });
+    await approveAndConfirm(input.token, input.poolAddress, input.amount);
+  }
+  logger.info('Aave supply', { chainId: input.chainId });
+  return await sendContractMethod(input.pool, 'supply', [input.asset, input.amount, input.owner, 0], {
+    fallback: GAS_UNITS.aaveSupply,
+  });
+}
+
 export async function stake(input: {
   mnemonic: string;
   market: StakeMarket;
@@ -328,21 +364,24 @@ export async function stake(input: {
       await assertStakeReady({ market: input.market, action: 'stake', owner: input.owner, amount: input.amount });
       logger.info('Lido stake', { chainId: 1 });
       const lido = new Contract(LIDO_STETH, STETH_ABI, wallet);
-      return (await lido.submit(ZERO, { value: input.amount })) as TransactionResponse;
+      return await sendContractMethod(lido, 'submit', [ZERO], { fallback: GAS_UNITS.lidoStake, value: input.amount });
     }
     const poolAddress = AAVE_V3_POOL[chainId]!;
     const token = new Contract(input.market.asset.address, ERC20_ABI, wallet);
     const allowance = (await token.allowance(input.owner, poolAddress)) as bigint;
     const needsApproval = allowance < input.amount;
     await assertStakeReady({ market: input.market, action: 'stake', owner: input.owner, amount: input.amount, needsApproval });
-    if (needsApproval) {
-      logger.info('Aave approve', { chainId });
-      const approval = (await token.approve(poolAddress, input.amount)) as TransactionResponse;
-      await approval.wait();
-    }
-    logger.info('Aave supply', { chainId });
     const pool = new Contract(poolAddress, AAVE_POOL_ABI, wallet);
-    return (await pool.supply(input.market.asset.address, input.amount, input.owner, 0)) as TransactionResponse;
+    return await sendAaveSupply({
+      token,
+      pool,
+      poolAddress,
+      asset: input.market.asset.address,
+      owner: input.owner,
+      amount: input.amount,
+      needsApproval,
+      chainId,
+    });
   } catch (error) {
     throw toUserError('Stake failed', error, { chainId });
   }
@@ -370,17 +409,20 @@ export async function unstake(input: {
       await assertStakeReady({ market: input.market, action: 'unstake', owner: input.owner, amount: input.amount, needsApproval });
       if (needsApproval) {
         logger.info('Lido approve', { chainId: 1 });
-        const approval = (await steth.approve(LIDO_WITHDRAWAL_QUEUE, input.amount)) as TransactionResponse;
-        await approval.wait();
+        await approveAndConfirm(steth, LIDO_WITHDRAWAL_QUEUE, input.amount);
       }
       logger.info('Lido unstake request', { chainId: 1 });
       const queue = new Contract(LIDO_WITHDRAWAL_QUEUE, QUEUE_ABI, wallet);
-      return (await queue.requestWithdrawals([input.amount], input.owner)) as TransactionResponse;
+      return await sendContractMethod(queue, 'requestWithdrawals', [[input.amount], input.owner], {
+        fallback: GAS_UNITS.lidoUnstake,
+      });
     }
     await assertStakeReady({ market: input.market, action: 'unstake', owner: input.owner, amount: input.amount });
     logger.info('Aave withdraw', { chainId });
     const pool = new Contract(AAVE_V3_POOL[chainId]!, AAVE_POOL_ABI, wallet);
-    return (await pool.withdraw(input.market.asset.address, input.amount, input.owner)) as TransactionResponse;
+    return await sendContractMethod(pool, 'withdraw', [input.market.asset.address, input.amount, input.owner], {
+      fallback: GAS_UNITS.aaveWithdraw,
+    });
   } catch (error) {
     throw toUserError('Unstake failed', error, { chainId });
   }
@@ -419,7 +461,7 @@ export async function claimLidoRequests(mnemonic: string, owner: string): Promis
     const last = (await queue.getLastCheckpointIndex()) as bigint;
     const hints = (await queue.findCheckpointHints(ids, 1n, last)) as bigint[];
     logger.info('Lido claim', { count: ids.length });
-    return (await queue.claimWithdrawals(ids, hints)) as TransactionResponse;
+    return await sendContractMethod(queue, 'claimWithdrawals', [ids, hints], { fallback: GAS_UNITS.lidoClaim });
   } catch (error) {
     throw toUserError('Lido claim failed', error, { chainId: 1 });
   }
