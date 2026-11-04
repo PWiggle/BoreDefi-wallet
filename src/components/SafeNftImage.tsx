@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image, Text, View, type ImageStyle, type StyleProp } from 'react-native';
 
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
-import { safeNftImageUrl } from '../wallet/nft-media';
+import { nftImageCandidates } from '../wallet/nft-media';
 
 function imageStyles({ colors, radius }: Theme) {
   return {
@@ -32,10 +32,15 @@ export function SafeNftImage({
   style?: StyleProp<ImageStyle>;
 }) {
   const styles = useThemedStyles(imageStyles);
-  const safe = safeNftImageUrl(url);
-  const [failed, setFailed] = useState(false);
+  const candidates = useMemo(() => nftImageCandidates(url), [url]);
+  // Index into candidates: on a load error, try the next IPFS gateway before showing the placeholder.
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    setAttempt(0);
+  }, [url]);
+  const safe = candidates[attempt];
 
-  if (!safe || failed) {
+  if (!safe) {
     return (
       <View style={[styles.placeholder, style]}>
         <Text style={styles.mark}>NFT</Text>
@@ -45,10 +50,11 @@ export function SafeNftImage({
 
   return (
     <Image
+      key={safe}
       source={{ uri: safe }}
       style={[styles.image, style]}
       resizeMode="cover"
-      onError={() => setFailed(true)}
+      onError={() => setAttempt((current) => current + 1)}
     />
   );
 }
