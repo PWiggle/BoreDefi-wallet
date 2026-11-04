@@ -1,10 +1,11 @@
 import { Interface } from 'ethers';
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ProtectedGuardSheet } from '../components/ProtectedGuardSheet';
+import { SafeNftImage } from '../components/SafeNftImage';
 import { Screen } from '../components/Screen';
 import { SwapConfirmSheet } from '../components/SwapConfirmSheet';
 import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
@@ -12,6 +13,7 @@ import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
+import { nftImageCandidates, protectedNftImageUrl } from '../wallet/nft-media';
 import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { reviewDappRequest } from '../wallet/request-review';
@@ -29,8 +31,22 @@ const BAYC = '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D';
 const TEST_OPERATOR = '0x000000000000000000000000000000000000dEaD';
 const APPROVAL_IFACE = new Interface(['function setApprovalForAll(address operator, bool approved)']);
 
+// Real token images (read-only): Lil Mutants #4632 (protected collection) and BAYC #0, as their metadata gives them.
+const LIL_MUTANT_4632 = protectedNftImageUrl({ imageOriginal: 'ipfs://QmShzmT9H3mnWxKoy3ib5aUCb2hjTUamrPPNsoFUEXPZ28/4632.png' });
+const BAYC_0_FROM_IPFS_IO = 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ';
+
 function proofStyles({ type }: Theme) {
-  return { meta: type.meta };
+  return {
+    meta: type.meta,
+    nftRow: { flexDirection: 'row' as const, gap: 12 },
+    nftCell: { flex: 1, gap: 6 },
+    nftImage: { width: '100%' as const, aspectRatio: 1 },
+  };
+}
+
+function gatewayHost(url: string | null | undefined): string {
+  const first = nftImageCandidates(url)[0];
+  return first ? new URL(first).hostname : 'none';
 }
 
 export function ProofScreen() {
@@ -102,6 +118,16 @@ export function ProofScreen() {
 
   return (
     <Screen title="Proof (test build)" subtitle="Live previews from safe test requests. Confirm buttons only close the sheet.">
+      <View style={styles.nftRow}>
+        <View style={styles.nftCell}>
+          <SafeNftImage url={LIL_MUTANT_4632 ?? undefined} style={styles.nftImage} />
+          <Text style={styles.meta}>{`Lil Mutants #4632 (protected) · ${gatewayHost(LIL_MUTANT_4632)}`}</Text>
+        </View>
+        <View style={styles.nftCell}>
+          <SafeNftImage url={BAYC_0_FROM_IPFS_IO} style={styles.nftImage} />
+          <Text style={styles.meta}>{`BAYC #0 (metadata: ipfs.io) · ${gatewayHost(BAYC_0_FROM_IPFS_IO)}`}</Text>
+        </View>
+      </View>
       <Button label="Swap confirm: 0.01 ETH → USDC (live quote)" loading={busy} onPress={openSwap} />
       <Button label="dApp request preview (normal swap)" variant="secondary" onPress={openDapp} disabled={busy} />
       <Button label="dApp request: BAYC approve-all (must block)" variant="secondary" onPress={openBlocked} disabled={busy} />
