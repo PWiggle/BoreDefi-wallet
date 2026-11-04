@@ -1,5 +1,5 @@
 import { Interface } from 'ethers';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { Button } from '../components/Button';
@@ -16,6 +16,7 @@ import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
 import { nftImageCandidates } from '../wallet/nft-media';
 import type { NftItem } from '../wallet/nfts';
+import { ALCHEMY_NETWORK, getAlchemyKey, parseAlchemyNfts } from '../wallet/alchemy';
 import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { reviewDappRequest } from '../wallet/request-review';
@@ -47,7 +48,6 @@ const LIL_MUTANT_4632_ITEM: NftItem = {
   imageOriginal: 'https://i2c.seadn.io/ethereum/0x3b45542f6c97fe7f7aa3bb055c95e93b2c0437ed/bb30a3664d1b7d388181187d11cc5368.png',
   tokenUri: 'ipfs://QmTxEZuuWgWEfDRg4NqYs6PSuJ15GuatxEivMud7TrBXE6/4632.json',
 };
-const BAYC_0_FROM_IPFS_IO = 'https://ipfs.io/ipfs/QmRRPWG96cmgTn2qSzjwr2qvfNEuhunv6FNeMFGa9bx6mQ';
 
 function proofStyles({ type }: Theme) {
   return {
@@ -66,6 +66,20 @@ function gatewayHost(url: string | null | undefined): string {
 export function ProofScreen() {
   const styles = useThemedStyles(proofStyles);
   const lilMutant = useNftImage(LIL_MUTANT_4632_ITEM);
+  // BAYC #0 exactly as Alchemy getNFTMetadata returns it today (live, read-only), through the same parser + hook.
+  const [baycItem, setBaycItem] = useState<NftItem | null>(null);
+  const bayc = useNftImage(baycItem);
+  useEffect(() => {
+    const key = getAlchemyKey();
+    if (!key) {
+      return;
+    }
+    const url = `https://${ALCHEMY_NETWORK[1]}.g.alchemy.com/nft/v3/${encodeURIComponent(key)}/getNFTMetadata?contractAddress=${BAYC}&tokenId=0`;
+    void fetch(url)
+      .then((response) => response.json())
+      .then((body) => setBaycItem(parseAlchemyNfts([body], 1)[0] ?? null))
+      .catch(() => setBaycItem(null));
+  }, []);
   const { session } = useWallet();
   const chain = CHAINS[1];
   const [status, setStatus] = useState('Test requests only. Nothing here is ever signed or sent.');
@@ -139,8 +153,8 @@ export function ProofScreen() {
           <Text style={styles.meta}>{`Lil Mutants #4632 (protected, Alchemy item) · ${lilMutant.resolving ? 'resolving…' : gatewayHost(lilMutant.url)}`}</Text>
         </View>
         <View style={styles.nftCell}>
-          <SafeNftImage url={BAYC_0_FROM_IPFS_IO} style={styles.nftImage} />
-          <Text style={styles.meta}>{`BAYC #0 (metadata: ipfs.io) · ${gatewayHost(BAYC_0_FROM_IPFS_IO)}`}</Text>
+          <SafeNftImage url={bayc.url} style={styles.nftImage} />
+          <Text style={styles.meta}>{`BAYC #0 (protected, live Alchemy) · ${baycItem ? (bayc.resolving ? 'resolving…' : gatewayHost(bayc.url)) : 'loading…'}`}</Text>
         </View>
       </View>
       <Button label="Swap confirm: 0.01 ETH → USDC (live quote)" loading={busy} onPress={openSwap} />

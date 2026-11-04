@@ -14,6 +14,7 @@ import { WarningBanner } from '../components/WarningBanner';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
+import { PROOF_NFT_OWNER } from '../proof-mode';
 import { checksumAddress } from '../wallet/address-safety';
 import { CHAINS } from '../wallet/chains';
 import { shortenAddress } from '../wallet/format';
@@ -212,7 +213,7 @@ export function NftsScreen() {
     setError(null);
     try {
       const [{ items: catalog, autodetect }, imported, shown, hidden] = await Promise.all([
-        fetchNfts(session.address, selectedChain.id),
+        fetchNfts(PROOF_NFT_OWNER ?? session.address, selectedChain.id),
         loadImportedNfts(),
         loadRevealedNfts(),
         loadHiddenNfts(),
