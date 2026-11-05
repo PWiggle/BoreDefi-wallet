@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Image, useWindowDimensions, View } from 'react-native';
+import { Image, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { coverImage } from '../brand';
@@ -19,16 +19,15 @@ function coverStyles({ spacing }: Theme) {
       backgroundColor: COVER_BACKGROUND,
       flex: 1,
     },
+    // The art is fitted into the space above the footer, so the footer text can never sit on the logo,
+    // whatever the screen height (iPhone SE, tall Androids, web with the test banner).
     art: {
-      bottom: 0,
-      left: 0,
-      position: 'absolute' as const,
-      right: 0,
-      top: 0,
+      flex: 1,
+      minHeight: 0,
+      width: '100%' as const,
     },
     footer: {
       gap: spacing.sm,
-      marginTop: 'auto' as const,
       paddingBottom: spacing.md,
       paddingHorizontal: spacing.md,
       paddingTop: spacing.sm,
@@ -38,7 +37,6 @@ function coverStyles({ spacing }: Theme) {
 
 export function CoverScreen({ footer, statusBarHidden = false }: Props) {
   const styles = useThemedStyles(coverStyles);
-  const { width, height } = useWindowDimensions();
   return (
     <View style={styles.root} testID="boredefi-cover">
       <StatusBar hidden={statusBarHidden} style="light" />
@@ -46,7 +44,7 @@ export function CoverScreen({ footer, statusBarHidden = false }: Props) {
         accessibilityLabel="BoreDefi"
         resizeMode="contain"
         source={coverImage}
-        style={[styles.art, { width, height }]}
+        style={styles.art}
       />
       <SafeAreaView edges={['bottom']} style={styles.footer}>
         {footer}

@@ -8,6 +8,7 @@ import { ChainPicker } from '../components/ChainPicker';
 import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { MarketRow } from '../components/MarketRow';
+import { SolanaHomeSection } from '../components/SolanaHomeSection';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
@@ -22,12 +23,16 @@ import {
   geckoIdForToken,
   indexMarketsById,
   portfolioTokensForChain,
+  portfolioUsdTotal,
   type MarketCoin,
   usdValueFromUnits,
 } from '../wallet/markets';
 import { fetchBalance } from '../wallet/rpc';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
 import { fetchTokenBalance } from '../wallet/swap';
 import { type TokenConfig } from '../wallet/tokens';
+import { useGas } from '../components/useGas';
+import { GasSummary } from './GasScreen';
 
 type TokenRow = {
   token: TokenConfig;
@@ -118,6 +123,7 @@ export function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
   const [nativeMarket, setNativeMarket] = useState<MarketCoin | undefined>(undefined);
   const [strip, setStrip] = useState<MarketCoin[]>([]);
 
@@ -135,7 +141,7 @@ export function HomeScreen() {
         // Indexers are optional. A Blockscout outage must not hide a live balance.
         fetchActivity(session.address, selectedChain.id, 5).catch(() => [] as ActivityItem[]),
         fetchMarketDetails(geckoIds).catch(() => {
-          setMarketsError('Could not load live CoinGecko prices.');
+          setMarketsError('Could not load live BoreDash prices.');
           return [] as MarketCoin[];
         }),
         fetchTopMarkets(8).catch(() => fetchTrendingCoins().catch(() => [] as MarketCoin[])),
@@ -160,10 +166,13 @@ export function HomeScreen() {
       setBalance(nextBalance);
       setActivity(nextActivity);
       setTokens(nextTokens);
+      setPortfolioTotal(
+        portfolioUsdTotal(nextTokens.map((row) => ({ token: row.token, amount: row.amount, priceUsd: row.market?.priceUsd }))),
+      );
       setNativeMarket(byId.get(geckoIdForNative(selectedChain.id)));
       setStrip(nextStrip.slice(0, 6));
       if (details.length === 0 && nextStrip.length === 0) {
-        setMarketsError('Could not load live CoinGecko prices.');
+        setMarketsError('Could not load live BoreDash prices.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not refresh wallet.');
@@ -175,6 +184,8 @@ export function HomeScreen() {
       load();
     }, [load]),
   );
+  // One gas read each time Home is focused (the Gas screen itself refreshes every 12 s).
+  const gas = useGas({ poll: false });
 
   if (!session) {
     return null;
@@ -186,7 +197,9 @@ export function HomeScreen() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const usdTotal = balance === null ? null : usdValueFromUnits(balance, 18, nativeMarket?.priceUsd);
+  // Every held token (native, stables, WETH, stETH, APE…) priced by its CoinGecko id; native-only until tokens load.
+  const usdTotal =
+    balance === null ? null : tokens.length ? portfolioTotal : usdValueFromUnits(balance, 18, nativeMarket?.priceUsd);
 
   return (
     <Screen
@@ -223,6 +236,13 @@ export function HomeScreen() {
         <CircleAction label="Stake" name="stake" onPress={() => navigation.navigate('Stake', {})} />
         <CircleAction label="Bridge" name="bridge" onPress={() => navigation.navigate('Bridge')} />
       </View>
+      <Pressable onPress={() => navigation.navigate('Gas')} style={styles.section}>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>Ethereum gas</Text>
+          <Text style={styles.link}>Live chart</Text>
+        </View>
+        <GasSummary snapshot={gas.snapshot} />
+      </Pressable>
       <ErrorBanner message={error} />
       <ErrorBanner message={marketsError} />
       <View style={styles.section}>
@@ -246,6 +266,7 @@ export function HomeScreen() {
           ))
         )}
       </View>
+      {SOLANA_ENABLED ? <SolanaHomeSection /> : null}
       <View style={styles.section}>
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Markets</Text>
@@ -254,7 +275,7 @@ export function HomeScreen() {
           </Pressable>
         </View>
         {strip.length === 0 ? (
-          <Text style={styles.empty}>Live CoinGecko markets are offline or rate-limited.</Text>
+          <Text style={styles.empty}>Live BoreDash markets are offline or busy. Pull to refresh.</Text>
         ) : (
           strip.map((coin) => (
             <MarketRow key={coin.id} coin={coin} onPress={() => navigation.navigate('Markets')} />

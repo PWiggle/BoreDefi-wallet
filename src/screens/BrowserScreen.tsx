@@ -15,17 +15,29 @@ import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webvie
 import { Button } from '../components/Button';
 import { CoinGeckoWebEmbed } from '../components/CoinGeckoWebEmbed';
 import { ConfirmSheet } from '../components/ConfirmSheet';
+import { ProtectedGuardSheet } from '../components/ProtectedGuardSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { InAppBrowserView } from '../components/InAppBrowserView';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainTabParamList } from '../navigation';
-import { classifyBrowserMethod, DAPP_BOOKMARKS, DEFAULT_BROWSER_URL, normalizeDappUrl } from '../wallet/dapps';
+import {
+  classifyBrowserMethod,
+  DAPP_BOOKMARKS,
+  dappHost,
+  dappOrigin,
+  DEFAULT_BROWSER_URL,
+  normalizeDappUrl,
+  urlBarAfterNavigation,
+} from '../wallet/dapps';
+import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
+import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
   chainIdHex,
   INJECTED_PROVIDER_SOURCE,
+  isOriginConnected,
   providerEmitScript,
   providerResolveScript,
   providerSyncScript,
@@ -33,8 +45,12 @@ import {
 import { inspectDappApproval } from '../wallet/approval-risk';
 import { formatNative } from '../wallet/format';
 import { sendRpc } from '../wallet/rpc';
-import { parseSwitchChainId } from '../wallet/wc';
+import { extractWalletConnectUri, isWalletConnectNavigation, parseSwitchChainId } from '../wallet/wc';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
+import type { ProtectedVerdict } from '../wallet/protected-guard';
+import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
+import { reviewDappRequest } from '../wallet/request-review';
+import type { TxPreview } from '../wallet/tx-simulate';
 
 type BrowserConfirm = {
   title: string;
@@ -49,6 +65,7 @@ type BrowserConfirm = {
   cancelLabel?: string;
   warnings?: string[];
   danger?: boolean;
+  preview?: TxPreview | null;
   resolve: (ok: boolean) => void;
 };
 
@@ -109,9 +126,31 @@ export function BrowserScreen() {
   const startUrl = route.params?.url ?? DEFAULT_BROWSER_URL;
   const [draft, setDraft] = useState(startUrl);
   const [url, setUrl] = useState(startUrl);
-  const [connectedOrigin, setConnectedOrigin] = useState<string | null>(null);
+  // The page actually loaded (follows redirects). Origins on prompts come from here, never from the typed URL.
+  const [pageUrl, setPageUrl] = useState(startUrl);
+  const editingRef = useRef(false);
+  // DO NOT REVERT to reading connection state from a render closure. On iOS the page's
+  // follow-up eth_accounts arrives before React re-renders after Connect is approved, so the
+  // old onMessage closure answered [] -> the Connect page reset itself and crashed with
+  // "null is not an object (evaluating 'provider.request')". The ref is updated synchronously.
+  const connectedOriginRef = useRef<string | null>(null);
+  const setConnectedOrigin = useCallback((next: string | null) => {
+    connectedOriginRef.current = next;
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
+
+  const [pendingProtected, setPendingProtected] = useState<{
+    verdict: ProtectedVerdict;
+    site: string;
+    preview: TxPreview | null;
+    resolve: (clearance: string | null) => void;
+  } | null>(null);
+
+  const requestProtected = (verdict: ProtectedVerdict, site: string, preview: TxPreview | null): Promise<string | null> =>
+    new Promise((resolve) => {
+      setPendingProtected({ verdict, site, preview, resolve });
+    });
 
   const requestConfirm = (spec: Omit<BrowserConfirm, 'resolve'>): Promise<boolean> =>
     new Promise((resolve) => {
@@ -122,6 +161,11 @@ export function BrowserScreen() {
     setError(null);
     try {
       const next = normalizeDappUrl(raw);
+      const verdict = next.startsWith('wc:') ? null : checkPhishing(next);
+      if (verdict?.blocked) {
+        setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+        return;
+      }
       if (next.startsWith('wc:')) {
         pair(next).catch((err) =>
           setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
@@ -130,6 +174,7 @@ export function BrowserScreen() {
       }
       setUrl(next);
       setDraft(next);
+      setPageUrl(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid URL.');
     }
@@ -141,6 +186,10 @@ export function BrowserScreen() {
         providerEmitScript('chainChanged', chainIdHex(selectedChain.id)),
     );
   }, [selectedChain.id, session?.address]);
+
+  useEffect(() => {
+    void refreshPhishingList();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,13 +215,24 @@ export function BrowserScreen() {
         payload?: { method?: string; params?: unknown[] };
       };
       id = parsed.id;
+      // Origin of the frame that sent this request (falls back to the last navigated page, never the typed URL).
+      const origin = dappOrigin(event.nativeEvent.url) ?? dappOrigin(pageUrl);
+      const site = dappHost(event.nativeEvent.url) ?? dappHost(pageUrl) ?? 'Unknown site';
+      const isConnected = isOriginConnected(connectedOriginRef.current, origin);
       const method = parsed.payload?.method ?? '';
       const params = parsed.payload?.params ?? [];
       const kind = classifyBrowserMethod(method);
       const hex = chainIdHex(selectedChain.id);
+      const phishing = checkPhishing(event.nativeEvent.url || pageUrl);
+      if (phishing.blocked && kind !== 'local') {
+        // Never connect to or sign for a blocked site, even if it loaded inside a frame.
+        setError(`Blocked: ${phishing.reason} Your wallet was not connected.`);
+        resolve(id, kind === 'accounts' ? [] : null, kind === 'accounts' ? undefined : 'Blocked by BoreDefi phishing protection.');
+        return;
+      }
 
       if (kind === 'accounts') {
-        resolve(id, connectedOrigin ? [session.address] : []);
+        resolve(id, isConnected ? [session.address] : []);
         return;
       }
       if (kind === 'local') {
@@ -190,7 +250,10 @@ export function BrowserScreen() {
           title: 'Connect wallet',
           network: selectedChain.name,
           from: session.address,
-          extra: [{ label: 'Site', value: 'Share this public address. Keys stay on this device.' }],
+          extra: [
+            { label: 'Site', value: site },
+            { label: 'Shares', value: 'This public address. Keys stay on this device.' },
+          ],
           mode: 'buttons',
           confirmLabel: 'Connect',
         });
@@ -198,16 +261,21 @@ export function BrowserScreen() {
           resolve(id, null, 'User rejected.');
           return;
         }
-        setConnectedOrigin(url);
+        if (!origin) {
+          resolve(id, null, 'This page has no web origin to connect.');
+          return;
+        }
+        setConnectedOrigin(origin);
         webRef.current?.injectJavaScript(providerSyncScript(session.address, selectedChain.id));
-        webRef.current?.injectJavaScript(
-          providerEmitScript('accountsChanged', [session.address]),
-        );
+        // Answer the request before announcing accountsChanged so pages see one consistent state.
         resolve(
           id,
           method === 'wallet_requestPermissions'
             ? [{ parentCapability: 'eth_accounts' }]
             : [session.address],
+        );
+        webRef.current?.injectJavaScript(
+          providerEmitScript('accountsChanged', [session.address]),
         );
         return;
       }
@@ -231,7 +299,7 @@ export function BrowserScreen() {
         const approved = await requestConfirm({
           title: 'Switch network',
           network: selectedChain.name,
-          extra: [{ label: 'Next chain', value: String(next) }],
+          extra: [{ label: 'Next chain', value: CHAINS[next].name }],
           mode: 'buttons',
           confirmLabel: 'Switch',
         });
@@ -245,10 +313,30 @@ export function BrowserScreen() {
         return;
       }
       if (kind === 'sign') {
+        if (!isConnected) {
+          resolve(id, null, 'Connect this site to the wallet first.');
+          return;
+        }
         const tx = params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
         const isSend = method === 'eth_sendTransaction' || method === 'eth_signTransaction';
+        // Transaction preview: simulate before anything is shown, then the protected guard with its findings.
+        const { verdict, preview } = await reviewDappRequest({
+          method,
+          params,
+          chainId: selectedChain.id,
+          owner: session.address,
+        });
+        let clearance: string | null = null;
+        if (verdict?.protected) {
+          clearance = await requestProtected(verdict, site, preview);
+          if (!clearance) {
+            resolve(id, null, 'User rejected.');
+            return;
+          }
+        }
         const risk = inspectDappApproval(method, params);
-        const approved = await requestConfirm({
+        const networkFee = isSend && preview.gasUsed ? await estimateNetworkFee(selectedChain.id, preview.gasUsed) : null;
+        const approved = clearance !== null || await requestConfirm({
           title: risk?.danger ? 'Danger: collection-wide approval' : 'Approve request',
           network: selectedChain.name,
           from: tx?.from ?? session.address,
@@ -258,8 +346,10 @@ export function BrowserScreen() {
             : isSend
               ? txAmount(tx?.value, selectedChain.symbol) ?? method
               : method,
-          fee: isSend ? 'Network gas (quoted at sign)' : 'None (signature only)',
+          fee: isSend ? (networkFee ? formatNetworkFee(networkFee) : 'Network gas (quoted at sign)') : 'None (signature only)',
+          preview,
           extra: [
+            { label: 'Site', value: site },
             { label: 'Method', value: method },
             ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
             ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
@@ -280,6 +370,7 @@ export function BrowserScreen() {
           method,
           params,
           chainId: selectedChain.id,
+          clearance,
         });
         if (result.kind === 'switch') {
           await setSelectedChain(result.chainId);
@@ -299,10 +390,22 @@ export function BrowserScreen() {
   };
 
   const intercept = (request: WebViewNavigation) => {
-    if (request.url.startsWith('wc:')) {
-      pair(request.url).catch((err) =>
+    const target = request.url || '';
+    if (isWalletConnectNavigation(target)) {
+      const wcUri = extractWalletConnectUri(target);
+      if (!wcUri) {
+        // Never hand an empty/malformed link to the WalletConnect screen.
+        setError('This page tried to open WalletConnect without a valid link. Use Connect on the page instead.');
+        return false;
+      }
+      pair(wcUri).catch((err) =>
         setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
       );
+      return false;
+    }
+    const verdict = checkPhishing(target);
+    if (verdict.blocked) {
+      setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
       return false;
     }
     return true;
@@ -323,12 +426,24 @@ export function BrowserScreen() {
           placeholderTextColor={colors.muted}
           style={styles.input}
           onSubmitEditing={() => open(draft)}
+          onFocus={() => {
+            editingRef.current = true;
+          }}
+          onBlur={() => {
+            editingRef.current = false;
+          }}
         />
         <Button label="Go" onPress={() => open(draft)} style={styles.go} />
       </View>
       <View style={styles.bookmarks}>
         {DAPP_BOOKMARKS.map((item) => (
-          <Pressable key={item.url} onPress={() => open(item.url)} style={styles.chip}>
+          <Pressable
+            key={item.url}
+            onPress={() => open(item.url)}
+            style={styles.chip}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name}, ${item.blurb}`}
+          >
             <Text style={styles.chipText}>{item.name}</Text>
           </Pressable>
         ))}
@@ -348,9 +463,39 @@ export function BrowserScreen() {
           }}
           onMessage={onMessage}
           onShouldStartLoadWithRequest={intercept}
+          onNavigationStateChange={(nav) => {
+            const nextOrigin = dappOrigin(nav.url);
+            if (!nextOrigin) {
+              return;
+            }
+            setPageUrl(nav.url);
+            setDraft((current) => urlBarAfterNavigation(current, nav.url, editingRef.current));
+            // Leaving the connected site drops the connection, so a redirect cannot inherit it.
+            const connectedOrigin = connectedOriginRef.current;
+            if (connectedOrigin && nextOrigin !== connectedOrigin) {
+              setConnectedOrigin(null);
+              webRef.current?.injectJavaScript(providerEmitScript('accountsChanged', []));
+            }
+          }}
           onError={(message) => setError(message)}
         />
       )}
+      {pendingProtected ? (
+        <ProtectedGuardSheet
+          verdict={pendingProtected.verdict}
+          network={selectedChain.name}
+          dapp={pendingProtected.site}
+          preview={pendingProtected.preview}
+          onApprove={(clearance) => {
+            pendingProtected.resolve(clearance);
+            setPendingProtected(null);
+          }}
+          onReject={() => {
+            pendingProtected.resolve(null);
+            setPendingProtected(null);
+          }}
+        />
+      ) : null}
       <ConfirmSheet
         visible={Boolean(pendingConfirm)}
         title={pendingConfirm?.title ?? ''}
@@ -359,6 +504,7 @@ export function BrowserScreen() {
         to={pendingConfirm?.to}
         amount={pendingConfirm?.amount}
         fee={pendingConfirm?.fee}
+        preview={pendingConfirm?.preview}
         extra={pendingConfirm?.extra}
         warnings={pendingConfirm?.warnings}
         variant={pendingConfirm?.danger ? 'danger' : 'default'}

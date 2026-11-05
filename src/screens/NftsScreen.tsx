@@ -8,28 +8,45 @@ import { ChainPicker } from '../components/ChainPicker';
 import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SafeNftImage } from '../components/SafeNftImage';
+import { useNftImage } from '../components/useNftImage';
 import { Screen } from '../components/Screen';
 import { WarningBanner } from '../components/WarningBanner';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
+import { PROOF_NFT_OWNER } from '../proof-mode';
 import { checksumAddress } from '../wallet/address-safety';
 import { CHAINS } from '../wallet/chains';
 import { shortenAddress } from '../wallet/format';
 import { safeNftImageUrl } from '../wallet/nft-media';
-import { classifyNftSpam, nftStorageKey, type NftSpamAssessment } from '../wallet/nft-spam';
-import { fetchNfts, groupNftsByCollection, mergeNftLists, type NftItem } from '../wallet/nfts';
+import {
+  classifyNftSpam,
+  displayCollectionName,
+  displayNftName,
+  nftStorageKey,
+  type NftSpamAssessment,
+} from '../wallet/nft-spam';
+import { buildNftGallery, reconcileNftFetch } from '../wallet/nft-gallery';
+import { fetchNfts, groupNftsByCollection, mergeNftLists, nftAutodetectLabel, type NftItem } from '../wallet/nfts';
 import {
   loadHiddenNfts,
+  loadLastGoodNfts,
+  saveLastGoodNfts,
   loadImportedNfts,
   loadRevealedNfts,
   saveHiddenNfts,
   saveRevealedNfts,
 } from '../wallet/storage';
 
+/** Protected collections only show content-addressed IPFS images (resolved from tokenURI when needed); see useNftImage. */
+function NftImage({ item, style }: { item: NftItem; style?: Parameters<typeof SafeNftImage>[0]['style'] }) {
+  const { url } = useNftImage(item);
+  return <SafeNftImage url={url} style={style} />;
+}
+
 type GalleryItem = {
   item: NftItem;
-  risk: NftSpamAssessment;
+  risk: NftSpamAssessment & { hiddenByYou?: boolean };
 };
 
 function nftStyles({ colors, type, card, radius, spacing }: Theme) {
@@ -98,6 +115,16 @@ function nftStyles({ colors, type, card, radius, spacing }: Theme) {
       fontWeight: '700' as const,
     },
     tileMeta: type.meta,
+    badgeVerified: {
+      color: colors.accent,
+      fontSize: 11,
+      fontWeight: '900' as const,
+    },
+    badgeFake: {
+      color: colors.danger,
+      fontSize: 11,
+      fontWeight: '900' as const,
+    },
     pickerRow: {
       alignItems: 'center' as const,
       flexDirection: 'row' as const,
@@ -173,8 +200,10 @@ export function NftsScreen() {
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [userHidden, setUserHidden] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [autodetectDown, setAutodetectDown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<GalleryItem | null>(null);
+  const selectedImage = useNftImage(selected?.item);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -186,13 +215,20 @@ export function NftsScreen() {
     setBusy(true);
     setError(null);
     try {
-      const [catalog, imported, shown, hidden] = await Promise.all([
-        fetchNfts(session.address, selectedChain.id),
-        loadImportedNfts(),
-        loadRevealedNfts(),
-        loadHiddenNfts(),
+      const owner = PROOF_NFT_OWNER ?? session.address;
+      const [fetched, lastGood, imported, shown, hidden] = await Promise.all([
+        fetchNfts(owner, selectedChain.id),
+        loadLastGoodNfts(owner, selectedChain.id),
+        loadImportedNfts().catch(() => [] as NftItem[]),
+        loadRevealedNfts().catch(() => [] as string[]),
+        loadHiddenNfts().catch(() => [] as string[]),
       ]);
+      const { items: catalog, autodetect } = reconcileNftFetch(fetched, lastGood);
+      if (fetched.autodetect === 'ok') {
+        void saveLastGoodNfts(owner, selectedChain.id, fetched.items);
+      }
       setItems(mergeNftLists(catalog, imported.filter((item) => item.chainId === selectedChain.id)));
+      setAutodetectDown(autodetect === 'unavailable');
       setRevealed(new Set(shown));
       setUserHidden(new Set(hidden));
     } catch (err) {
@@ -208,21 +244,7 @@ export function NftsScreen() {
     }, [load]),
   );
 
-  const gallery = useMemo<GalleryItem[]>(
-    () =>
-      items.map((item) => {
-        const risk = classifyNftSpam(item, revealed);
-        const key = nftStorageKey(item);
-        return {
-          item,
-          risk: {
-            ...risk,
-            hidden: userHidden.has(key) || risk.hidden,
-          },
-        };
-      }),
-    [items, revealed, userHidden],
-  );
+  const gallery = useMemo<GalleryItem[]>(() => buildNftGallery(items, revealed, userHidden), [items, revealed, userHidden]);
   const visible = gallery.filter((entry) => !entry.risk.hidden);
   const hidden = gallery.filter((entry) => entry.risk.hidden);
   const groups = groupNftsByCollection(visible);
@@ -310,9 +332,7 @@ export function NftsScreen() {
       </View>
       <View style={styles.toolbar}>
         <Text style={styles.autodetect}>
-          {CHAINS[selectedChain.id].nftApi
-            ? 'Autodetect is on · public Blockscout catalog. Pull down or tap Refresh after you receive.'
-            : `No public catalog on ${selectedChain.name} · import a collectible you own`}
+          {nftAutodetectLabel(selectedChain.id, selectedChain.name)}
         </Text>
         <Pressable onPress={() => void load()}>
           <Text style={styles.importLink}>Refresh</Text>
@@ -322,6 +342,11 @@ export function NftsScreen() {
         <Text style={styles.advanced}>Import is advanced · paste a collectible contract you already own</Text>
       </Pressable>
       {error ? <ErrorBanner message={error} /> : null}
+      {autodetectDown && !busy ? (
+        <Text style={styles.meta}>
+          {`Autodetect is unavailable on ${selectedChain.name} right now. NFTs you import still show here.`}
+        </Text>
+      ) : null}
       {busy ? <Text style={styles.meta}>Loading…</Text> : null}
       {visible.length === 0 && !busy ? (
         <View style={styles.empty}>
@@ -329,7 +354,9 @@ export function NftsScreen() {
           <Text style={styles.meta}>
             {hidden.length > 0
               ? 'Unsolicited airdrops are in Hidden / possible spam below. Receive an NFT you expect, then pull to refresh. Or Show anyway after you read the warnings.'
-              : 'Nothing from autodetect on this network. Receive an NFT on this chain, then pull to refresh. Import only a collectible you already own.'}
+              : autodetectDown
+                ? 'Receive an NFT on this chain, or import a collectible you already own.'
+                : 'Nothing from autodetect on this network. Receive an NFT on this chain, then pull to refresh. Import only a collectible you already own.'}
           </Text>
           <Button label="Receive" onPress={() => navigation.navigate('NftReceive')} />
           <Button label="Import" variant="secondary" onPress={() => navigation.navigate('NftImport')} />
@@ -337,7 +364,10 @@ export function NftsScreen() {
       ) : null}
       {groups.map((group) => (
         <View key={`${group.contract}`} style={styles.group}>
-          <Text style={styles.groupTitle}>{group.collection}</Text>
+          <Text style={styles.groupTitle}>
+            {group.entries[0] ? displayCollectionName(group.entries[0].item) : group.collection}
+            {group.entries[0]?.risk.verified ? `  ✓ ${group.entries[0].risk.label ?? 'Verified'}` : ''}
+          </Text>
           <View style={styles.grid}>
             {group.entries.map((entry) => (
               <NftTile key={nftStorageKey(entry.item)} entry={entry} onPress={() => setSelected(entry)} />
@@ -361,7 +391,10 @@ export function NftsScreen() {
         {showHidden
           ? hiddenGroups.map((group) => (
               <View key={`hidden-${group.contract}`} style={styles.group}>
-                <Text style={styles.groupTitle}>{group.collection}</Text>
+                <Text style={styles.groupTitle}>
+                  {group.collection}
+                  {group.entries[0]?.risk.fake ? `  ⚠ ${group.entries[0].risk.label}` : ''}
+                </Text>
                 <View style={styles.grid}>
                   {group.entries.map((entry) => (
                     <NftTile
@@ -369,6 +402,14 @@ export function NftsScreen() {
                       entry={entry}
                       dim
                       onPress={() => setSelected(entry)}
+                    />
+                  ))}
+                  {group.entries.filter((entry) => entry.risk.verified && entry.risk.hiddenByYou).map((entry) => (
+                    <Button
+                      key={`show-${nftStorageKey(entry.item)}`}
+                      label={`Show ${displayNftName(entry.item)} (verified, hidden by you)`}
+                      variant="ghost"
+                      onPress={() => void showAnyway(entry.item)}
                     />
                   ))}
                 </View>
@@ -390,13 +431,14 @@ export function NftsScreen() {
                   onPress={() => openSend(entry.item)}
                   style={styles.pickerRow}
                 >
-                  <SafeNftImage url={entry.item.imageUrl} style={styles.pickerThumb} />
+                  <NftImage item={entry.item} style={styles.pickerThumb} />
                   <View style={styles.pickerCopy}>
                     <Text numberOfLines={1} style={styles.tileName}>
-                      {entry.item.name}
+                      {displayNftName(entry.item)}
                     </Text>
                     <Text numberOfLines={1} style={styles.meta}>
-                      {entry.item.collection} · #{entry.item.tokenId}
+                      {displayCollectionName(entry.item)} · #{entry.item.tokenId}
+                      {entry.risk.verified ? ` · ✓ ${entry.risk.label ?? 'Verified'}` : ''}
                     </Text>
                   </View>
                 </Pressable>
@@ -411,14 +453,20 @@ export function NftsScreen() {
           <View style={styles.sheet}>
             {selected ? (
               <ScrollView contentContainerStyle={styles.sheetBody}>
-                <SafeNftImage url={selected.item.imageUrl} style={styles.hero} />
-                {!safeNftImageUrl(selected.item.imageUrl) ? (
+                <SafeNftImage url={selectedImage.url} style={styles.hero} />
+                {!selectedImage.resolving && !safeNftImageUrl(selectedImage.url) ? (
                   <Text style={styles.warn}>
-                    Image hidden. Only https / IPFS-gateway images are shown. No HTML or SVG documents.
+                    {selected.risk.verified
+                      ? 'Image hidden. Protected collections only show images stored on IPFS by content hash, so a metadata server cannot swap in fake text.'
+                      : 'Image hidden. Only https / IPFS-gateway images are shown. No HTML or SVG documents.'}
                   </Text>
                 ) : null}
-                <Text style={styles.name}>{selected.item.name}</Text>
-                <Text style={styles.collection}>{selected.item.collection}</Text>
+                {selected.risk.verified ? (
+                  <Text style={styles.badgeVerified}>{`✓ ${selected.risk.label ?? 'Verified'} · official contract · protected collection`}</Text>
+                ) : null}
+                {selected.risk.fake ? <Text style={styles.badgeFake}>⚠ {selected.risk.label}</Text> : null}
+                <Text style={styles.name}>{displayNftName(selected.item)}</Text>
+                <Text style={styles.collection}>{displayCollectionName(selected.item)}</Text>
                 <Text style={styles.meta}>Token id #{selected.item.tokenId} · {selected.item.standard}</Text>
                 <Pressable onPress={() => copyContract(selected.item.contract)}>
                   <Text style={styles.contract}>
@@ -445,7 +493,15 @@ export function NftsScreen() {
                         'This is in Hidden / possible spam. Show anyway first. Do not send a hidden airdrop until you confirm you own it.',
                       ]}
                     />
-                    <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
+                    {selected.risk.fake ? (
+                      <WarningBanner
+                        danger
+                        title={selected.risk.label ?? 'Fake'}
+                        lines={['This copies a protected collection name (Yuga Labs / Bored Ape / Yaper) on a contract that is not official. It stays hidden. Do not interact with it.']}
+                      />
+                    ) : (
+                      <Button label="Show anyway" variant="ghost" onPress={() => void showAnyway(selected.item)} />
+                    )}
                   </>
                 ) : (
                   <>
@@ -474,9 +530,11 @@ function NftTile({
   const styles = useThemedStyles(nftStyles);
   return (
     <Pressable onPress={onPress} style={[styles.tile, dim && styles.tileDim]}>
-      <SafeNftImage url={entry.item.imageUrl} style={styles.thumb} />
+      <NftImage item={entry.item} style={styles.thumb} />
+      {entry.risk.verified ? <Text style={styles.badgeVerified}>{`✓ ${entry.risk.label ?? 'Verified'}`}</Text> : null}
+      {entry.risk.fake ? <Text style={styles.badgeFake}>⚠ Fake</Text> : null}
       <Text numberOfLines={1} style={styles.tileName}>
-        {entry.item.name}
+        {displayNftName(entry.item)}
       </Text>
       <Text numberOfLines={1} style={styles.tileMeta}>
         #{entry.item.tokenId}

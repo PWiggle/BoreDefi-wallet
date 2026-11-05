@@ -1,5 +1,5 @@
-const TEST_MESSAGE = 'Hello from BoreDefi';
-const PROJECT_ID = 'c884e13aaa967e608946ee76f636f27b';
+const SIGN_MESSAGE = 'Hello from BoreDefi';
+const PROJECT_ID = 'bbd12489086c59bfdb9e0a49fc05c22f';
 const CHAINS = {
   1: { name: 'Ethereum', symbol: 'ETH' },
   10: { name: 'Optimism', symbol: 'ETH' },
@@ -64,14 +64,18 @@ function utf8ToHex(value) {
 }
 
 function announceRequest() {
-  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  try {
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+  } catch {
+    // Very old browsers: fall back to window.ethereum below.
+  }
 }
 
 function findBoreDefi() {
   const found = [];
   const onAnnounce = (event) => {
     const detail = event.detail;
-    if (detail?.info?.rdns === 'com.boredefi.wallet' || detail?.provider?.isBoreDefi) {
+    if (detail?.provider && (detail?.info?.rdns === 'com.boredefi.wallet' || detail?.provider?.isBoreDefi)) {
       found.push({ provider: detail.provider, name: detail.info?.name || 'BoreDefi' });
     }
   };
@@ -87,6 +91,63 @@ function findBoreDefi() {
   return null;
 }
 
+// The wallet's in-app browser injects its provider before the page runs, but some WebViews
+// (and browser extensions) add it a moment later. Wait briefly for it instead of failing.
+function waitForBoreDefi(timeoutMs = 1500) {
+  const now = findBoreDefi();
+  if (now) {
+    return Promise.resolve(now);
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) {
+        return;
+      }
+      const hit = findBoreDefi();
+      if (hit || Date.now() >= deadline) {
+        done = true;
+        clearInterval(poll);
+        window.removeEventListener('ethereum#initialized', finish);
+        window.removeEventListener('eip6963:announceProvider', finish);
+        resolve(hit);
+      }
+    };
+    const deadline = Date.now() + timeoutMs;
+    const poll = setInterval(finish, 100);
+    window.addEventListener('ethereum#initialized', finish);
+    window.addEventListener('eip6963:announceProvider', finish);
+  });
+}
+
+// True inside the BoreDefi app's own Browser tab. react-native-webview adds
+// window.ReactNativeWebView to every page it loads, even if the wallet script is late.
+// Inside the app the page must NEVER start WalletConnect: a wc:/boredefi:// link would bounce
+// out to iOS and back into the wallet's WalletConnect screen instead of connecting here.
+function inBoreDefiApp() {
+  try {
+    if (window.ReactNativeWebView || window.ethereum?.isBoreDefi) {
+      return true;
+    }
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    return /BoreDefi/i.test(ua);
+  } catch {
+    return false;
+  }
+}
+
+const IN_APP_MISSING =
+  'The BoreDefi wallet did not load on this page. Pull down to reload, or reopen it from the Browser tab → Connect.';
+
+function applyInAppMode() {
+  if (!inBoreDefiApp()) {
+    return;
+  }
+  els.connectWc.hidden = true;
+  els.wcOpen.hidden = true;
+  els.qrBox.classList.remove('visible');
+}
+
 function otherInjected() {
   if (window.ethereum && !window.ethereum.isBoreDefi) {
     return window.ethereum;
@@ -94,13 +155,29 @@ function otherInjected() {
   return null;
 }
 
-async function refreshAccount() {
-  if (!provider) {
+// Every refresh is tied to the provider it started with. If the user disconnects (or another
+// refresh resets the page) while a request is in flight, the stale refresh stops quietly
+// instead of calling .request on null.
+let refreshSeq = 0;
+
+async function refreshAccount(knownAccounts) {
+  const active = provider;
+  if (!active?.request) {
     return;
   }
-  const nextAccounts = await provider.request({ method: 'eth_accounts' });
+  const seq = ++refreshSeq;
+  const stale = () => provider !== active || seq !== refreshSeq;
+  const nextAccounts = Array.isArray(knownAccounts)
+    ? knownAccounts
+    : await active.request({ method: 'eth_accounts' });
+  if (stale()) {
+    return;
+  }
   accounts = Array.isArray(nextAccounts) ? nextAccounts : [];
-  const rawChain = await provider.request({ method: 'eth_chainId' });
+  const rawChain = await active.request({ method: 'eth_chainId' });
+  if (stale()) {
+    return;
+  }
   chainId = hexToNumber(rawChain);
   const chain = CHAINS[chainId] ?? { name: `Chain ${chainId}`, symbol: 'ETH' };
   els.address.textContent = shortAddress(accounts[0]);
@@ -108,15 +185,18 @@ async function refreshAccount() {
   els.network.textContent = chain.name;
   els.wallet.textContent = via === 'walletconnect' ? 'BoreDefi · WalletConnect' : via === 'injected-other' ? 'Injected wallet' : 'BoreDefi';
   if (accounts[0]) {
-    const balance = await provider.request({
-      method: 'eth_getBalance',
-      params: [accounts[0], 'latest'],
-    });
-    els.balance.textContent = `${formatEther(balance)} ${chain.symbol}`;
     els.status.textContent = 'Connected';
-    els.message.textContent = 'Connected. Sign is optional and does not move funds.';
+    els.message.textContent = 'Connected. Signing a message is optional and never moves funds.';
     els.sign.disabled = false;
     els.disconnect.disabled = false;
+    const balance = await active.request({
+      method: 'eth_getBalance',
+      params: [accounts[0], 'latest'],
+    }).catch(() => null);
+    if (stale()) {
+      return;
+    }
+    els.balance.textContent = balance ? `${formatEther(balance)} ${chain.symbol}` : '—';
   } else {
     resetUi('Disconnected.');
   }
@@ -140,39 +220,81 @@ function resetUi(note) {
   els.wcOpen.hidden = true;
 }
 
+const boundProviders = new WeakSet();
+
 function bindProviderEvents() {
-  if (!provider?.on) {
+  const target = provider;
+  if (!target?.on || boundProviders.has(target)) {
     return;
   }
-  provider.on('accountsChanged', () => {
-    refreshAccount().catch((err) => setError(err.message));
+  boundProviders.add(target);
+  target.on('accountsChanged', (next) => {
+    if (provider !== target) {
+      return;
+    }
+    refreshAccount(Array.isArray(next) ? next : undefined).catch((err) => setError(friendlyError(err)));
   });
-  provider.on('chainChanged', () => {
-    refreshAccount().catch((err) => setError(err.message));
+  target.on('chainChanged', () => {
+    if (provider !== target) {
+      return;
+    }
+    refreshAccount().catch((err) => setError(friendlyError(err)));
   });
-  provider.on('disconnect', () => resetUi('Disconnected.'));
+  target.on('disconnect', () => {
+    if (provider === target) {
+      resetUi('Disconnected.');
+    }
+  });
+}
+
+function friendlyError(err) {
+  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  if (/user rejected/i.test(text)) {
+    return 'Request cancelled in the wallet.';
+  }
+  if (!text || /null is not an object|cannot read prop|undefined is not an object|is not a function/i.test(text)) {
+    return 'Could not reach the wallet. Reload this page in the BoreDefi Browser, or use WalletConnect QR.';
+  }
+  return text;
 }
 
 async function connectInjected(target, label) {
   setError('');
-  provider = target.provider ?? target;
+  const active = target.provider ?? target;
+  if (!active?.request) {
+    throw new Error('BoreDefi wallet not found on this page.');
+  }
+  provider = active;
   via = label;
   bindProviderEvents();
-  await provider.request({ method: 'eth_requestAccounts' });
-  await refreshAccount();
+  const granted = await active.request({ method: 'eth_requestAccounts' });
+  if (provider !== active) {
+    return;
+  }
+  await refreshAccount(Array.isArray(granted) && granted.length ? granted : undefined);
 }
 
 async function connectBoreDefi() {
-  const boredefi = findBoreDefi();
+  els.message.textContent = 'Looking for BoreDefi…';
+  const inApp = inBoreDefiApp();
+  const boredefi = await waitForBoreDefi(inApp ? 4000 : 1500);
   if (boredefi) {
     await connectInjected(boredefi, 'injected');
     return;
   }
-  els.message.textContent = 'BoreDefi is not injected here. Open this page in the wallet Browser tab, unlock the extension, or use WalletConnect QR.';
+  if (inApp || inBoreDefiApp()) {
+    applyInAppMode();
+    els.message.textContent = IN_APP_MISSING;
+    return;
+  }
+  els.message.textContent = 'BoreDefi wallet not found in this browser. Open this page in the BoreDefi app (Browser tab), or use WalletConnect QR below.';
   await connectWalletConnect();
 }
 
 async function renderQr(uri) {
+  if (inBoreDefiApp()) {
+    return;
+  }
   els.qrBox.classList.add('visible');
   els.wcUri.textContent = uri;
   els.wcOpen.href = `boredefi://wc?uri=${encodeURIComponent(uri)}`;
@@ -183,6 +305,11 @@ async function renderQr(uri) {
 
 async function connectWalletConnect() {
   setError('');
+  if (inBoreDefiApp()) {
+    applyInAppMode();
+    els.message.textContent = "You're already in BoreDefi. Tap Connect BoreDefi.";
+    return;
+  }
   els.message.textContent = 'Starting WalletConnect… scan the QR in BoreDefi (Settings → WalletConnect).';
   const { EthereumProvider } = await import('https://esm.sh/@walletconnect/ethereum-provider@2.21.1');
   const wc = await EthereumProvider.init({
@@ -193,9 +320,9 @@ async function connectWalletConnect() {
     events: ['chainChanged', 'accountsChanged'],
     metadata: {
       name: 'BoreDefi Connect',
-      description: 'TEST-ONLY Connect page for BoreDefi Wallet',
-      url: 'https://pwiggle.github.io/BoreDefi-wallet/connect/',
-      icons: ['https://pwiggle.github.io/BoreDefi-wallet/connect/mark.png'],
+      description: 'Connect your BoreDefi Wallet',
+      url: 'https://www.boredefi.com/connect',
+      icons: ['https://www.boredefi.com/connect/mark.png'],
     },
     rpcMap: {
       1: 'https://ethereum-rpc.publicnode.com',
@@ -218,25 +345,27 @@ async function connectWalletConnect() {
   await refreshAccount();
 }
 
-async function signTest() {
+async function signMessage() {
   setError('');
-  if (!provider || !accounts[0]) {
+  const active = provider;
+  if (!active?.request || !accounts[0]) {
     throw new Error('Connect first.');
   }
-  const signature = await provider.request({
+  const signature = await active.request({
     method: 'personal_sign',
-    params: [utf8ToHex(TEST_MESSAGE), accounts[0]],
+    params: [utf8ToHex(SIGN_MESSAGE), accounts[0]],
   });
-  els.message.textContent = `Signed “${TEST_MESSAGE}”. ${signature.slice(0, 18)}…`;
+  els.message.textContent = `Signed “${SIGN_MESSAGE}”. ${String(signature).slice(0, 18)}…`;
 }
 
 async function disconnect() {
   setError('');
+  const active = provider;
   try {
-    if (via === 'walletconnect' && provider?.disconnect) {
-      await provider.disconnect();
-    } else if (provider?.request) {
-      await provider.request({
+    if (via === 'walletconnect' && active?.disconnect) {
+      await active.disconnect();
+    } else if (active?.request) {
+      await active.request({
         method: 'wallet_revokePermissions',
         params: [{ eth_accounts: {} }],
       }).catch(() => undefined);
@@ -250,10 +379,10 @@ els.connect.addEventListener('click', () => {
   els.connect.disabled = true;
   connectBoreDefi()
     .catch((err) => {
-      setError(err instanceof Error ? err.message : 'Connect failed.');
       if (!accounts[0]) {
-        resetUi('Connect failed. Try WalletConnect QR or open this page inside BoreDefi.');
+        resetUi('Not connected. Try again, or use WalletConnect QR.');
       }
+      setError(friendlyError(err));
     })
     .finally(() => {
       els.connect.disabled = false;
@@ -263,23 +392,30 @@ els.connect.addEventListener('click', () => {
 els.connectWc.addEventListener('click', () => {
   els.connectWc.disabled = true;
   connectWalletConnect()
-    .catch((err) => setError(err instanceof Error ? err.message : 'WalletConnect failed.'))
+    .catch((err) => setError(friendlyError(err)))
     .finally(() => {
       els.connectWc.disabled = false;
     });
 });
 
 els.sign.addEventListener('click', () => {
-  signTest().catch((err) => setError(err instanceof Error ? err.message : 'Sign failed.'));
+  signMessage().catch((err) => setError(friendlyError(err)));
 });
 
 els.disconnect.addEventListener('click', () => {
-  disconnect().catch((err) => setError(err instanceof Error ? err.message : 'Disconnect failed.'));
+  disconnect().catch((err) => setError(friendlyError(err)));
 });
 
-const detected = findBoreDefi();
-if (detected) {
-  els.message.textContent = 'BoreDefi is available on this page. Tap Connect BoreDefi.';
-} else if (otherInjected()) {
-  els.message.textContent = 'Another injected wallet is present. BoreDefi is the intended target — open this page in the BoreDefi Browser, unlock the extension, or use WalletConnect QR.';
-}
+applyInAppMode();
+waitForBoreDefi(inBoreDefiApp() ? 4000 : 1500).then((detected) => {
+  if (provider) {
+    return;
+  }
+  if (detected) {
+    els.message.textContent = 'BoreDefi wallet detected. Tap Connect BoreDefi.';
+  } else if (inBoreDefiApp()) {
+    els.message.textContent = IN_APP_MISSING;
+  } else if (otherInjected()) {
+    els.message.textContent = 'Another wallet is installed in this browser. To use BoreDefi, open this page in the BoreDefi app or use WalletConnect QR.';
+  }
+});

@@ -3,7 +3,7 @@
     "name": "BoreDefi Wallet",
     "slug": "boredefi-wallet",
     "scheme": "boredefi",
-    "version": "1.0.0",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -21,14 +21,20 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.boredefi.wallet",
+      "buildNumber": "17",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
-        "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID."
+        "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID.",
+        "UIStatusBarHidden": true,
+        "UIViewControllerBasedStatusBarAppearance": false
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.boredefi.wallet",
-      "versionCode": 26,
+      "versionCode": 33,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -78,7 +84,8 @@
         "expo-camera",
         {
           "cameraPermission": "Scan a recipient address or WalletConnect QR code.",
-          "recordAudioAndroid": false
+          "recordAudioAndroid": false,
+          "microphonePermission": false
         }
       ],
       "./plugins/withHiddenSplashStatusBar",
@@ -108,6 +115,12 @@
           }
         }
       ]
-    ]
+    ],
+    "owner": "peplabs",
+    "extra": {
+      "eas": {
+        "projectId": "abd7b480-a7d9-4f16-a942-fd4c9701468d"
+      }
+    }
   }
 }

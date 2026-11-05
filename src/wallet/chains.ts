@@ -1,4 +1,4 @@
-export type ChainId = 1 | 10 | 56 | 137 | 8453 | 42161 | 43114;
+export type ChainId = 1 | 10 | 56 | 137 | 8453 | 42161 | 43114 | 33139;
 
 export type ChainConfig = {
   id: ChainId;
@@ -69,6 +69,15 @@ const publicRpc = {
     'https://avalanche-c-chain-rpc.publicnode.com',
     'https://api.avax.network/ext/bc/C/rpc',
     'https://avalanche.drpc.org',
+  ]),
+  // ApeChain (chain id 33139 / 0x8173, gas token APE). rpc.apechain.com is the official RPC in
+  // docs.apechain.com; the Caldera, dRPC and thirdweb hosts are fallbacks. All four answered
+  // eth_chainId 0x8173 on 2026-11-03. publicnode has no ApeChain endpoint (404).
+  apechain: chainRpc(process.env.EXPO_PUBLIC_APECHAIN_RPC, [
+    'https://rpc.apechain.com',
+    'https://apechain.calderachain.xyz/http',
+    'https://apechain.drpc.org',
+    'https://33139.rpc.thirdweb.com',
   ]),
 };
 
@@ -149,6 +158,18 @@ export const CHAINS: Record<ChainId, ChainConfig> = {
     activityUrl:
       'https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api',
   },
+  33139: {
+    id: 33139,
+    name: 'ApeChain',
+    symbol: 'APE',
+    decimals: 18,
+    ...publicRpc.apechain,
+    explorerTx: 'https://apescan.io/tx/',
+    explorerAddress: 'https://apescan.io/address/',
+    // ApeScan's own /api needs a key for txlist; the Caldera Blockscout explorer is keyless.
+    activityUrl: 'https://apechain.calderaexplorer.xyz/api',
+    nftApi: 'https://apechain.calderaexplorer.xyz/api/v2',
+  },
 };
 
 export const CHAIN_LIST: ChainConfig[] = [
@@ -159,6 +180,7 @@ export const CHAIN_LIST: ChainConfig[] = [
   CHAINS[137],
   CHAINS[56],
   CHAINS[43114],
+  CHAINS[33139],
 ];
 
 export const DEFAULT_CHAIN_ID: ChainId = 1;

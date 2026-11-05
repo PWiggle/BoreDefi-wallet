@@ -37,6 +37,8 @@ import {
   saveSettings,
   type SettingsRecord,
 } from '../wallet/storage';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
+import { clearSolanaKeyCache, deriveSolanaAddress } from '../wallet/solana/derive';
 import {
   encryptVault,
   isVaultV1,
@@ -74,6 +76,8 @@ type WalletContextValue = {
   session: Session | null;
   settings: SettingsRecord;
   address: string | null;
+  /** Solana address from the same recovery phrase (m/44'/501'/0'/0'). Null when Solana is switched off or still deriving. */
+  solanaAddress: string | null;
   selectedChain: ChainConfig;
   biometricsReady: boolean;
   pinBackoffMs: number;
@@ -96,6 +100,11 @@ type WalletContextValue = {
   revealMnemonic: (pin: string) => Promise<string | null>;
   revealWithBiometrics: () => Promise<string | null>;
   resetWallet: (pin: string) => Promise<boolean>;
+  /**
+   * Fresh re-authentication right at signing time, even when the wallet is already unlocked.
+   * With a PIN it verifies the PIN (lockout rules apply); without one it asks for biometrics.
+   */
+  reauthenticate: (input: { pin?: string; reason: string }) => Promise<boolean>;
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -107,6 +116,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SettingsRecord>(defaultSettings);
   const [biometricsReady, setBiometricsReady] = useState(false);
   const [pinBackoffMs, setPinBackoffMs] = useState(0);
+  const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
   const settingsRef = useRef(settings);
   const hiddenAtRef = useRef<number | null>(null);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,7 +177,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [pinBackoffMs]);
 
+  const sessionMnemonic = session?.mnemonic ?? null;
+  useEffect(() => {
+    if (!SOLANA_ENABLED || !sessionMnemonic) {
+      setSolanaAddress(null);
+      return;
+    }
+    let live = true;
+    deriveSolanaAddress(sessionMnemonic)
+      .then((next) => live && setSolanaAddress(next))
+      .catch((error) => {
+        logger.error('Solana address derivation failed', { message: error instanceof Error ? error.message : 'unknown' });
+        if (live) setSolanaAddress(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [sessionMnemonic]);
+
   const lock = useCallback(() => {
+    clearSolanaKeyCache();
     setSession(null);
     setPhase((current) => (current === 'unlocked' ? 'locked' : current));
   }, []);
@@ -552,6 +581,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return false;
     }
     await clearAllWalletData();
+    clearSolanaKeyCache();
     setSession(null);
     setPending(null);
     await persistSettings({
@@ -562,6 +592,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return true;
   }, [assertPinAvailable, notePinFailure, persistSettings]);
 
+  const reauthenticate = useCallback(
+    async ({ pin, reason }: { pin?: string; reason: string }) => {
+      if (!session) {
+        return false;
+      }
+      if (pin !== undefined) {
+        if (!assertPinAvailable()) {
+          return false;
+        }
+        const ok = await verifyPin(pin);
+        if (!ok) {
+          await notePinFailure();
+          return false;
+        }
+        await notePinSuccess();
+        return true;
+      }
+      if (!settingsRef.current.biometricsEnabled) {
+        return false;
+      }
+      return authenticateBiometrics(reason);
+    },
+    [assertPinAvailable, notePinFailure, notePinSuccess, session],
+  );
+
   const value = useMemo<WalletContextValue>(
     () => ({
       phase,
@@ -569,6 +624,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       session,
       settings,
       address: session?.address ?? pending?.address ?? null,
+      solanaAddress: session ? solanaAddress : null,
       selectedChain: CHAINS[settings.selectedChainId],
       biometricsReady,
       pinBackoffMs,
@@ -591,8 +647,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       revealMnemonic,
       revealWithBiometrics,
       resetWallet,
+      reauthenticate,
     }),
     [
+      reauthenticate,
       biometricsReady,
       cancelOnboarding,
       changePin,
@@ -614,6 +672,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setHideBalances,
       setSelectedChain,
       settings,
+      solanaAddress,
       startCreate,
       startImport,
       unlockWithBiometrics,

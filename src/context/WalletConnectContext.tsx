@@ -23,6 +23,7 @@ import {
 import { installRelayOriginWebSocket } from '../wallet/wc-origin';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
 import { WALLETCONNECT_RELAY_ORIGIN } from '../wallet/wc';
+import { checkPhishing } from '../wallet/security/phishing';
 import { useWallet } from './WalletContext';
 
 installRelayOriginWebSocket();
@@ -69,7 +70,7 @@ type WalletConnectContextValue = {
   pair: (uri: string) => Promise<void>;
   approveProposal: () => Promise<void>;
   rejectProposal: () => Promise<void>;
-  approveRequest: () => Promise<void>;
+  approveRequest: (clearance?: string) => Promise<void>;
   rejectRequest: () => Promise<void>;
   disconnect: (topic: string) => Promise<void>;
 };
@@ -129,7 +130,21 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
           return;
         }
         clientRef.current = kit;
-        kit.on('session_proposal', ((proposal: { id: number; params: { proposer?: { metadata?: { name?: string; url?: string } } } }) => {
+        kit.on('session_proposal', ((proposal: {
+          id: number;
+          params: { proposer?: { metadata?: { name?: string; url?: string } } };
+          verifyContext?: { verified?: { isScam?: boolean; origin?: string } };
+        }) => {
+          const proposerUrl = proposal.params.proposer?.metadata?.url ?? '';
+          const verdict = checkPhishing(proposal.verifyContext?.verified?.origin || proposerUrl);
+          if (verdict.blocked || proposal.verifyContext?.verified?.isScam) {
+            // Never connect the wallet to a blocked or WalletConnect-flagged scam site.
+            void kit
+              .rejectSession({ id: proposal.id, reason: { code: 5000, message: 'Blocked by BoreDefi phishing protection.' } })
+              .catch(() => undefined);
+            setError(`Blocked: ${verdict.reason ?? 'WalletConnect flagged this site as a scam.'} Your wallet was not connected.`);
+            return;
+          }
           setPendingProposal({
             id: proposal.id,
             name: proposal.params.proposer?.metadata?.name ?? 'dApp',
@@ -176,9 +191,12 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     if (!client) {
       throw new Error('Set EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID and rebuild to use WalletConnect.');
     }
+    if (!uri || !uri.trim()) {
+      throw new Error('Paste or scan a WalletConnect link first. It starts with wc:');
+    }
     const extracted = extractWalletConnectUri(uri);
     if (!extracted) {
-      throw new Error('That is not a WalletConnect URI.');
+      throw new Error("That isn't a WalletConnect link. Copy the wc: link from the dApp, or tap Scan QR.");
     }
     setError(null);
     await client.pair({ uri: extracted });
@@ -230,7 +248,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     setPendingProposal(null);
   }, [pendingProposal]);
 
-  const approveRequest = useCallback(async () => {
+  const approveRequest = useCallback(async (clearance?: string) => {
     const client = clientRef.current;
     if (!client || !pendingRequest) {
       return;
@@ -245,6 +263,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
         method: pendingRequest.method,
         params: pendingRequest.params,
         chainId: pendingRequest.chainId,
+        clearance,
       });
       if (result.kind === 'switch') {
         await setSelectedChain(result.chainId);
@@ -353,7 +372,7 @@ export function describeRequest(request: RequestInfo): string {
   if (request.method.startsWith('eth_sign') || request.method === 'personal_sign') {
     return `Sign a message for ${request.peerName} on ${CHAINS[request.chainId].name}.`;
   }
-  if (request.method === 'wallet_switchEthereumChain') {
+  if (request.method === 'wallet_switchEthereumChain' || request.method === 'wallet_addEthereumChain') {
     const next = parseChainId(
       typeof request.params[0] === 'object' && request.params[0]
         ? Number.parseInt(String((request.params[0] as { chainId?: string }).chainId ?? '0x0'), 16)

@@ -6,6 +6,7 @@ import { DEFAULT_APPEARANCE, normalizeAppearance, type AppearanceMode } from '..
 import { DEFAULT_AUTO_LOCK, normalizeAutoLock, type AutoLockMode } from './auto-lock';
 import { DEFAULT_CHAIN_ID, parseChainId, type ChainId } from './chains';
 import { type NftItem } from './nfts';
+import { normalizePolicy, pruneExpiredWindows, type ProtectedPolicy } from './protected-policy';
 import {
   dekToHex,
   hexToDek,
@@ -21,6 +22,8 @@ const DEK_KEY = 'boredefi.vault.dek';
 const NFT_REVEAL_KEY = 'boredefi.nft.revealed.v1';
 const NFT_HIDDEN_KEY = 'boredefi.nft.hidden.v1';
 const NFT_IMPORT_KEY = 'boredefi.nft.imported.v1';
+const NFT_LAST_GOOD_PREFIX = 'boredefi.nft.lastgood.v1.';
+const PROTECTED_POLICY_KEY = 'boredefi.protected.policy.v1';
 
 const secureOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -210,6 +213,14 @@ export async function saveImportedNfts(items: NftItem[]): Promise<void> {
   await writeItem(NFT_IMPORT_KEY, JSON.stringify(items));
 }
 
+export async function loadProtectedPolicy(): Promise<ProtectedPolicy> {
+  return pruneExpiredWindows(normalizePolicy(parseJson<unknown>(await readItem(PROTECTED_POLICY_KEY))));
+}
+
+export async function saveProtectedPolicy(policy: ProtectedPolicy): Promise<void> {
+  await writeItem(PROTECTED_POLICY_KEY, JSON.stringify(normalizePolicy(policy)));
+}
+
 export async function clearAllWalletData(): Promise<void> {
   await Promise.all([
     removeItem(VAULT_KEY),
@@ -219,6 +230,58 @@ export async function clearAllWalletData(): Promise<void> {
     removeItem(NFT_REVEAL_KEY),
     removeItem(NFT_HIDDEN_KEY),
     removeItem(NFT_IMPORT_KEY),
+    removeItem(PROTECTED_POLICY_KEY),
   ]);
   logger.info('Local wallet data cleared');
+}
+
+/** Last NFT list that loaded for one wallet + network; shown when the catalog is briefly unreachable. */
+function nftLastGoodKey(owner: string, chainId: number): string {
+  return `${NFT_LAST_GOOD_PREFIX}${chainId}.${owner.toLowerCase()}`;
+}
+
+export async function loadLastGoodNfts(owner: string, chainId: number): Promise<NftItem[] | null> {
+  try {
+    const stored = parseJson<NftItem[]>(await readItem(nftLastGoodKey(owner, chainId)));
+    return Array.isArray(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastGoodNfts(owner: string, chainId: number, items: NftItem[]): Promise<void> {
+  try {
+    await writeItem(nftLastGoodKey(owner, chainId), JSON.stringify(items));
+  } catch {
+    // Cache only; never block the NFT tab.
+  }
+}
+
+/** Addresses this wallet has sent to (and its own), for the address-poisoning guard. Small list, newest first. */
+const KNOWN_ADDR_PREFIX = 'boredefi.known.addresses.v1.';
+const KNOWN_ADDR_MAX = 25;
+/** 'evm' (case-insensitive hex) or a non-EVM chain family key (case-sensitive). */
+export type AddressBookKind = string;
+
+export async function loadKnownAddresses(kind: AddressBookKind): Promise<string[]> {
+  try {
+    const stored = parseJson<string[]>(await readItem(`${KNOWN_ADDR_PREFIX}${kind}`));
+    return Array.isArray(stored) ? stored.filter((a) => typeof a === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function rememberKnownAddresses(kind: AddressBookKind, addresses: (string | null | undefined)[]): Promise<void> {
+  try {
+    const current = await loadKnownAddresses(kind);
+    const norm = (a: string) => (kind === 'evm' ? a.toLowerCase() : a);
+    const merged: string[] = [];
+    for (const a of [...addresses, ...current]) {
+      if (a && !merged.some((m) => norm(m) === norm(a))) merged.push(a);
+    }
+    await writeItem(`${KNOWN_ADDR_PREFIX}${kind}`, JSON.stringify(merged.slice(0, KNOWN_ADDR_MAX)));
+  } catch {
+    // Guard data only; never block a send.
+  }
 }

@@ -5,6 +5,7 @@ import { isChainId } from './chains';
 import {
   caipAccount,
   extractWalletConnectUri,
+  isWalletConnectNavigation,
   getWalletConnectProjectId,
   hexToUtf8,
   parseCaipChainId,
@@ -43,7 +44,9 @@ test('builds CAIP identifiers and decodes hex messages', () => {
   assert.equal(hexToUtf8('0x68656c6c6f'), 'hello');
   assert.equal(pickSignMessage(['0x68656c6c6f', '0x9858EfFD232B4033E47d90003D41EC34EcaEda94']), '0x68656c6c6f');
   assert.equal(parseSwitchChainId([{ chainId: '0x2105' }]), 8453);
-  assert.equal(supportedCaipAccounts('0xabc').length, 7);
+  assert.equal(parseSwitchChainId([{ chainId: '0x8173' }]), 33139);
+  assert.equal(supportedCaipAccounts('0xabc').length, 8);
+  assert.ok(supportedCaipAccounts('0xabc').includes('eip155:33139:0xabc'));
 });
 
 test('defaults to the live public WalletConnect project ID', () => {
@@ -54,4 +57,25 @@ test('defaults to the live public WalletConnect project ID', () => {
     headers: { Origin: 'https://boredefi.money' },
   });
   assert.equal(relayWebSocketOptions('https://example.com'), undefined);
+});
+
+test('REGRESSION: WalletConnect links in every shape a page or QR can hand us', () => {
+  const uri =
+    'wc:7f6e504bfad60b485450578e05678ed3e8e8c4751d3c6160be17160d63ec90f9@2?relay-protocol=irn&symKey=587d5484ce2a2a6ee3ba1962fdd7e8588e06200c46823bd18fbd67def96ad303&expiryTimestamp=1793690000';
+  assert.equal(extractWalletConnectUri(uri), uri);
+  assert.equal(extractWalletConnectUri(`  ${uri}  `), uri);
+  assert.equal(extractWalletConnectUri(uri.replace(/^wc:/, 'WC:')), uri);
+  assert.equal(extractWalletConnectUri(encodeURIComponent(uri)), uri);
+  assert.equal(extractWalletConnectUri(`boredefi://wc?uri=${encodeURIComponent(uri)}`), uri);
+  assert.equal(extractWalletConnectUri(`boredefi://wc?uri=${encodeURIComponent(encodeURIComponent(uri))}`), uri);
+  // Unencoded value (its own & and = must survive).
+  assert.equal(extractWalletConnectUri(`boredefi://wc?uri=${uri}`), uri);
+  assert.equal(extractWalletConnectUri(`https://www.boredefi.com/wc?uri=${encodeURIComponent(uri)}`), uri);
+  // Empty / broken hand-offs never reach the pairing screen.
+  for (const bad of ['', '   ', 'wc:', 'boredefi://wc', 'boredefi://wc?uri=', 'boredefi://', 'https://www.boredefi.com/connect', undefined, null]) {
+    assert.equal(extractWalletConnectUri(bad as string), null, String(bad));
+  }
+  assert.equal(isWalletConnectNavigation('boredefi://wc?uri='), true);
+  assert.equal(isWalletConnectNavigation('wc:abc@2'), true);
+  assert.equal(isWalletConnectNavigation('https://app.uniswap.org'), false);
 });

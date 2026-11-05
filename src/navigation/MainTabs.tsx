@@ -43,7 +43,7 @@ export function MainTabs() {
       <Tab.Screen
         name="Markets"
         component={DiscoverScreen}
-        options={{ tabBarIcon: ({ color }) => <MarketsTabIcon color={color} /> }}
+        options={{ title: 'Markets · powered by BoreDash', tabBarLabel: 'Markets', tabBarIcon: ({ color }) => <MarketsTabIcon color={color} /> }}
       />
       <Tab.Screen
         name="Browser"

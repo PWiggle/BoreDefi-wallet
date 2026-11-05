@@ -9,8 +9,8 @@ import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import type { MainNavigation } from '../navigation';
 import {
-  COINGECKO_SITE,
-  coinGeckoUrl,
+  BOREDASH_SITE,
+  boreDashUrl,
   fetchMarketDetails,
   fetchTopMarkets,
   fetchTrendingCoins,
@@ -24,6 +24,7 @@ type Tab = 'all' | 'trending' | 'gainers';
 
 function discoverStyles({ colors, field, radius, spacing }: Theme) {
   return {
+    credit: { color: colors.muted, fontSize: 11, textAlign: 'center' as const, marginTop: spacing.sm },
     search: {
       ...field,
     },
@@ -82,12 +83,12 @@ export function DiscoverScreen() {
       const extra = extraIds.length > 0 ? await fetchMarketDetails(extraIds).catch(() => [] as MarketCoin[]) : [];
       setTrending(hydrateMarkets(nextTrending, [...nextMarkets, ...extra]));
       if (nextMarkets.length === 0) {
-        setError('CoinGecko returned no markets. Pull to refresh or tap Retry.');
+        setError('BoreDash markets are empty right now. Pull to refresh or tap Retry.');
       }
     } catch (err) {
       setMarkets([]);
       setTrending([]);
-      setError(err instanceof Error ? err.message : 'Could not load CoinGecko markets.');
+      setError('Could not load BoreDash markets. Pull to refresh or tap Retry.');
     } finally {
       setBusy(false);
     }
@@ -110,7 +111,7 @@ export function DiscoverScreen() {
       const details = await fetchMarketDetails(hits.map((item) => item.id));
       setResults(hydrateMarkets(hits, details));
       if (hits.length === 0) {
-        setError('No CoinGecko results for that search.');
+        setError('No BoreDash results for that search.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed.');
@@ -120,7 +121,7 @@ export function DiscoverScreen() {
   };
 
   const openCoin = (coin: MarketCoin) => {
-    navigation.navigate('Browser', { url: coinGeckoUrl(coin.id) });
+    navigation.navigate('Browser', { url: boreDashUrl(coin.id) });
   };
 
   const searching = Boolean(query.trim() && results.length > 0);
@@ -129,14 +130,14 @@ export function DiscoverScreen() {
   return (
     <Screen
       inset="tab"
-      title="Markets"
-      subtitle="CoinGecko inside BoreDefi. Live public data, no API key."
+      title="Markets · powered by BoreDash"
+      subtitle="BoreDash markets inside BoreDefi. Live public data."
       refreshing={busy}
       onRefresh={load}
     >
       <ErrorBanner message={error} />
       {error ? <Button label="Retry" onPress={load} loading={busy} /> : null}
-      <Button label="Open CoinGecko" onPress={() => navigation.navigate('Browser', { url: COINGECKO_SITE })} />
+      <Button label="Open BoreDash" onPress={() => navigation.navigate('Browser', { url: BOREDASH_SITE })} />
       <TextInput
         value={query}
         onChangeText={(value) => {
@@ -147,7 +148,7 @@ export function DiscoverScreen() {
         }}
         autoCapitalize="none"
         autoCorrect={false}
-        placeholder="Search CoinGecko"
+        placeholder="Search BoreDash"
         placeholderTextColor={colors.muted}
         style={styles.search}
         onSubmitEditing={runSearch}
@@ -177,6 +178,7 @@ export function DiscoverScreen() {
       {list.map((coin) => (
         <MarketRow key={`${searching ? 'search' : tab}-${coin.id}`} coin={coin} onPress={() => openCoin(coin)} />
       ))}
+      <Text style={styles.credit}>Data: BoreDash</Text>
     </Screen>
   );
 }

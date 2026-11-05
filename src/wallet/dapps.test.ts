@@ -7,6 +7,9 @@ import {
   DAPP_BOOKMARKS,
   DEFAULT_BROWSER_URL,
   normalizeDappUrl,
+  dappHost,
+  dappOrigin,
+  urlBarAfterNavigation,
   READ_RPC_METHODS,
   SIGNING_METHODS,
 } from './dapps';
@@ -26,16 +29,49 @@ test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(classifyBrowserMethod('eth_call'), 'read');
   assert.equal(classifyBrowserMethod('personal_sign'), 'sign');
   assert.equal(classifyBrowserMethod('wallet_switchEthereumChain'), 'switch');
+  assert.equal(classifyBrowserMethod('wallet_addEthereumChain'), 'switch');
   assert.equal(classifyBrowserMethod('wallet_revokePermissions'), 'disconnect');
   assert.equal(classifyBrowserMethod('foo'), 'unsupported');
   assert.equal(DEFAULT_BROWSER_URL, 'https://app.uniswap.org');
-  assert.equal(CONNECT_DEMO_URL, 'https://pwiggle.github.io/BoreDefi-wallet/connect/');
+  assert.equal(CONNECT_DEMO_URL, 'https://www.boredefi.com/connect');
+  // The first bookmark is the BoreDefi site; the connect check moved to Settings → Support.
+  assert.equal(DAPP_BOOKMARKS[0]?.name, 'BoreDefi');
+  assert.equal(DAPP_BOOKMARKS[0]?.url, 'https://www.boredefi.com');
+  assert.equal(DAPP_BOOKMARKS.some((item) => item.url === CONNECT_DEMO_URL || item.name === 'Connect'), false);
   assert.equal(
-    DAPP_BOOKMARKS.some((item) => item.name === 'Connect' && item.url === CONNECT_DEMO_URL),
+    DAPP_BOOKMARKS.some((item) => item.name === 'BoreDash' && item.url === 'https://www.boredash.com'),
     true,
   );
-  assert.equal(
-    DAPP_BOOKMARKS.some((item) => item.name === 'CoinGecko' && item.url === 'https://www.coingecko.com'),
-    true,
-  );
+});
+
+test('URL bar and prompt origin follow redirects to the page actually loaded', () => {
+  const typed = 'https://pwiggle.github.io/BoreDefi-wallet/connect/';
+  const loaded = 'https://www.boredefi.com/connect';
+  assert.equal(urlBarAfterNavigation(typed, loaded, false), loaded);
+  // Never overwrite what the user is typing.
+  assert.equal(urlBarAfterNavigation('app.unis', loaded, true), 'app.unis');
+  // Ignore non-web states such as about:blank during a redirect.
+  assert.equal(urlBarAfterNavigation(loaded, 'about:blank', false), loaded);
+  assert.equal(urlBarAfterNavigation(loaded, undefined, false), loaded);
+
+  assert.equal(dappOrigin(loaded), 'https://www.boredefi.com');
+  assert.equal(dappHost(loaded), 'www.boredefi.com');
+  assert.notEqual(dappOrigin(typed), dappOrigin(loaded));
+  assert.equal(dappOrigin('http://10.0.2.2:8765/?a=1'), 'http://10.0.2.2:8765');
+  assert.equal(dappHost('http://10.0.2.2:8765/'), '10.0.2.2:8765');
+  assert.equal(dappOrigin('wc:abc@2?relay-protocol=irn'), null);
+  assert.equal(dappOrigin('javascript:alert(1)'), null);
+  assert.equal(dappOrigin('not a url'), null);
+  // Look-alike hosts are different origins.
+  assert.notEqual(dappOrigin('https://www.boredefi.com.evil.io/connect'), dappOrigin(loaded));
+});
+
+test('Browser tab has a Mevvy tile for Solana swaps (1.0.6), on every platform', () => {
+  const mevvy = DAPP_BOOKMARKS.find((item) => item.name === 'Mevvy');
+  assert.deepEqual(mevvy, { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' });
+  assert.equal(normalizeDappUrl(mevvy!.url), 'https://mevvy.app');
+  // Uniswap and the other EVM tiles stay.
+  for (const name of ['BoreDefi', 'BoreDash', 'Uniswap', 'Aave', 'Lido', 'Jumper']) {
+    assert.ok(DAPP_BOOKMARKS.some((item) => item.name === name), name);
+  }
 });

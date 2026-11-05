@@ -1,3 +1,4 @@
+import { usePreventScreenCapture } from 'expo-screen-capture';
 import { useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 
@@ -23,6 +24,8 @@ export function ImportWalletScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(importStyles);
   const { importMnemonic, cancelOnboarding } = useWallet();
+  // Seed phrase is typed here: block screenshots / screen recording like the other seed screens.
+  usePreventScreenCapture();
   const [phrase, setPhrase] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -62,6 +65,7 @@ export function ImportWalletScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
+        spellCheck={false}
         importantForAutofill="no"
         editable={!importing}
         textAlignVertical="top"

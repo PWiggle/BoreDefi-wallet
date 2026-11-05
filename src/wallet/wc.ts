@@ -11,6 +11,7 @@ export const WALLETCONNECT_METHODS = [
   'eth_signTypedData_v3',
   'eth_signTypedData_v4',
   'wallet_switchEthereumChain',
+  'wallet_addEthereumChain',
   'wallet_getCapabilities',
   'wallet_revokePermissions',
 ] as const;
@@ -75,24 +76,67 @@ export function supportedCaipAccounts(address: string): string[] {
   return CHAIN_LIST.map((chain) => caipAccount(chain.id, address));
 }
 
-export function extractWalletConnectUri(raw: string): string | null {
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** A usable WalletConnect v2 pairing URI: wc:<topic>@2?...symKey=... */
+function normalizeWc(candidate: string): string | null {
+  let value = candidate.trim();
+  // Accept URL-encoded forms (wc%3A..., or a once-more-encoded copy) by decoding up to twice.
+  for (let i = 0; i < 2 && !/^wc:/i.test(value) && /%[0-9a-f]{2}/i.test(value); i += 1) {
+    value = safeDecode(value).trim();
+  }
+  if (!/^wc:/i.test(value)) {
+    return null;
+  }
+  value = `wc:${value.slice(3)}`;
+  if (!value.includes('@') && !value.includes('?')) {
+    return null;
+  }
+  if (/%[0-9a-f]{2}/i.test(value) && !/symKey=/i.test(value)) {
+    value = safeDecode(value);
+  }
+  const body = value.slice(3);
+  const topic = body.split(/[@?]/)[0];
+  if (!topic) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * Pull a pairing URI out of anything a user, QR, page or deep link might hand us:
+ * wc:..., WC:..., wc%3A..., boredefi://wc?uri=..., https://.../wc?uri=..., with or without
+ * encoding. Parses the query by hand (React Native's URL is incomplete for custom schemes).
+ */
+export function extractWalletConnectUri(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string') {
+    return null;
+  }
   const trimmed = raw.trim();
   if (!trimmed) {
     return null;
   }
-  if (trimmed.startsWith('wc:')) {
-    return trimmed;
+  const direct = normalizeWc(trimmed);
+  if (direct) {
+    return direct;
   }
-  try {
-    const url = new URL(trimmed);
-    const uri = url.searchParams.get('uri');
-    if (uri?.startsWith('wc:')) {
-      return decodeURIComponent(uri);
-    }
-  } catch {
+  const q = trimmed.indexOf('?');
+  if (q < 0) {
     return null;
   }
-  return null;
+  const query = trimmed.slice(q + 1).split('#')[0];
+  // uri= is normally the only/last param, and its value may itself contain unencoded & and =.
+  const match = /(?:^|&)uri=(.*)$/i.exec(query);
+  if (!match) {
+    return null;
+  }
+  return normalizeWc(match[1].replace(/\+/g, '%20'));
 }
 
 export function isWalletConnectUri(raw: string): boolean {
@@ -135,4 +179,10 @@ export function parseSwitchChainId(params: unknown[]): ChainId | null {
     return null;
   }
   return parseCaipChainId(chainId.startsWith('eip155:') ? chainId : `eip155:${chainId}`);
+}
+
+/** A WebView navigation that is a WalletConnect hand-off (wc:..., boredefi://wc...), valid or not. */
+export function isWalletConnectNavigation(url: string): boolean {
+  const value = (url || '').trim().toLowerCase();
+  return value.startsWith('wc:') || value.startsWith('wc%3a') || value.startsWith('boredefi://wc');
 }

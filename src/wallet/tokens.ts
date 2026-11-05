@@ -40,6 +40,8 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(1, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'USDC', 'USD Coin', 6),
     token(1, '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'USDT', 'Tether USD', 6),
     token(1, '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', 'stETH', 'Lido Staked ETH', 18),
+    // ApeCoin: Yuga-protected (see yuga-allowlist.ts); decimals verified on-chain.
+    token(1, '0x4d224452801ACEd8B2F0aebE155379bb5D594381', 'APE', 'ApeCoin', 18),
   ],
   8453: [
     native(8453),
@@ -52,6 +54,7 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(42161, '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', 'WETH', 'Wrapped Ether', 18),
     token(42161, '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', 'USDC', 'USD Coin', 6),
     token(42161, '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', 'USDT', 'Tether USD', 6),
+    token(42161, '0x7f9FBf9bDd3F4105C478b996B648FE6e828a1e98', 'APE', 'ApeCoin', 18),
   ],
   10: [
     native(10),
@@ -61,6 +64,7 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
   ],
   137: [
     native(137),
+    token(137, '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', 'WPOL', 'Wrapped POL', 18),
     token(137, '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', 'WETH', 'Wrapped Ether', 18),
     token(137, '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', 'USDC', 'USD Coin', 6),
     token(137, '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 'USDT', 'Tether USD', 6),
@@ -70,12 +74,23 @@ export const TOKENS: Record<ChainId, TokenConfig[]> = {
     token(56, '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', 'WBNB', 'Wrapped BNB', 18),
     token(56, '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', 'USDC', 'USD Coin', 18),
     token(56, '0x55d398326f99059fF775485246999027B3197955', 'USDT', 'Tether USD', 18),
+    token(56, '0x8f86a15EC17cb3369d8b3E666dAdBC11daA82b79', 'APE', 'ApeCoin', 18),
   ],
   43114: [
     native(43114),
     token(43114, '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', 'WAVAX', 'Wrapped AVAX', 18),
     token(43114, '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', 'USDC', 'USD Coin', 6),
     token(43114, '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', 'USDT', 'Tether USD', 6),
+  ],
+  // ApeChain: name()/symbol()/decimals() read on-chain 2026-11-03. WAPE is named in docs.apechain.com;
+  // WETH and USDT are the addresses in LI.FI's ApeChain token list. ApeUSD is ApeChain's native yield
+  // stablecoin (not in LI.FI's list, so it cannot be swapped in-app). ApeETH is left out: no free price feed.
+  33139: [
+    native(33139),
+    token(33139, '0x48b62137EdfA95a428D35C09E44256a739F6B557', 'WAPE', 'Wrapped ApeCoin', 18),
+    token(33139, '0xA2235d059F80e176D931Ef76b6C51953Eb3fBEf4', 'ApeUSD', 'Ape USD', 18),
+    token(33139, '0xf4D9235269a96aaDaFc9aDAe454a0618eBE37949', 'WETH', 'Wrapped Ether', 18),
+    token(33139, '0x674843C06FF83502ddb4D37c2E09C01cdA38cbc8', 'USDT', 'Bridged stgUSDT', 6),
   ],
 };
 

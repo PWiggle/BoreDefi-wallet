@@ -214,12 +214,22 @@ async function handleProvider(payload) {
   if (method === 'eth_sendTransaction') {
     const tx = params[0] ?? {};
     const signer = wallet().connect(provider(chainId));
-    const response = await signer.sendTransaction({
-      to: tx.to,
-      data: tx.data,
-      value: tx.value ? BigInt(tx.value) : 0n,
-      gasLimit: tx.gas ? BigInt(tx.gas) : undefined,
-    });
+    const request = { to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : 0n };
+    const provided = tx.gas ? BigInt(tx.gas) : tx.gasLimit ? BigInt(tx.gasLimit) : null;
+    let gasLimit = provided ?? undefined;
+    try {
+      // Same rule as src/wallet/gas-limit.ts: +30%, at least +25,000, never below the dApp's own gas.
+      const estimate = await signer.estimateGas(request);
+      const scaled = (estimate * 130n + 99n) / 100n;
+      const floor = estimate + 25000n;
+      const buffered = estimate === 21000n ? estimate : scaled > floor ? scaled : floor;
+      gasLimit = provided && provided > buffered ? provided : buffered;
+    } catch (error) {
+      if (!provided) {
+        throw error;
+      }
+    }
+    const response = await signer.sendTransaction({ ...request, gasLimit });
     return response.hash;
   }
   if (method === 'wallet_getCapabilities') {

@@ -8,9 +8,10 @@ import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
-import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
 import { parsePaymentUri } from '../wallet/qr';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
+import { parseSolanaPaymentUri } from '../wallet/solana/qr';
 import { extractWalletConnectUri } from '../wallet/wc';
 
 function scanStyles({ colors }: Theme) {
@@ -34,7 +35,6 @@ export function ScanQrScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'ScanQr'>>();
   const purpose = route.params?.purpose ?? 'payment';
-  const { pair } = useWalletConnect();
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -70,13 +70,9 @@ export function ScanQrScreen() {
             const wcUri = extractWalletConnectUri(data);
             if (wcUri && purpose !== 'payment') {
               setDone(true);
-              try {
-                await pair(wcUri);
-                navigation.navigate('WalletConnect', { uri: wcUri });
-              } catch (err) {
-                setDone(false);
-                setError(err instanceof Error ? err.message : 'Could not pair.');
-              }
+              // The WalletConnect screen pairs this URI once (it de-duplicates); pairing here too
+              // made the second attempt fail.
+              navigation.navigate('WalletConnect', { uri: wcUri });
               return;
             }
             if (wcUri) {
@@ -86,6 +82,16 @@ export function ScanQrScreen() {
             }
             if (purpose === 'walletconnect') {
               setError('That QR is not a WalletConnect URI.');
+              return;
+            }
+            if (SOLANA_ENABLED && (purpose === 'solana' || (purpose === 'payment' && /^solana:/i.test(data.trim())))) {
+              try {
+                const solana = parseSolanaPaymentUri(data);
+                setDone(true);
+                navigation.navigate('SolanaSend', { to: solana.address, amount: solana.amount, mint: solana.splToken });
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Could not read that QR code.');
+              }
               return;
             }
             try {
@@ -105,7 +111,9 @@ export function ScanQrScreen() {
       <Text style={styles.hint}>
         {purpose === 'walletconnect'
           ? 'Point the camera at a WalletConnect QR from a dApp.'
-          : purpose === 'nft'
+          : purpose === 'solana'
+            ? 'Point the camera at a Solana address or Solana Pay QR.'
+            : purpose === 'nft'
             ? 'Point the camera at a recipient address or payment QR for this NFT send.'
             : 'Point the camera at an address, payment, or WalletConnect QR.'}
       </Text>

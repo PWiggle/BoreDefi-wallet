@@ -1,5 +1,7 @@
 import { getAddress, Interface, isAddress, MaxUint256 } from 'ethers';
 
+import { isProtectedNft, protectedAssetFor } from './yuga-allowlist';
+
 const APPROVAL_IFACE = new Interface([
   'function setApprovalForAll(address operator, bool approved)',
   'function approve(address spender, uint256 amountOrId)',
@@ -39,6 +41,22 @@ function isUnlimited(value: bigint): boolean {
   return value >= UNLIMITED_FLOOR || value === MaxUint256;
 }
 
+export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+const PERMIT2_TYPES = new Set(['permitsingle', 'permitbatch', 'permittransferfrom', 'permitbatchtransferfrom', 'permitwitnesstransferfrom']);
+
+export function isPermit2(verifyingContract: string | null | undefined, primaryType: string | null | undefined): boolean {
+  return (verifyingContract ? verifyingContract.toLowerCase() === PERMIT2_ADDRESS.toLowerCase() : false) || PERMIT2_TYPES.has((primaryType ?? '').toLowerCase());
+}
+
+function protectedCollectionName(token: string | null): string | null {
+  if (!token) return null;
+  for (const chainId of [1, 33139, 8453, 137, 42161, 10, 56]) {
+    const asset = protectedAssetFor(chainId, token);
+    if (asset && isProtectedNft(asset)) return asset.name;
+  }
+  return null;
+}
+
 function extraOperatorWarning(operator: string | null, expected?: string | null): string | null {
   if (!operator) {
     return 'Operator address could not be decoded. Prefer Reject.';
@@ -71,6 +89,7 @@ export function decodeApprovalCalldata(to: string | undefined, data: string | un
     if (parsed.name === 'setApprovalForAll') {
       const operator = asChecksum(parsed.args[0]);
       const approved = Boolean(parsed.args[1]);
+      const protectedName = protectedCollectionName(token);
       return {
         kind: 'setApprovalForAll',
         danger: approved,
@@ -78,10 +97,15 @@ export function decodeApprovalCalldata(to: string | undefined, data: string | un
         token,
         unlimited: approved,
         summary: approved
-          ? 'This site is asking to take ALL NFTs in this collection.'
+          ? protectedName
+            ? `PROTECTED COLLECTION: this site is asking to take ALL your ${protectedName} NFTs.`
+            : 'This site is asking to take ALL NFTs in this collection.'
           : 'This revokes an operator for the whole collection.',
         warnings: approved
           ? [
+              ...(protectedName
+                ? [`${protectedName} is a protected collection. Marketplaces you trust rarely need this; scammers always ask for it. Reject unless you started a listing on the official site.`]
+                : []),
               DRAIN_APPROVAL_WARNING,
               ...(extraOperatorWarning(operator) ? [extraOperatorWarning(operator)!] : []),
             ]
@@ -172,14 +196,19 @@ export function decodeTypedApproval(payload: unknown): ApprovalRisk | null {
     if (!operator && !unlimited) {
       return null;
     }
+    const permit2 = isPermit2(token, data.primaryType);
     return {
       kind: 'permit',
       danger: true,
       operator,
       token,
       unlimited: unlimited || primary.includes('permit'),
-      summary: 'Typed-data approval. This can let a contract spend NFTs or tokens.',
+      summary: permit2
+        ? 'Permit2 signature: lets a contract move your tokens with no further approval. A common drainer trick.'
+        : 'Typed-data approval. This can let a contract spend NFTs or tokens.',
       warnings: [
+        ...(permit2 ? ['Permit2: one signature can hand over several tokens at once. Only sign on a swap you started on the official site.'] : []),
+        ...(unlimited ? ['Unlimited amount.'] : []),
         DRAIN_APPROVAL_WARNING,
         ...(extraOperatorWarning(operator) ? [extraOperatorWarning(operator)!] : []),
       ],

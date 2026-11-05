@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { checksumAddress } from '../wallet/address-safety';
+import type { TxPreview } from '../wallet/tx-simulate';
 import { Button } from './Button';
+import { TxPreviewCard } from './TxPreviewCard';
 import { WarningBanner } from './WarningBanner';
 
 export type ConfirmRow = {
@@ -19,7 +21,12 @@ type Props = {
   to?: string;
   amount?: string;
   fee?: string;
+  /** Small grey line under the fee (e.g. the gas limit). */
+  feeDetail?: string;
   extra?: ConfirmRow[];
+  /** Transaction preview ("What will happen"). */
+  preview?: TxPreview | null;
+  previewLoading?: boolean;
   warnings?: string[];
   loading?: boolean;
   mode?: 'hold' | 'buttons';
@@ -37,8 +44,15 @@ function confirmStyles({ colors, radius, spacing, type }: Theme) {
     backdrop: {
       backgroundColor: colors.overlay,
       flex: 1,
+    },
+    scroll: {
+      flexGrow: 1,
       justifyContent: 'center' as const,
       padding: spacing.lg,
+    },
+    detail: {
+      ...type.meta,
+      fontSize: 12,
     },
     card: {
       backgroundColor: colors.surface,
@@ -118,7 +132,10 @@ export function ConfirmSheet({
   to,
   amount,
   fee,
+  feeDetail,
   extra = [],
+  preview,
+  previewLoading,
   warnings = [],
   loading,
   mode = 'hold',
@@ -172,23 +189,34 @@ export function ConfirmSheet({
     ...(from ? [{ label: 'From', value: displayAddress(from) ?? from }] : []),
     ...(to ? [{ label: 'To', value: displayAddress(to) ?? to }] : []),
     ...(amount ? [{ label: 'Amount', value: amount }] : []),
-    ...(fee ? [{ label: 'Estimated fee', value: fee }] : []),
-    ...extra,
   ];
+  const renderRow = (row: ConfirmRow) => (
+    <View key={`${row.label}-${row.value}`} style={styles.row}>
+      <Text style={styles.label}>{row.label}</Text>
+      <Text selectable style={styles.value}>
+        {row.value}
+      </Text>
+    </View>
+  );
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
       <View style={styles.backdrop}>
+        <ScrollView contentContainerStyle={styles.scroll}>
         <View style={[styles.card, danger && styles.cardDanger]}>
           <Text style={[styles.title, danger && styles.titleDanger]}>{title}</Text>
-          {rows.map((row) => (
-            <View key={`${row.label}-${row.value}`} style={styles.row}>
-              <Text style={styles.label}>{row.label}</Text>
+          {rows.map(renderRow)}
+          {fee ? (
+            <View style={styles.row}>
+              <Text style={styles.label}>Estimated network fee</Text>
               <Text selectable style={styles.value}>
-                {row.value}
+                {fee}
               </Text>
+              {feeDetail ? <Text style={styles.detail}>{feeDetail}</Text> : null}
             </View>
-          ))}
+          ) : null}
+          {extra.map(renderRow)}
+          {preview || previewLoading ? <TxPreviewCard preview={preview ?? null} loading={previewLoading} /> : null}
           <WarningBanner
             danger={danger}
             title={danger ? 'Do not approve unless you started this' : undefined}
@@ -211,7 +239,7 @@ export function ConfirmSheet({
                   ]}
                 />
                 <Text style={[styles.holdLabel, danger && styles.holdLabelDanger]}>
-                  {loading ? 'Submitting…' : confirmLabel}
+                  {previewLoading ? 'Checking…' : loading ? 'Submitting…' : confirmLabel}
                 </Text>
               </Pressable>
               {danger ? null : <Button label={rejectLabel} variant="ghost" onPress={onCancel} />}
@@ -223,6 +251,7 @@ export function ConfirmSheet({
             </>
           )}
         </View>
+        </ScrollView>
       </View>
     </Modal>
   );

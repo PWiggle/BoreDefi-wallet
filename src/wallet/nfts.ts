@@ -1,7 +1,9 @@
 import { Contract, getAddress, isAddress, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
+import { ALCHEMY_NETWORK, alchemyEnabledFor, fetchAlchemyNfts, getAlchemyKey } from './alchemy';
 import { CHAINS, type ChainId } from './chains';
+import { sendContractMethod } from './gas-limit';
 import { connectedWallet, getProvider } from './rpc';
 
 const ERC721_ABI = [
@@ -24,6 +26,13 @@ export type NftItem = {
   name: string;
   collection: string;
   imageUrl?: string;
+  /** The token's own image URI from metadata (ipfs://…), before any CDN cache. Used for protected collections. */
+  imageOriginal?: string;
+  /**
+   * tokenURI the indexer reported (ipfs://…/4632.json). Protected collections whose indexer image is only a CDN copy
+   * (Alchemy gives i2c.seadn.io / nft-cdn for Lil Mutants, with no raw metadata) resolve their IPFS image from it.
+   */
+  tokenUri?: string;
 };
 
 type BlockscoutNft = {
@@ -100,30 +109,104 @@ export function parseBlockscoutNfts(items: BlockscoutNft[], chainId: ChainId): N
       name: item.metadata?.name ?? `#${tokenId}`,
       collection: item.token?.name ?? 'NFT',
       imageUrl: item.image_url ?? item.metadata?.image,
+      ...((item.metadata?.image ?? item.image_url) ? { imageOriginal: item.metadata?.image ?? item.image_url } : {}),
     });
   }
   return parsed;
 }
 
-export async function fetchNfts(owner: string, chainId: ChainId): Promise<NftItem[]> {
+/**
+ * Autodetect outcome for one network.
+ * - `ok`: the catalog answered. An empty list (or a 404 for an address it has never seen)
+ *   just means the wallet holds no NFTs there.
+ * - `unavailable`: the catalog could not be reached or refused the request (for example the
+ *   Cloudflare 403 challenge Blockscout now serves to app clients on Base, Polygon and Arbitrum,
+ *   402 Pro API, 429, 5xx, a timeout or a non-JSON body). We cannot say the wallet is empty, but
+ *   this is not a wallet error either, so the screen shows a quiet note instead of a red banner.
+ */
+export type NftAutodetect = 'ok' | 'unavailable';
+
+export type NftFetchResult = { items: NftItem[]; autodetect: NftAutodetect };
+
+export const NFT_FETCH_TIMEOUT_MS = 15_000;
+
+export function classifyNftHttpStatus(status: number): 'json' | 'empty' | 'unavailable' {
+  if (status >= 200 && status < 300) {
+    return 'json';
+  }
+  if (status === 404) {
+    return 'empty';
+  }
+  return 'unavailable';
+}
+
+type FetchLike = (input: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+}>;
+
+export async function fetchNfts(
+  owner: string,
+  chainId: ChainId,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+  timeoutMs: number = NFT_FETCH_TIMEOUT_MS,
+  alchemyKey: string | null = getAlchemyKey(),
+): Promise<NftFetchResult> {
+  if (alchemyKey && alchemyEnabledFor(chainId, alchemyKey)) {
+    const viaAlchemy = await fetchAlchemyNfts(owner, chainId, alchemyKey, fetchImpl, timeoutMs);
+    if (viaAlchemy.autodetect === 'ok') {
+      return viaAlchemy;
+    }
+    // Fall through to Blockscout.
+  }
+  const viaBlockscout = await fetchBlockscoutNfts(owner, chainId, fetchImpl, timeoutMs);
+  if (viaBlockscout.autodetect === 'ok' || !alchemyKey || alchemyEnabledFor(chainId, alchemyKey) || !ALCHEMY_NETWORK[chainId]) {
+    return viaBlockscout;
+  }
+  // Blockscout unreachable on a Blockscout-first chain (Ethereum): try Alchemy as a backup before giving up.
+  return fetchAlchemyNfts(owner, chainId, alchemyKey, fetchImpl, timeoutMs);
+}
+
+export async function fetchBlockscoutNfts(
+  owner: string,
+  chainId: ChainId,
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+  timeoutMs: number = NFT_FETCH_TIMEOUT_MS,
+): Promise<NftFetchResult> {
   const base = CHAINS[chainId].nftApi;
   if (!base) {
-    return [];
+    return { items: [], autodetect: 'ok' };
   }
   const url = `${base}/addresses/${owner}/nft?type=ERC-721,ERC-1155`;
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const response = await fetchImpl(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller?.signal,
+    });
+    const kind = classifyNftHttpStatus(response.status);
+    if (kind === 'empty') {
+      return { items: [], autodetect: 'ok' };
     }
-    const body = (await response.json()) as { items?: BlockscoutNft[] };
-    return parseBlockscoutNfts(body.items ?? [], chainId);
+    if (kind === 'unavailable') {
+      logger.warn('NFT autodetect unavailable', { chainId, status: response.status });
+      return { items: [], autodetect: 'unavailable' };
+    }
+    const body = (await response.json()) as { items?: unknown } | null;
+    const items = Array.isArray(body?.items) ? (body.items as BlockscoutNft[]) : [];
+    return { items: parseBlockscoutNfts(items, chainId), autodetect: 'ok' };
   } catch (error) {
-    logger.error('NFT list failed', {
+    logger.warn('NFT autodetect unavailable', {
       chainId,
       message: error instanceof Error ? error.message : 'unknown',
     });
-    throw new Error('Could not load NFTs for this network.');
+    return { items: [], autodetect: 'unavailable' };
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -149,6 +232,9 @@ export async function verifyNftOwnership(
   }
 }
 
+/** Used only when eth_estimateGas is unreachable (RPC down); safeTransferFrom is typically 50k-120k. */
+export const NFT_SEND_FALLBACK_GAS = 200_000n;
+
 export async function sendNft(input: {
   mnemonic: string;
   owner: string;
@@ -166,14 +252,30 @@ export async function sendNft(input: {
   });
   if (input.item.standard === 'ERC-721') {
     const nft = new Contract(input.item.contract, ERC721_ABI, wallet);
-    return nft.safeTransferFrom(input.owner, to, BigInt(input.item.tokenId)) as Promise<TransactionResponse>;
+    return sendContractMethod(nft, 'safeTransferFrom', [input.owner, to, BigInt(input.item.tokenId)], {
+      fallback: NFT_SEND_FALLBACK_GAS,
+    });
   }
   const nft = new Contract(input.item.contract, ERC1155_ABI, wallet);
-  return nft.safeTransferFrom(
-    input.owner,
-    to,
-    BigInt(input.item.tokenId),
-    input.amount ?? 1n,
-    '0x',
-  ) as Promise<TransactionResponse>;
+  return sendContractMethod(
+    nft,
+    'safeTransferFrom',
+    [input.owner, to, BigInt(input.item.tokenId), input.amount ?? 1n, '0x'],
+    { fallback: NFT_SEND_FALLBACK_GAS },
+  );
+}
+
+/** One-line status under the NFT chain picker: Alchemy first where it is enabled, Blockscout otherwise. */
+export function nftAutodetectLabel(
+  chainId: ChainId,
+  chainName: string,
+  alchemyKey: string | null = getAlchemyKey(),
+): string {
+  if (alchemyEnabledFor(chainId, alchemyKey)) {
+    return 'Autodetect is on. Pull down or tap Refresh after you receive.';
+  }
+  if (CHAINS[chainId].nftApi) {
+    return 'Autodetect is on · public Blockscout catalog. Pull down or tap Refresh after you receive.';
+  }
+  return `No public catalog on ${chainName} · import a collectible you own`;
 }

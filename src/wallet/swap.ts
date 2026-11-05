@@ -1,8 +1,12 @@
 import { Contract, Interface, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
+import { friendlyTxError, toUserError, UserFacingError } from './tx-errors';
+import { isWrapPair, isWrapperRoute, sameTokenAddress } from './swap-guard';
 import { type ChainId } from './chains';
-import { connectedWallet, getProvider } from './rpc';
+import { sendContractMethod, sendWithBufferedGas } from './gas-limit';
+import { GAS_UNITS } from './preflight';
+import { connectedWallet, getProvider, readWithFallback, retryRead } from './rpc';
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
 
 const QUOTE_URL = 'https://li.quest/v1/quote';
@@ -12,9 +16,18 @@ const ERC20_ABI = [
   'function balanceOf(address owner) view returns (uint256)',
 ];
 
+export type QuoteToken = { address: string; decimals: number; symbol: string };
+
+export const NO_ROUTE_MESSAGE = 'No route available';
+
 export type SwapQuote = {
   tool: string;
   toolName: string;
+  /** Tokens the aggregator actually quoted. Always checked against the user's selection. */
+  fromToken: QuoteToken;
+  toToken: QuoteToken;
+  fromAmountUsd: number | null;
+  toAmountUsd: number | null;
   fromAmount: bigint;
   toAmount: bigint;
   toAmountMin: bigint;
@@ -34,11 +47,15 @@ type LiFiQuote = {
     fromChainId?: number;
     toChainId?: number;
     fromAmount?: string;
+    fromToken?: { address?: string; decimals?: number; symbol?: string };
+    toToken?: { address?: string; decimals?: number; symbol?: string };
   };
   estimate?: {
     toAmount?: string;
     toAmountMin?: string;
     approvalAddress?: string;
+    fromAmountUSD?: string;
+    toAmountUSD?: string;
   };
   includedSteps?: Array<{ type?: string; tool?: string }>;
   transactionRequest?: {
@@ -50,6 +67,20 @@ type LiFiQuote = {
   message?: string;
 };
 
+/** LI.FI answers 404 "No available quotes" when nothing routes; 429/5xx are temporary. */
+export function liFiFailureMessage(status: number, message: string | undefined): string {
+  if (status === 429 || status >= 500) {
+    return 'The swap service is busy. Try again in a moment.';
+  }
+  if (status === 404 || /no available quotes|no route|not found/i.test(message ?? '')) {
+    return NO_ROUTE_MESSAGE;
+  }
+  if (/too low|minimum|amount/i.test(message ?? '') && (message ?? '').length < 120) {
+    return 'Amount is too small for any route. Try a larger amount.';
+  }
+  return NO_ROUTE_MESSAGE;
+}
+
 export function isSameChainSwap(fromChainId: number, toChainId: number): boolean {
   return fromChainId === toChainId;
 }
@@ -58,10 +89,32 @@ export function quoteContainsBridge(steps: Array<{ type?: string; tool?: string 
   return (steps ?? []).some((step) => step.type === 'cross' || step.tool === 'hop' || step.type === 'bridge');
 }
 
+function quoteToken(
+  raw: { address?: string; decimals?: number; symbol?: string } | undefined,
+  expected: TokenConfig | undefined,
+): QuoteToken {
+  if (!expected) {
+    return { address: raw?.address ?? '', decimals: raw?.decimals ?? 18, symbol: raw?.symbol ?? '' };
+  }
+  if (!raw?.address || !sameTokenAddress(raw.address, expected.address)) {
+    throw new UserFacingError('The quote was for a different token. Get a new quote.');
+  }
+  if (raw.decimals !== undefined && raw.decimals !== expected.decimals) {
+    throw new UserFacingError('The quote used the wrong token decimals. Get a new quote.');
+  }
+  return { address: expected.address, decimals: expected.decimals, symbol: expected.symbol };
+}
+
+function usd(value: string | undefined): number | null {
+  const parsed = value === undefined ? NaN : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function parseLiFiQuote(
   payload: LiFiQuote,
   expectedFromChainId: ChainId,
   expectedToChainId: ChainId = expectedFromChainId,
+  expectedTokens?: { from: TokenConfig; to: TokenConfig },
 ): SwapQuote {
   const fromChainId = payload.action?.fromChainId;
   const toChainId = payload.action?.toChainId;
@@ -86,9 +139,26 @@ export function parseLiFiQuote(
   if (!request?.to || !request.data) {
     throw new Error('Quote did not include a transaction to sign.');
   }
+  const fromToken = quoteToken(payload.action?.fromToken, expectedTokens?.from);
+  const toToken = quoteToken(payload.action?.toToken, expectedTokens?.to);
+  if (
+    isWrapperRoute(payload.tool, payload.includedSteps) &&
+    (expectedFromChainId !== expectedToChainId ||
+      !expectedTokens ||
+      !isWrapPair(expectedFromChainId, expectedTokens.from, expectedTokens.to))
+  ) {
+    throw new UserFacingError(NO_ROUTE_MESSAGE);
+  }
+  if (BigInt(payload.estimate?.toAmount ?? '0') <= 0n) {
+    throw new UserFacingError(NO_ROUTE_MESSAGE);
+  }
   return {
     tool: payload.tool ?? 'aggregator',
     toolName: payload.toolDetails?.name ?? payload.tool ?? 'Best route',
+    fromToken,
+    toToken,
+    fromAmountUsd: usd(payload.estimate?.fromAmountUSD),
+    toAmountUsd: usd(payload.estimate?.toAmountUSD),
     fromAmount: BigInt(payload.action?.fromAmount ?? '0'),
     toAmount: BigInt(payload.estimate?.toAmount ?? '0'),
     toAmountMin: BigInt(payload.estimate?.toAmountMin ?? '0'),
@@ -129,21 +199,85 @@ export async function fetchSwapQuote(input: {
   url.searchParams.set('integrator', 'boredefi');
 
   try {
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
-    });
+    const response = await fetchQuoteResponse(() =>
+      fetch(url.toString(), {
+        headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
+      }),
+    );
     const payload = (await response.json()) as LiFiQuote;
     if (!response.ok) {
-      throw new Error(payload.message || 'Could not get a swap quote.');
+      throw new UserFacingError(liFiFailureMessage(response.status, payload.message));
     }
-    return parseLiFiQuote(payload, input.chainId, input.chainId);
+    return parseLiFiQuote(payload, input.chainId, input.chainId, { from: input.fromToken, to: input.toToken });
   } catch (error) {
-    logger.error('Swap quote failed', {
+    throw toUserError('Swap quote failed', error, {
       chainId: input.chainId,
-      message: error instanceof Error ? error.message : 'unknown',
+      fallback: NO_ROUTE_MESSAGE,
+      step: SWAP_STEPS.quote,
     });
-    throw error instanceof Error ? error : new Error('Could not get a swap quote.');
   }
+}
+
+/** Step names shown in Swap errors ("Network problem while …"). */
+export const SWAP_STEPS = {
+  quote: 'getting a swap quote from LI.FI',
+  bridgeQuote: 'getting a bridge quote from LI.FI',
+  balance: (symbol: string) => `loading your ${symbol} balance`,
+  prices: 'checking the market price',
+} as const;
+
+/**
+ * LI.FI quote request with retries (soak test 2026-11-02: about 4% of anonymous quotes got a transient 429/5xx
+ * "busy" answer that succeeds a moment later). Retries a dropped connection and a 429/5xx, with a short growing
+ * pause; any other status is returned at once. The last answer (or error) is returned for the caller to map.
+ */
+export async function fetchQuoteResponse<R extends { status: number }>(
+  run: () => Promise<R>,
+  options: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<R> {
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const delayMs = options.delayMs ?? 800;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; ; attempt += 1) {
+    const last = attempt >= attempts - 1;
+    try {
+      const response = await run();
+      if (!last && (response.status === 429 || response.status >= 500)) {
+        await sleep(delayMs * (attempt + 1));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (last) {
+        throw error;
+      }
+      await sleep(delayMs * (attempt + 1));
+    }
+  }
+}
+
+/**
+ * One retry for a request that never got an HTTP answer (dropped cellular connection, "Network request failed").
+ * HTTP error statuses are returned as-is; the caller maps them.
+ */
+export async function fetchWithRetry<R>(
+  run: () => Promise<R>,
+  options: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<R> {
+  const attempts = Math.max(1, options.attempts ?? 2);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await sleep(options.delayMs ?? 800);
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function fetchTokenBalance(
@@ -151,11 +285,42 @@ export async function fetchTokenBalance(
   token: TokenConfig,
   chainId: ChainId,
 ): Promise<bigint> {
+  // readWithFallback: one failing public RPC must not fail the read (see rpc.ts).
   if (token.native || isNativeTokenAddress(token.address)) {
-    return getProvider(chainId).getBalance(owner);
+    return readWithFallback(chainId, (provider) => provider.getBalance(owner));
   }
-  const contract = new Contract(token.address, ERC20_ABI, getProvider(chainId));
-  return contract.balanceOf(owner) as Promise<bigint>;
+  return readWithFallback(
+    chainId,
+    (provider) => new Contract(token.address, ERC20_ABI, provider).balanceOf(owner) as Promise<bigint>,
+  );
+}
+
+export type SpendBalanceLoad = { balance: bigint; error: null } | { balance: null; error: string };
+
+/**
+ * Balance of the token a Swap or Bridge would spend, for the screen: retried once, and on failure a message that
+ * names the step ("Network problem while loading your USDC balance…"). The screen shows "…" and blocks the
+ * pre-flight while balance is null, and a later successful load clears the error.
+ */
+export async function loadSpendBalance(
+  owner: string,
+  token: TokenConfig,
+  chainId: ChainId,
+  options: { read?: typeof fetchTokenBalance; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<SpendBalanceLoad> {
+  const read = options.read ?? fetchTokenBalance;
+  try {
+    return { balance: await retryRead(() => read(owner, token, chainId), { sleep: options.sleep }), error: null };
+  } catch (error) {
+    return {
+      balance: null,
+      error: friendlyTxError(error, {
+        chainId,
+        step: SWAP_STEPS.balance(token.symbol),
+        fallback: `Could not load your ${token.symbol} balance. Try again in a moment.`,
+      }),
+    };
+  }
 }
 
 export type ExternalTxSender = (tx: {
@@ -178,28 +343,43 @@ export async function ensureSpendAllowance(input: {
   if (input.token.native || isNativeTokenAddress(input.token.address)) {
     return null;
   }
-  const reader = new Contract(input.token.address, ERC20_ABI, getProvider(input.chainId));
-  const allowance = (await reader.allowance(input.owner, input.spender)) as bigint;
-  if (allowance >= input.amount) {
-    return null;
-  }
-  logger.info('Submitting token approval', { chainId: input.chainId, spender: input.spender });
-  if (input.sendTx) {
-    const data = new Interface(ERC20_ABI).encodeFunctionData('approve', [input.spender, input.amount]);
-    const hash = await input.sendTx({
-      to: input.token.address,
-      data,
-      value: 0n,
-      chainId: input.chainId,
+  try {
+    const reader = new Contract(input.token.address, ERC20_ABI, getProvider(input.chainId));
+    const allowance = (await reader.allowance(input.owner, input.spender)) as bigint;
+    if (allowance >= input.amount) {
+      return null;
+    }
+    logger.info('Submitting token approval', { chainId: input.chainId, spender: input.spender });
+    if (input.sendTx) {
+      const data = new Interface(ERC20_ABI).encodeFunctionData('approve', [input.spender, input.amount]);
+      const hash = await input.sendTx({
+        to: input.token.address,
+        data,
+        value: 0n,
+        chainId: input.chainId,
+      });
+      const receipt = await getProvider(input.chainId).waitForTransaction(hash);
+      if (receipt && receipt.status === 0) {
+        throw new Error('Token approval reverted on-chain.');
+      }
+      return null;
+    }
+    const wallet = await connectedWallet(input.mnemonic, input.chainId);
+    const contract = new Contract(input.token.address, ERC20_ABI, wallet);
+    const tx = await sendContractMethod(contract, 'approve', [input.spender, input.amount], {
+      fallback: GAS_UNITS.erc20Approve,
     });
-    await getProvider(input.chainId).waitForTransaction(hash);
-    return null;
+    const receipt = await tx.wait();
+    if (receipt && receipt.status === 0) {
+      throw new Error('Token approval reverted on-chain.');
+    }
+    return tx;
+  } catch (error) {
+    throw toUserError('Token approval failed', error, {
+      chainId: input.chainId,
+      fallback: 'Token approval failed. Nothing was swapped.',
+    });
   }
-  const wallet = await connectedWallet(input.mnemonic, input.chainId);
-  const contract = new Contract(input.token.address, ERC20_ABI, wallet);
-  const tx = (await contract.approve(input.spender, input.amount)) as TransactionResponse;
-  await tx.wait();
-  return tx;
 }
 
 export async function sendSwapTransaction(
@@ -220,18 +400,22 @@ export async function sendSwapTransaction(
       return { hash };
     }
     const wallet = await connectedWallet(mnemonic, chainId);
-    return await wallet.sendTransaction({
-      to: quote.transactionRequest.to,
-      data: quote.transactionRequest.data,
-      value: quote.transactionRequest.value,
-      gasLimit: quote.transactionRequest.gasLimit,
-    });
+    // LI.FI's gasLimit is kept, but never below our own buffered estimate (see gas-limit.ts).
+    return await sendWithBufferedGas(
+      wallet,
+      {
+        to: quote.transactionRequest.to,
+        data: quote.transactionRequest.data,
+        value: quote.transactionRequest.value,
+        gasLimit: quote.transactionRequest.gasLimit,
+      },
+      GAS_UNITS.swap,
+    );
   } catch (error) {
-    logger.error('Swap send failed', {
+    throw toUserError('Swap send failed', error, {
       chainId,
-      message: error instanceof Error ? error.message : 'unknown',
+      fallback: 'Swap transaction failed. Review the quote and try again.',
     });
-    throw new Error('Swap transaction failed. Review the quote and try again.');
   }
 }
 
@@ -263,20 +447,21 @@ export async function fetchBridgeQuote(input: {
   url.searchParams.set('integrator', 'boredefi');
 
   try {
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
-    });
+    const response = await fetchQuoteResponse(() =>
+      fetch(url.toString(), {
+        headers: { Accept: 'application/json', 'User-Agent': 'BoreDefiWallet/0.3' },
+      }),
+    );
     const payload = (await response.json()) as LiFiQuote;
     if (!response.ok) {
-      throw new Error(payload.message || 'Could not get a bridge quote.');
+      throw new UserFacingError(liFiFailureMessage(response.status, payload.message));
     }
-    return parseLiFiQuote(payload, input.fromChainId, input.toChainId);
+    return parseLiFiQuote(payload, input.fromChainId, input.toChainId, { from: input.fromToken, to: input.toToken });
   } catch (error) {
-    logger.error('Bridge quote failed', {
-      fromChainId: input.fromChainId,
-      toChainId: input.toChainId,
-      message: error instanceof Error ? error.message : 'unknown',
+    throw toUserError('Bridge quote failed', error, {
+      chainId: input.fromChainId,
+      fallback: NO_ROUTE_MESSAGE,
+      step: SWAP_STEPS.bridgeQuote,
     });
-    throw error instanceof Error ? error : new Error('Could not get a bridge quote.');
   }
 }
