@@ -64,6 +64,11 @@ test('SOL send guards: own address, zero, too much, dust left behind, new accoun
     /never been used/,
   );
   assert.ok(planSolanaSend(solInput({ amount: RENT_EXEMPT_SYSTEM_ACCOUNT, recipient: { exists: false, owner: null, lamports: 0n } })).ok);
+  // A brand-new recipient is allowed but flagged on the confirm sheet (found in the real mainnet proof send).
+  const fresh = planSolanaSend(solInput({ recipient: { exists: false, owner: null, lamports: 0n } }));
+  assert.ok(fresh.ok && fresh.plan.warnings.some((w) => /never been used/.test(w)));
+  const used = planSolanaSend(solInput());
+  assert.ok(used.ok && !used.plan.warnings.some((w) => /never been used/.test(w)));
   // Live (lower) rent minimum from RPC is honoured when supplied.
   assert.ok(planSolanaSend(solInput({ amount: 650_240n, systemAccountRent: 650_240n, recipient: { exists: false, owner: null, lamports: 0n } })).ok);
   assert.match(msg(planSolanaSend(solInput({ amount: SOL - 5_010n - 1_000n, systemAccountRent: 650_240n }))), /Leave at least 0.00065024 SOL/);

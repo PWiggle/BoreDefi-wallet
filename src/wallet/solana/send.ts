@@ -129,6 +129,9 @@ export function planSolanaSend(input: SolanaSendInput): PlanResult {
         message: `This address has never been used. Send at least ${formatLamports(minWalletBalance)} SOL so the network can open it.`,
       };
     }
+    if (!input.recipient.exists) {
+      warnings.push('This address has never been used on Solana. Double-check it is the right wallet.');
+    }
     computeUnitLimit = CU_LIMIT_SOL;
     instructions.push(setComputeUnitLimit(computeUnitLimit), setComputeUnitPrice(priority), systemTransfer(input.from, check.address, input.amount));
     solSpent = input.amount;
