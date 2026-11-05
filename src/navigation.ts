@@ -36,6 +36,7 @@ export type MainStackParamList = {
   /** Solana (EXPO_PUBLIC_SOLANA builds only). */
   SolanaReceive: undefined;
   SolanaSend: { to?: string; amount?: string; mint?: string };
+  SolanaActivity: undefined;
 };
 
 export type MainNavigation = CompositeNavigationProp<

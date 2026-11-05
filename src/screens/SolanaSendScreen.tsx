@@ -13,6 +13,7 @@ import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
 import { formatTokenAmount, formatUsd, parseTokenAmount } from '../wallet/format';
 import { fetchMarketDetails, usdValueFromUnits } from '../wallet/markets';
+import { formatSolanaAmount } from '../wallet/solana/format';
 import { checkSolanaRecipient } from '../wallet/solana/address';
 import { explorerTxUrl, SOLANA_CLUSTER } from '../wallet/solana/config';
 import { fetchSolanaPortfolio, type SolanaPortfolio } from '../wallet/solana/portfolio';
@@ -295,7 +296,7 @@ export function SolanaSendScreen() {
       />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={styles.meta}>
-          Balance: {choice ? formatTokenAmount(choice.balance, choice.decimals) : '—'} {symbol}
+          Balance: {choice ? formatSolanaAmount(choice.balance, choice.decimals) : '—'} {symbol}
         </Text>
         {choice ? (
           <Pressable

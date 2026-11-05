@@ -34,6 +34,7 @@ import { RevealSeedScreen } from './src/screens/RevealSeedScreen';
 import { ScanQrScreen } from './src/screens/ScanQrScreen';
 import { SendScreen } from './src/screens/SendScreen';
 import { SetPinScreen } from './src/screens/SetPinScreen';
+import { SolanaActivityScreen } from './src/screens/SolanaActivityScreen';
 import { SolanaReceiveScreen } from './src/screens/SolanaReceiveScreen';
 import { SolanaSendScreen } from './src/screens/SolanaSendScreen';
 import { SOLANA_ENABLED } from './src/wallet/solana/config';
@@ -138,6 +139,9 @@ function RootNavigator() {
         ) : null}
         {SOLANA_ENABLED ? (
           <MainStack.Screen name="SolanaSend" component={SolanaSendScreen} options={{ title: 'Send on Solana' }} initialParams={{}} />
+        ) : null}
+        {SOLANA_ENABLED ? (
+          <MainStack.Screen name="SolanaActivity" component={SolanaActivityScreen} options={{ title: 'Solana activity' }} />
         ) : null}
         <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />

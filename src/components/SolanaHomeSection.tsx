@@ -6,7 +6,8 @@ import * as Clipboard from 'expo-clipboard';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainNavigation } from '../navigation';
-import { formatTokenAmount, formatUsd, shortenAddress } from '../wallet/format';
+import { formatUsd, shortenAddress } from '../wallet/format';
+import { formatSol, formatSolanaAmount } from '../wallet/solana/format';
 import { fetchMarketDetails, indexMarketsById, usdValueFromUnits, type MarketCoin } from '../wallet/markets';
 import { SOLANA_CLUSTER } from '../wallet/solana/config';
 import { fetchSolanaPortfolio, solanaGeckoIds, type SolanaPortfolio } from '../wallet/solana/portfolio';
@@ -87,7 +88,7 @@ export function SolanaHomeSection() {
       <View style={styles.card}>
         <Text style={styles.usd}>{hide ? '••••' : formatUsd(total)}</Text>
         <Text style={styles.native}>
-          {hide ? '••••' : portfolio ? formatTokenAmount(portfolio.sol, SOL_DECIMALS) : '—'} SOL
+          {hide ? '••••' : portfolio ? formatSol(portfolio.sol) : '—'} SOL
         </Text>
         <Pressable
           onPress={async () => {
@@ -102,7 +103,7 @@ export function SolanaHomeSection() {
           <Pressable key={row.mint} style={styles.row} onPress={() => navigation.navigate('SolanaSend', { mint: row.mint })}>
             <Text style={styles.sym}>{row.symbol}</Text>
             <Text style={styles.amt}>
-              {hide ? '••••' : `${formatTokenAmount(row.amount, row.decimals)} · ${formatUsd(tokenUsd[index] ?? null)}`}
+              {hide ? '••••' : `${formatSolanaAmount(row.amount, row.decimals)} · ${formatUsd(tokenUsd[index] ?? null)}`}
             </Text>
           </Pressable>
         ))}
@@ -118,6 +119,9 @@ export function SolanaHomeSection() {
           </Pressable>
           <Pressable style={styles.action} onPress={() => navigation.navigate('SolanaReceive')}>
             <Text style={styles.actionText}>Receive</Text>
+          </Pressable>
+          <Pressable style={styles.action} onPress={() => navigation.navigate('SolanaActivity')}>
+            <Text style={styles.actionText}>Activity</Text>
           </Pressable>
         </View>
       </View>
