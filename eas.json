@@ -12,6 +12,9 @@
       },
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_SOLANA": "1"
       }
     }
   },
