@@ -58,10 +58,14 @@ test('#4632 Alchemy shape (CDN-only image, no metadata, null name): kept and vis
   assert.equal(buildNftGallery(items, new Set(), new Set())[0].risk.hidden, false);
 });
 
-test('a protected NFT can never be hidden, even by a stale manual Hide', () => {
+test('a manually hidden protected NFT stays listed in the labeled Hidden section', () => {
   const items = parseBlockscoutNfts([BLOCKSCOUT_4632] as never, 1);
   const gallery = buildNftGallery(items, new Set(), new Set([nftStorageKey(items[0])]));
-  assert.equal(gallery[0].risk.hidden, false);
+  assert.equal(gallery.length, 1);
+  assert.equal(gallery[0].risk.hidden, true);
+  assert.equal(gallery[0].risk.hiddenByYou, true);
+  assert.equal(gallery[0].risk.verified, true);
+  assert.match(gallery[0].risk.reasons[0], /Hidden by you/);
 });
 
 test('a protected NFT with no usable image still shows (placeholder), not hidden or dropped', () => {

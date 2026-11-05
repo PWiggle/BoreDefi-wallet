@@ -2,11 +2,11 @@ import { classifyNftSpam, nftStorageKey, type NftSpamAssessment } from './nft-sp
 import type { NftFetchResult, NftItem } from './nfts';
 import { protectedAssetFor } from './yuga-allowlist';
 
-export type NftGalleryEntry = { item: NftItem; risk: NftSpamAssessment };
+export type NftGalleryEntry = { item: NftItem; risk: NftSpamAssessment & { hiddenByYou?: boolean } };
 
 /**
- * Builds the NFT tab list. An owned NFT on a verified (protected) contract is ALWAYS visible: neither the spam
- * filter nor a stale manual "Hide" can move it out of the list (Lil Mutants #4632, iOS build 16, Nov 4 2026).
+ * Builds the NFT tab list. An owned NFT on a verified (protected) contract is never hidden by the spam filter; a manual
+ * Hide only moves it to the labeled Hidden section (still listed, one-tap Show) (Lil Mutants #4632, iOS build 16, Nov 4 2026).
  * Every item in `items` comes back exactly once; nothing is dropped.
  */
 export function buildNftGallery(
@@ -17,8 +17,11 @@ export function buildNftGallery(
   return items.map((item) => {
     const risk = classifyNftSpam(item, revealed);
     const isProtected = Boolean(protectedAssetFor(item.chainId, item.contract));
-    const hidden = isProtected ? false : userHidden.has(nftStorageKey(item)) || risk.hidden;
-    return { item, risk: { ...risk, hidden } };
+    const byYou = userHidden.has(nftStorageKey(item));
+    // Protected: never hidden by spam rules. A manual Hide moves it to the labeled Hidden section (one-tap Show).
+    const hidden = isProtected ? byYou : byYou || risk.hidden;
+    const reasons = isProtected && byYou ? ['Hidden by you. Verified collection: tap Show to put it back.'] : risk.reasons;
+    return { item, risk: { ...risk, hidden, reasons, hiddenByYou: byYou } };
   });
 }
 

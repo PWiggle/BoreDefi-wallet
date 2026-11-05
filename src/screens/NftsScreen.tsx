@@ -46,7 +46,7 @@ function NftImage({ item, style }: { item: NftItem; style?: Parameters<typeof Sa
 
 type GalleryItem = {
   item: NftItem;
-  risk: NftSpamAssessment;
+  risk: NftSpamAssessment & { hiddenByYou?: boolean };
 };
 
 function nftStyles({ colors, type, card, radius, spacing }: Theme) {
@@ -402,6 +402,14 @@ export function NftsScreen() {
                       entry={entry}
                       dim
                       onPress={() => setSelected(entry)}
+                    />
+                  ))}
+                  {group.entries.filter((entry) => entry.risk.verified && entry.risk.hiddenByYou).map((entry) => (
+                    <Button
+                      key={`show-${nftStorageKey(entry.item)}`}
+                      label={`Show ${displayNftName(entry.item)} (verified, hidden by you)`}
+                      variant="ghost"
+                      onPress={() => void showAnyway(entry.item)}
                     />
                   ))}
                 </View>
