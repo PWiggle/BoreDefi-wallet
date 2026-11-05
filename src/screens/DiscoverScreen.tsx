@@ -178,7 +178,7 @@ export function DiscoverScreen() {
       {list.map((coin) => (
         <MarketRow key={`${searching ? 'search' : tab}-${coin.id}`} coin={coin} onPress={() => openCoin(coin)} />
       ))}
-      <Text style={styles.credit}>Data: CoinGecko</Text>
+      <Text style={styles.credit}>Data: BoreDash (source: CoinGecko)</Text>
     </Screen>
   );
 }
