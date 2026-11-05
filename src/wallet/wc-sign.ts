@@ -8,6 +8,8 @@ import { resolveGasLimit, sendWithBufferedGas } from './gas-limit';
 import { connectedWallet } from './rpc';
 import { hexToUtf8, parseSwitchChainId, pickSignMessage } from './wc';
 
+export const ETH_SIGN_BLOCKED = 'Blocked: eth_sign can sign anything blind, so BoreDefi never signs it. Ask the site to use personal_sign or typed data.';
+
 export type WalletConnectRequestResult =
   | { kind: 'signature' | 'hash' | 'accounts' | 'switched'; value: string | string[] | true }
   | { kind: 'switch'; chainId: ChainId };
@@ -58,11 +60,9 @@ export async function handleWalletConnectRequest(input: {
       const signature = await wallet.signMessage(hexToUtf8(message));
       return { kind: 'signature', value: signature };
     }
-    case 'eth_sign': {
-      const message = pickSignMessage(params);
-      const signature = await wallet.signMessage(hexToUtf8(message));
-      return { kind: 'signature', value: signature };
-    }
+    case 'eth_sign':
+      // Raw eth_sign can sign a transaction hash blind (drainer favorite). Never signed, from any site.
+      throw new Error(ETH_SIGN_BLOCKED);
     case 'eth_signTypedData':
     case 'eth_signTypedData_v3':
     case 'eth_signTypedData_v4': {
