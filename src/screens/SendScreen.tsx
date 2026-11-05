@@ -34,6 +34,8 @@ import { unexpectedProtectedMoves } from '../wallet/swap-preview';
 import { previewInAppCalls } from '../wallet/tx-preview-runtime';
 import type { TxPreview } from '../wallet/tx-simulate';
 import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
+import { addressPoisoningCheck } from '../wallet/security/address-poisoning';
+import { loadKnownAddresses, rememberKnownAddresses } from '../wallet/storage';
 
 function sendStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -179,7 +181,9 @@ export function SendScreen() {
     const recipient = getAddress(to);
     try {
       const clipboard = await Clipboard.getStringAsync().catch(() => '');
-      setWarnings(addressWarnings(to, clipboard));
+      const known = await loadKnownAddresses('evm');
+      const poison = addressPoisoningCheck(recipient, [...known, fromAddress], 'evm');
+      setWarnings([...(poison ? [poison.warning] : []), ...addressWarnings(to, clipboard)]);
       const estimate = token.native
         ? await estimateNativeTransfer(fromAddress, recipient, units, selectedChain.id)
         : await estimateContractCall(fromAddress, token.address, erc20TransferData(recipient, units), selectedChain.id);
@@ -252,6 +256,7 @@ export function SendScreen() {
       setReview(false);
       setClearedSend(null);
       setTxHash(hash);
+      void rememberKnownAddresses('evm', [recipient]);
     } catch (err) {
       setError(friendlyTxError(err, { chainId: selectedChain.id, fallback: 'Send failed. Nothing left this wallet.' }));
       setReview(false);

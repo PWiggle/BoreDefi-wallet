@@ -8,6 +8,7 @@ import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { fetchActivity, type ActivityItem } from '../wallet/activity';
 import { formatNative, formatTimestamp, shortenAddress } from '../wallet/format';
+import { rememberKnownAddresses } from '../wallet/storage';
 
 function activityStyles({ colors, type, card, spacing }: Theme) {
   return {
@@ -54,7 +55,10 @@ export function ActivityScreen() {
     }
     try {
       setError(null);
-      setItems(await fetchActivity(session.address, selectedChain.id));
+      const list = await fetchActivity(session.address, selectedChain.id);
+      setItems(list);
+      // Only addresses this wallet sent to (never incoming senders, which may be poisoners).
+      void rememberKnownAddresses('evm', list.filter((tx) => !tx.inbound && tx.status === 'success').map((tx) => tx.to).slice(0, 10));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load activity.');
     }

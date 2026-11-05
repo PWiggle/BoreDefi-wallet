@@ -27,6 +27,8 @@ import { checkProtectedRecipient, recipientTailMatches, rememberRecipient } from
 import { getProvider } from '../wallet/rpc';
 import { loadProtectedPolicy, saveProtectedPolicy } from '../wallet/storage';
 import { protectedAssetFor, protectedBadgeLabel } from '../wallet/yuga-allowlist';
+import { addressPoisoningCheck } from '../wallet/security/address-poisoning';
+import { loadKnownAddresses, rememberKnownAddresses } from '../wallet/storage';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
@@ -152,7 +154,9 @@ export function NftSendScreen() {
       }
     }
     setTail('');
+    const poison = addressPoisoningCheck(to, [...(await loadKnownAddresses('evm')), session?.address], 'evm');
     setWarnings([
+      ...(poison ? [poison.warning] : []),
       ...protectedLines,
       ...addressWarnings(to, clipboard),
       'On-chain ownerOf / balanceOf matches this wallet. Send is blocked if it does not.',
@@ -202,6 +206,7 @@ export function NftSendScreen() {
       });
       setReview(false);
       setTxHash(tx.hash);
+      void rememberKnownAddresses('evm', [to]);
       if (protectedAsset) {
         const policy = await loadProtectedPolicy();
         await saveProtectedPolicy(rememberRecipient(policy, to));

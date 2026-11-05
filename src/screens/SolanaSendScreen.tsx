@@ -31,6 +31,8 @@ import {
   type SolanaSendOutcome,
 } from '../wallet/solana/send';
 import { SOL_DECIMALS, SOL_GECKO_ID } from '../wallet/solana/tokens';
+import { addressPoisoningCheck } from '../wallet/security/address-poisoning';
+import { loadKnownAddresses, rememberKnownAddresses } from '../wallet/storage';
 
 function sendStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -179,6 +181,8 @@ export function SolanaSendScreen() {
       }
       const clipboard = await Clipboard.getStringAsync().catch(() => '');
       const extra: string[] = [...result.plan.warnings];
+      const poison = addressPoisoningCheck(recipient.address, [...(await loadKnownAddresses('solana')), solanaAddress], 'solana');
+      if (poison) extra.unshift(poison.warning);
       if (clipboard.trim() && checkSolanaRecipient(clipboard).ok && clipboard.trim() !== recipient.address) {
         extra.push('Clipboard address does not match the address you entered.');
       }
@@ -209,6 +213,7 @@ export function SolanaSendScreen() {
       const result = await broadcastAndConfirm(signed);
       setReview(false);
       setOutcome(result);
+      void rememberKnownAddresses('solana', [to.trim()]);
     } catch (err) {
       setReview(false);
       setError(err instanceof Error ? err.message : 'Send failed. Nothing left this wallet.');

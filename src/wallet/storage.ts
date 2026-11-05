@@ -256,3 +256,32 @@ export async function saveLastGoodNfts(owner: string, chainId: number, items: Nf
     // Cache only; never block the NFT tab.
   }
 }
+
+/** Addresses this wallet has sent to (and its own), for the address-poisoning guard. Small list, newest first. */
+const KNOWN_ADDR_PREFIX = 'boredefi.known.addresses.v1.';
+const KNOWN_ADDR_MAX = 25;
+/** 'evm' (case-insensitive hex) or a non-EVM chain family key (case-sensitive). */
+export type AddressBookKind = string;
+
+export async function loadKnownAddresses(kind: AddressBookKind): Promise<string[]> {
+  try {
+    const stored = parseJson<string[]>(await readItem(`${KNOWN_ADDR_PREFIX}${kind}`));
+    return Array.isArray(stored) ? stored.filter((a) => typeof a === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function rememberKnownAddresses(kind: AddressBookKind, addresses: (string | null | undefined)[]): Promise<void> {
+  try {
+    const current = await loadKnownAddresses(kind);
+    const norm = (a: string) => (kind === 'evm' ? a.toLowerCase() : a);
+    const merged: string[] = [];
+    for (const a of [...addresses, ...current]) {
+      if (a && !merged.some((m) => norm(m) === norm(a))) merged.push(a);
+    }
+    await writeItem(`${KNOWN_ADDR_PREFIX}${kind}`, JSON.stringify(merged.slice(0, KNOWN_ADDR_MAX)));
+  } catch {
+    // Guard data only; never block a send.
+  }
+}
