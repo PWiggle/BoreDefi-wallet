@@ -31,6 +31,7 @@ import {
   normalizeDappUrl,
   urlBarAfterNavigation,
 } from '../wallet/dapps';
+import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
 import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
@@ -160,6 +161,11 @@ export function BrowserScreen() {
     setError(null);
     try {
       const next = normalizeDappUrl(raw);
+      const verdict = next.startsWith('wc:') ? null : checkPhishing(next);
+      if (verdict?.blocked) {
+        setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+        return;
+      }
       if (next.startsWith('wc:')) {
         pair(next).catch((err) =>
           setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
@@ -180,6 +186,10 @@ export function BrowserScreen() {
         providerEmitScript('chainChanged', chainIdHex(selectedChain.id)),
     );
   }, [selectedChain.id, session?.address]);
+
+  useEffect(() => {
+    void refreshPhishingList();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -213,6 +223,13 @@ export function BrowserScreen() {
       const params = parsed.payload?.params ?? [];
       const kind = classifyBrowserMethod(method);
       const hex = chainIdHex(selectedChain.id);
+      const phishing = checkPhishing(event.nativeEvent.url || pageUrl);
+      if (phishing.blocked && kind !== 'local') {
+        // Never connect to or sign for a blocked site, even if it loaded inside a frame.
+        setError(`Blocked: ${phishing.reason} Your wallet was not connected.`);
+        resolve(id, kind === 'accounts' ? [] : null, kind === 'accounts' ? undefined : 'Blocked by BoreDefi phishing protection.');
+        return;
+      }
 
       if (kind === 'accounts') {
         resolve(id, isConnected ? [session.address] : []);
@@ -384,6 +401,11 @@ export function BrowserScreen() {
       pair(wcUri).catch((err) =>
         setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
       );
+      return false;
+    }
+    const verdict = checkPhishing(target);
+    if (verdict.blocked) {
+      setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
       return false;
     }
     return true;

@@ -23,6 +23,7 @@ import {
 import { installRelayOriginWebSocket } from '../wallet/wc-origin';
 import { handleWalletConnectRequest } from '../wallet/wc-sign';
 import { WALLETCONNECT_RELAY_ORIGIN } from '../wallet/wc';
+import { checkPhishing } from '../wallet/security/phishing';
 import { useWallet } from './WalletContext';
 
 installRelayOriginWebSocket();
@@ -129,7 +130,21 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
           return;
         }
         clientRef.current = kit;
-        kit.on('session_proposal', ((proposal: { id: number; params: { proposer?: { metadata?: { name?: string; url?: string } } } }) => {
+        kit.on('session_proposal', ((proposal: {
+          id: number;
+          params: { proposer?: { metadata?: { name?: string; url?: string } } };
+          verifyContext?: { verified?: { isScam?: boolean; origin?: string } };
+        }) => {
+          const proposerUrl = proposal.params.proposer?.metadata?.url ?? '';
+          const verdict = checkPhishing(proposal.verifyContext?.verified?.origin || proposerUrl);
+          if (verdict.blocked || proposal.verifyContext?.verified?.isScam) {
+            // Never connect the wallet to a blocked or WalletConnect-flagged scam site.
+            void kit
+              .rejectSession({ id: proposal.id, reason: { code: 5000, message: 'Blocked by BoreDefi phishing protection.' } })
+              .catch(() => undefined);
+            setError(`Blocked: ${verdict.reason ?? 'WalletConnect flagged this site as a scam.'} Your wallet was not connected.`);
+            return;
+          }
           setPendingProposal({
             id: proposal.id,
             name: proposal.params.proposer?.metadata?.name ?? 'dApp',
