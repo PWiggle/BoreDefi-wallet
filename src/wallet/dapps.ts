@@ -13,7 +13,8 @@ export const BOREDEFI_SUPPORT_URL = 'https://www.boredefi.com/support';
 export const DAPP_BOOKMARKS: DappBookmark[] = [
   { name: 'BoreDefi', url: BOREDEFI_SITE_URL, blurb: 'Portfolio and Safety check' },
   { name: 'BoreDash', url: 'https://www.boredash.com', blurb: 'Live markets' },
-  { name: 'Uniswap', url: 'https://app.uniswap.org', blurb: 'Swap tokens' },
+  // BoredSwap (built by Mev): 0x-powered EVM swaps, 0.30% fee.
+  { name: 'BoredSwap', url: 'https://boredswap.app', blurb: 'Swap tokens' },
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
   { name: 'Lido', url: 'https://stake.lido.fi', blurb: 'Stake ETH' },
   { name: 'Jumper', url: 'https://jumper.exchange', blurb: 'Bridge and swap' },
@@ -21,7 +22,7 @@ export const DAPP_BOOKMARKS: DappBookmark[] = [
   { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' },
 ];
 
-export const DEFAULT_BROWSER_URL = 'https://app.uniswap.org';
+export const DEFAULT_BROWSER_URL = 'https://boredswap.app';
 
 export function normalizeDappUrl(raw: string): string {
   const trimmed = raw.trim();

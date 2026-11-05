@@ -32,7 +32,7 @@ test('normalizes dApp URLs and classifies provider methods', () => {
   assert.equal(classifyBrowserMethod('wallet_addEthereumChain'), 'switch');
   assert.equal(classifyBrowserMethod('wallet_revokePermissions'), 'disconnect');
   assert.equal(classifyBrowserMethod('foo'), 'unsupported');
-  assert.equal(DEFAULT_BROWSER_URL, 'https://app.uniswap.org');
+  assert.equal(DEFAULT_BROWSER_URL, 'https://boredswap.app');
   assert.equal(CONNECT_DEMO_URL, 'https://www.boredefi.com/connect');
   // The first bookmark is the BoreDefi site; the connect check moved to Settings → Support.
   assert.equal(DAPP_BOOKMARKS[0]?.name, 'BoreDefi');
@@ -70,8 +70,8 @@ test('Browser tab has a Mevvy tile for Solana swaps (1.0.6), on every platform',
   const mevvy = DAPP_BOOKMARKS.find((item) => item.name === 'Mevvy');
   assert.deepEqual(mevvy, { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' });
   assert.equal(normalizeDappUrl(mevvy!.url), 'https://mevvy.app');
-  // Uniswap and the other EVM tiles stay.
-  for (const name of ['BoreDefi', 'BoreDash', 'Uniswap', 'Aave', 'Lido', 'Jumper']) {
+  // BoredSwap and the other EVM tiles stay.
+  for (const name of ['BoreDefi', 'BoreDash', 'BoredSwap', 'Aave', 'Lido', 'Jumper']) {
     assert.ok(DAPP_BOOKMARKS.some((item) => item.name === name), name);
   }
 });
