@@ -28,11 +28,13 @@ export const SOLANA_DUST_LAMPORTS = 1_000_000n;
 
 /**
  * Why a row is hidden by default (null = shown). Hidden: failed transactions someone else sent (spam), tiny
- * incoming SOL from others (dust / poisoning), and unknown tokens pushed into the wallet. Own actions always show.
+ * incoming SOL from others (dust / poisoning), unknown tokens pushed into the wallet, and any failed transaction
+ * (nothing moved). Every other own action always shows.
  */
 export function solanaActivityHiddenReason(item: SolanaActivityItem): string | null {
+  // A failed transaction moved nothing (at most a tiny fee), so it stays out of the default list, yours or not.
+  if (item.status === 'failed') return item.feePayer ? 'Failed (nothing moved)' : 'Failed transaction sent by someone else';
   if (item.feePayer) return null;
-  if (item.status === 'failed') return 'Failed transaction sent by someone else';
   if (item.unknownMintIn) return 'Unknown token sent to you (possible spam)';
   if (item.direction === 'in' && item.symbol === 'SOL' && item.amount < SOLANA_DUST_LAMPORTS) return 'Dust (tiny amount from an unknown sender)';
   return null;
