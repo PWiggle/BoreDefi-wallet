@@ -16,6 +16,7 @@ import {
   planSolanaSend,
   priorityFeeLamports,
   signPlan,
+  simulatePlanUnsigned,
   type SolanaSendInput,
 } from './send';
 import { RENT_EXEMPT_SYSTEM_ACCOUNT, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID } from './programs';
@@ -63,6 +64,9 @@ test('SOL send guards: own address, zero, too much, dust left behind, new accoun
     /never been used/,
   );
   assert.ok(planSolanaSend(solInput({ amount: RENT_EXEMPT_SYSTEM_ACCOUNT, recipient: { exists: false, owner: null, lamports: 0n } })).ok);
+  // Live (lower) rent minimum from RPC is honoured when supplied.
+  assert.ok(planSolanaSend(solInput({ amount: 650_240n, systemAccountRent: 650_240n, recipient: { exists: false, owner: null, lamports: 0n } })).ok);
+  assert.match(msg(planSolanaSend(solInput({ amount: SOL - 5_010n - 1_000n, systemAccountRent: 650_240n }))), /Leave at least 0.00065024 SOL/);
   // Max leaves exactly zero, which is allowed.
   assert.ok(planSolanaSend(solInput({ amount: maxSolSendable(SOL, 10_000n) })).ok);
 });
@@ -104,6 +108,8 @@ test('formatLamports and friendly errors', () => {
   assert.match(friendlySolanaError({ InstructionError: [0, { Custom: 1 }] }), /Not enough tokens/);
   assert.match(friendlySolanaError({ InsufficientFundsForRent: { account_index: 0 } }), /keep the account open/);
   assert.match(friendlySolanaError('BlockhashNotFound'), /Review it again/);
+  // Seen live: the public "abandon … about" test account was reassigned to a program, so it cannot pay fees.
+  assert.match(friendlySolanaError('InvalidAccountForFee'), /cannot pay network fees/);
 });
 
 test('signPlan produces a transaction signed by the derived key; broadcast simulates first and waits for confirmation', async () => {
@@ -140,6 +146,23 @@ test('signPlan produces a transaction signed by the derived key; broadcast simul
   const outcome = await broadcastAndConfirm(signed, rpc, async () => {});
   assert.deepEqual(outcome, { signature, status: 'confirmed' });
   assert.deepEqual(methods, ['getLatestBlockhash', 'simulateTransaction', 'sendTransaction', 'getSignatureStatuses']);
+});
+
+test('review-time simulation sends an UNSIGNED transaction (zero signature, sigVerify off)', async () => {
+  const r = planSolanaSend(solInput());
+  assert.ok(r.ok);
+  let params: any[] = [];
+  const fetcher = (async (_url: string, init: { body: string }) => {
+    params = JSON.parse(init.body).params;
+    return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: { context: { slot: 1 }, value: { err: null, logs: [] } } }) } as Response;
+  }) as unknown as typeof fetch;
+  const sim = await simulatePlanUnsigned(A, r.plan, createSolanaRpc(['https://x'], fetcher));
+  assert.equal(sim.err, null);
+  assert.equal(params[1].sigVerify, false);
+  assert.equal(params[1].replaceRecentBlockhash, true);
+  const wire = Uint8Array.from(Buffer.from(params[0], 'base64'));
+  assert.equal(wire[0], 1);
+  assert.ok(wire.slice(1, 65).every((b) => b === 0));
 });
 
 test('broadcast refuses to send when simulation fails', async () => {

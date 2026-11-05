@@ -58,6 +58,8 @@ export type SolanaSendInput = {
   recipientAtaExists?: boolean;
   priorityMicroLamports: bigint;
   tokenAccountRent?: bigint;
+  /** Live rent-exempt minimum for a plain wallet account; falls back to the conservative constant. */
+  systemAccountRent?: bigint;
 };
 
 export type SolanaSendPlan = {
@@ -105,6 +107,7 @@ export function planSolanaSend(input: SolanaSendInput): PlanResult {
     };
   }
   const warnings: string[] = [];
+  const minWalletBalance = input.systemAccountRent ?? RENT_EXEMPT_SYSTEM_ACCOUNT;
   const priority = input.priorityMicroLamports > MAX_PRIORITY_MICRO_LAMPORTS ? MAX_PRIORITY_MICRO_LAMPORTS : input.priorityMicroLamports < 0n ? 0n : input.priorityMicroLamports;
   const instructions: Instruction[] = [];
   let computeUnitLimit: number;
@@ -120,10 +123,10 @@ export function planSolanaSend(input: SolanaSendInput): PlanResult {
     if (input.recipient.exists && input.recipient.owner && input.recipient.owner !== SYSTEM_PROGRAM_ID) {
       warnings.push('This address is owned by a program, not a normal wallet.');
     }
-    if (!input.recipient.exists && input.amount < RENT_EXEMPT_SYSTEM_ACCOUNT) {
+    if (!input.recipient.exists && input.amount < minWalletBalance) {
       return {
         ok: false,
-        message: `This address has never been used. Send at least ${formatLamports(RENT_EXEMPT_SYSTEM_ACCOUNT)} SOL so the network can open it.`,
+        message: `This address has never been used. Send at least ${formatLamports(minWalletBalance)} SOL so the network can open it.`,
       };
     }
     computeUnitLimit = CU_LIMIT_SOL;
@@ -164,10 +167,10 @@ export function planSolanaSend(input: SolanaSendInput): PlanResult {
     const need = solSpent + feeLamports + rentLamports;
     return { ok: false, message: `Not enough SOL. This needs ${formatLamports(need)} SOL including the network fee.` };
   }
-  if (remaining > 0n && remaining < RENT_EXEMPT_SYSTEM_ACCOUNT) {
+  if (remaining > 0n && remaining < minWalletBalance) {
     return {
       ok: false,
-      message: `Leave at least ${formatLamports(RENT_EXEMPT_SYSTEM_ACCOUNT)} SOL in the wallet, or send the full balance with Max.`,
+      message: `Leave at least ${formatLamports(minWalletBalance)} SOL in the wallet, or send the full balance with Max.`,
     };
   }
   return {
@@ -189,8 +192,9 @@ export async function loadSendContext(
   to: string,
   asset: SolanaSendAsset,
   rpc = solanaRpc(),
-): Promise<Pick<SolanaSendInput, 'recipient' | 'recipientAtaExists' | 'priorityMicroLamports' | 'tokenAccountRent'>> {
+): Promise<Pick<SolanaSendInput, 'recipient' | 'recipientAtaExists' | 'priorityMicroLamports' | 'tokenAccountRent' | 'systemAccountRent'>> {
   const recipient = await getAccountSummary(to.trim(), rpc);
+  const systemAccountRent = await getRentExemptMinimum(0, rpc).catch(() => undefined);
   const writable = [from, to.trim()];
   let recipientAtaExists: boolean | undefined;
   let tokenAccountRent: bigint | undefined;
@@ -210,7 +214,7 @@ export async function loadSendContext(
     }
   }
   const priorityMicroLamports = await getPriorityFeeEstimate(writable, rpc).catch(() => 0n);
-  return { recipient, recipientAtaExists, priorityMicroLamports, tokenAccountRent };
+  return { recipient, recipientAtaExists, priorityMicroLamports, tokenAccountRent, systemAccountRent };
 }
 
 export type SignedSolanaTx = { wire: Uint8Array; signature: string; lastValidBlockHeight: number };
@@ -229,10 +233,13 @@ export async function signPlan(mnemonic: string, from: string, plan: SolanaSendP
 /** Friendly text for the common simulation/preflight failures. */
 export function friendlySolanaError(err: unknown, logs: string[] = []): string {
   const text = `${typeof err === 'string' ? err : JSON.stringify(err ?? '')} ${logs.join(' ')}`;
+  if (/InvalidAccountForFee/.test(text)) {
+    return 'This Solana account cannot pay network fees (a program has taken ownership of it). Nothing was sent.';
+  }
   if (/InsufficientFundsForRent/i.test(text)) {
     return 'Not enough SOL left to keep the account open. Leave a little more SOL or send the full balance.';
   }
-  if (/insufficient lamports|InsufficientFunds|Attempt to debit an account but found no record/i.test(text)) {
+  if (/insufficient lamports|InsufficientFunds|AccountNotFound|Attempt to debit an account but found no record/i.test(text)) {
     return 'Not enough SOL for this send and the network fee.';
   }
   if (/insufficient funds/i.test(text) || /"Custom":1\b/.test(text)) {
@@ -247,8 +254,14 @@ export function friendlySolanaError(err: unknown, logs: string[] = []): string {
   return 'The network would reject this send. Nothing was sent.';
 }
 
-export async function simulateSigned(tx: SignedSolanaTx, rpc = solanaRpc()): Promise<SimulationResult> {
-  return simulateTransaction(tx.wire, rpc);
+/**
+ * Review-time simulation of the exact plan WITHOUT signing it. A signed transaction handed to an RPC can be
+ * broadcast by that RPC, so nothing is signed until the user confirms.
+ */
+export async function simulatePlanUnsigned(from: string, plan: SolanaSendPlan, rpc = solanaRpc()): Promise<SimulationResult> {
+  // Any valid 32-byte hash works: the RPC replaces it (replaceRecentBlockhash).
+  const message = serializeMessage(compileMessage(from, plan.instructions, SYSTEM_PROGRAM_ID));
+  return simulateTransaction(serializeTransaction([new Uint8Array(64)], message), rpc, false);
 }
 
 export type SolanaSendOutcome = { signature: string; status: 'confirmed' | 'pending' };

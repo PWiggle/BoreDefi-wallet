@@ -8,9 +8,9 @@ export const COMPUTE_BUDGET_PROGRAM_ID = 'ComputeBudget1111111111111111111111111
 export const LAMPORTS_PER_SOL = 1_000_000_000n;
 /** Fixed fee per signature (lamports). */
 export const LAMPORTS_PER_SIGNATURE = 5_000n;
-/** Rent-exempt minimum for a 0-data system account (lamports). */
+/** Conservative fallback for the 0-data rent-exempt minimum (pre-2026 value; the live RPC value is lower and preferred). */
 export const RENT_EXEMPT_SYSTEM_ACCOUNT = 890_880n;
-/** Rent-exempt minimum for a 165-byte SPL token account (lamports); refreshed from RPC when possible. */
+/** Conservative fallback for a 165-byte token account's rent (pre-2026 value; the live RPC value is preferred). */
 export const RENT_EXEMPT_TOKEN_ACCOUNT = 2_039_280n;
 
 export function isTokenProgram(programId: string): boolean {

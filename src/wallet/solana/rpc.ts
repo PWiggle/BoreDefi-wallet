@@ -172,10 +172,15 @@ export function medianPriorityFee(values: number[]): bigint {
 
 export type SimulationResult = { err: unknown; logs: string[]; unitsConsumed: number | null };
 
-export async function simulateTransaction(wire: Uint8Array, rpc = solanaRpc()): Promise<SimulationResult> {
+/**
+ * signed=false is for review-time checks of an UNSIGNED transaction (zero signature): the RPC swaps in a
+ * fresh blockhash and skips signature checks, so nothing that could be broadcast ever leaves the phone
+ * before the user confirms.
+ */
+export async function simulateTransaction(wire: Uint8Array, rpc = solanaRpc(), signed = true): Promise<SimulationResult> {
   const result = await rpc<WithContext<{ err: unknown; logs: string[] | null; unitsConsumed?: number }>>('simulateTransaction', [
     base64.encode(wire),
-    { encoding: 'base64', commitment: 'confirmed', sigVerify: true, replaceRecentBlockhash: false },
+    { encoding: 'base64', commitment: 'confirmed', sigVerify: signed, replaceRecentBlockhash: !signed },
   ]);
   return { err: result.value.err, logs: result.value.logs ?? [], unitsConsumed: result.value.unitsConsumed ?? null };
 }
