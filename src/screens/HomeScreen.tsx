@@ -8,6 +8,7 @@ import { ChainPicker } from '../components/ChainPicker';
 import { CircleAction } from '../components/CircleAction';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { MarketRow } from '../components/MarketRow';
+import { SolanaHomeSection } from '../components/SolanaHomeSection';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
@@ -27,6 +28,7 @@ import {
   usdValueFromUnits,
 } from '../wallet/markets';
 import { fetchBalance } from '../wallet/rpc';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
 import { fetchTokenBalance } from '../wallet/swap';
 import { type TokenConfig } from '../wallet/tokens';
 import { useGas } from '../components/useGas';
@@ -264,6 +266,7 @@ export function HomeScreen() {
           ))
         )}
       </View>
+      {SOLANA_ENABLED ? <SolanaHomeSection /> : null}
       <View style={styles.section}>
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Markets</Text>

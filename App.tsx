@@ -34,6 +34,9 @@ import { RevealSeedScreen } from './src/screens/RevealSeedScreen';
 import { ScanQrScreen } from './src/screens/ScanQrScreen';
 import { SendScreen } from './src/screens/SendScreen';
 import { SetPinScreen } from './src/screens/SetPinScreen';
+import { SolanaReceiveScreen } from './src/screens/SolanaReceiveScreen';
+import { SolanaSendScreen } from './src/screens/SolanaSendScreen';
+import { SOLANA_ENABLED } from './src/wallet/solana/config';
 import { StakeScreen } from './src/screens/StakeScreen';
 import { SwapScreen } from './src/screens/SwapScreen';
 import { UnlockScreen } from './src/screens/UnlockScreen';
@@ -130,6 +133,12 @@ function RootNavigator() {
         <MainStack.Screen name="Bridge" component={BridgeScreen} />
         <MainStack.Screen name="Gas" component={GasScreen} options={{ title: 'Gas' }} />
         {PROOF_MODE ? <MainStack.Screen name="Proof" component={ProofScreen} options={{ title: 'Proof' }} /> : null}
+        {SOLANA_ENABLED ? (
+          <MainStack.Screen name="SolanaReceive" component={SolanaReceiveScreen} options={{ title: 'Receive SOL' }} />
+        ) : null}
+        {SOLANA_ENABLED ? (
+          <MainStack.Screen name="SolanaSend" component={SolanaSendScreen} options={{ title: 'Send on Solana' }} initialParams={{}} />
+        ) : null}
         <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />
         <MainStack.Screen name="NftReceive" component={NftReceiveScreen} options={{ title: 'Receive NFT' }} />

@@ -10,6 +10,8 @@ import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import type { MainStackParamList } from '../navigation';
 import { parsePaymentUri } from '../wallet/qr';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
+import { parseSolanaPaymentUri } from '../wallet/solana/qr';
 import { extractWalletConnectUri } from '../wallet/wc';
 
 function scanStyles({ colors }: Theme) {
@@ -82,6 +84,16 @@ export function ScanQrScreen() {
               setError('That QR is not a WalletConnect URI.');
               return;
             }
+            if (SOLANA_ENABLED && (purpose === 'solana' || (purpose === 'payment' && /^solana:/i.test(data.trim())))) {
+              try {
+                const solana = parseSolanaPaymentUri(data);
+                setDone(true);
+                navigation.navigate('SolanaSend', { to: solana.address, amount: solana.amount, mint: solana.splToken });
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Could not read that QR code.');
+              }
+              return;
+            }
             try {
               const parsed = parsePaymentUri(data);
               setDone(true);
@@ -99,7 +111,9 @@ export function ScanQrScreen() {
       <Text style={styles.hint}>
         {purpose === 'walletconnect'
           ? 'Point the camera at a WalletConnect QR from a dApp.'
-          : purpose === 'nft'
+          : purpose === 'solana'
+            ? 'Point the camera at a Solana address or Solana Pay QR.'
+            : purpose === 'nft'
             ? 'Point the camera at a recipient address or payment QR for this NFT send.'
             : 'Point the camera at an address, payment, or WalletConnect QR.'}
       </Text>

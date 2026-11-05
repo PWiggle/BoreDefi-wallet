@@ -16,7 +16,7 @@ export type MainStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Receive: undefined;
   Send: { to?: string; amount?: string; tokenSymbol?: string };
-  ScanQr: { purpose?: 'payment' | 'walletconnect' | 'nft'; nft?: NftItem };
+  ScanQr: { purpose?: 'payment' | 'walletconnect' | 'nft' | 'solana'; nft?: NftItem };
   Activity: undefined;
   RevealSeed: undefined;
   ChangePin: undefined;
@@ -33,6 +33,9 @@ export type MainStackParamList = {
   NftImport: undefined;
   WalletConnect: { uri?: string };
   ProtectedCollections: undefined;
+  /** Solana (EXPO_PUBLIC_SOLANA builds only). */
+  SolanaReceive: undefined;
+  SolanaSend: { to?: string; amount?: string; mint?: string };
 };
 
 export type MainNavigation = CompositeNavigationProp<

@@ -7,6 +7,9 @@ import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { buildReceiveUri } from '../wallet/qr';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
+import { useNavigation } from '@react-navigation/native';
+import type { MainNavigation } from '../navigation';
 
 function receiveStyles({ colors, type, card, radius, spacing }: Theme) {
   return {
@@ -25,6 +28,7 @@ function receiveStyles({ colors, type, card, radius, spacing }: Theme) {
 export function ReceiveScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(receiveStyles);
+  const navigation = useNavigation<MainNavigation>();
   const { session, selectedChain } = useWallet();
   if (!session) {
     return null;
@@ -44,6 +48,9 @@ export function ReceiveScreen() {
         network can lose funds.
       </Text>
       <Button label="Copy address" onPress={() => Clipboard.setStringAsync(session.address)} />
+      {SOLANA_ENABLED ? (
+        <Button label="Receive on Solana instead" variant="secondary" onPress={() => navigation.navigate('SolanaReceive')} />
+      ) : null}
     </Screen>
   );
 }
