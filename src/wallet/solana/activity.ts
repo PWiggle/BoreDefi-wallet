@@ -17,7 +17,33 @@ export type SolanaActivityItem = {
   /** Other side of a simple transfer when it can be read, else null. */
   counterparty: string | null;
   explorerUrl: string;
+  /** True when this wallet signed / paid the fee (its own action). */
+  feePayer?: boolean;
+  /** An unknown (unlisted) SPL mint landed in this wallet in this transaction. */
+  unknownMintIn?: boolean;
 };
+
+/** Incoming SOL below this (0.001 SOL) from someone else is treated as dust, a common address-poisoning lure. */
+export const SOLANA_DUST_LAMPORTS = 1_000_000n;
+
+/**
+ * Why a row is hidden by default (null = shown). Hidden: failed transactions someone else sent (spam), tiny
+ * incoming SOL from others (dust / poisoning), and unknown tokens pushed into the wallet. Own actions always show.
+ */
+export function solanaActivityHiddenReason(item: SolanaActivityItem): string | null {
+  if (item.feePayer) return null;
+  if (item.status === 'failed') return 'Failed transaction sent by someone else';
+  if (item.unknownMintIn) return 'Unknown token sent to you (possible spam)';
+  if (item.direction === 'in' && item.symbol === 'SOL' && item.amount < SOLANA_DUST_LAMPORTS) return 'Dust (tiny amount from an unknown sender)';
+  return null;
+}
+
+export function splitSolanaActivity(items: SolanaActivityItem[]): { shown: SolanaActivityItem[]; hidden: SolanaActivityItem[] } {
+  const shown: SolanaActivityItem[] = [];
+  const hidden: SolanaActivityItem[] = [];
+  for (const item of items) (solanaActivityHiddenReason(item) ? hidden : shown).push(item);
+  return { shown, hidden };
+}
 
 type TokenBalance = { accountIndex: number; mint: string; owner?: string; uiTokenAmount: { amount: string; decimals: number } };
 
@@ -77,6 +103,7 @@ export function parseSolanaActivity(
   const index = keys.indexOf(owner);
   const feePayer = keys[0] === owner;
   const feeLamports = feePayer ? BigInt(tx.meta.fee) : 0n;
+  const flags = { feePayer } as const;
 
   // Known-token change for accounts this wallet owns.
   const tokenDelta = new Map<string, { delta: bigint; decimals: number }>();
@@ -90,6 +117,7 @@ export function parseSolanaActivity(
   };
   add(tx.meta.postTokenBalances, 1n);
   add(tx.meta.preTokenBalances, -1n);
+  const unknownMintIn = [...tokenDelta].some(([mint, { delta }]) => delta > 0n && !findKnownToken(mint, cluster));
   for (const [mint, { delta, decimals }] of tokenDelta) {
     const known = findKnownToken(mint, cluster);
     if (!known || delta === 0n) continue;
@@ -102,11 +130,13 @@ export function parseSolanaActivity(
       amount: abs(delta),
       feeLamports,
       counterparty: counterpartyRow?.owner ?? null,
+      ...flags,
+      unknownMintIn,
     };
   }
 
   if (index < 0) {
-    return { ...empty, feeLamports };
+    return { ...empty, feeLamports, ...flags, unknownMintIn };
   }
   const solDelta = BigInt(tx.meta.postBalances[index] ?? 0) - BigInt(tx.meta.preBalances[index] ?? 0);
   const net = solDelta + feeLamports; // add back the fee so a send shows what the other side got
@@ -120,7 +150,7 @@ export function parseSolanaActivity(
       break;
     }
   }
-  return { ...base, direction, symbol: 'SOL', decimals: SOL_DECIMALS, amount: abs(net), feeLamports, counterparty };
+  return { ...base, direction, symbol: 'SOL', decimals: SOL_DECIMALS, amount: abs(net), feeLamports, counterparty, ...flags, unknownMintIn };
 }
 
 /** Recent activity for the owner: signatures first, then each transaction (3 at a time for public RPC limits). */

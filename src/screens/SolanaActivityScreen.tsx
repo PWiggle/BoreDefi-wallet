@@ -7,7 +7,7 @@ import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { formatTimestamp, shortenAddress } from '../wallet/format';
-import { fetchSolanaActivity, type SolanaActivityItem } from '../wallet/solana/activity';
+import { fetchSolanaActivity, solanaActivityHiddenReason, splitSolanaActivity, type SolanaActivityItem } from '../wallet/solana/activity';
 import { SOLANA_CLUSTER } from '../wallet/solana/config';
 import { formatSol, formatSolanaAmount } from '../wallet/solana/format';
 
@@ -35,6 +35,7 @@ export function SolanaActivityScreen() {
   const [items, setItems] = useState<SolanaActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
 
   const load = useCallback(async () => {
     if (!solanaAddress) return;
@@ -53,6 +54,8 @@ export function SolanaActivityScreen() {
   );
 
   const hide = settings.hideBalances;
+  const { shown, hidden } = splitSolanaActivity(items ?? []);
+  const rows = showHidden ? [...shown, ...hidden] : shown;
   return (
     <Screen
       title="Solana activity"
@@ -67,10 +70,20 @@ export function SolanaActivityScreen() {
       <ErrorBanner message={error} />
       {items === null && !error ? <Text style={styles.empty}>Loading…</Text> : null}
       {items?.length === 0 ? <Text style={styles.empty}>No Solana transactions yet.</Text> : null}
-      {(items ?? []).map((item) => (
+      {hidden.length > 0 ? (
+        <Pressable onPress={() => setShowHidden((v) => !v)} style={styles.item}>
+          <Text style={styles.meta}>
+            {showHidden ? 'Hide' : 'Show hidden'} ({hidden.length}): spam, dust and failed transactions others sent you. Never copy an address from these.
+          </Text>
+        </Pressable>
+      ) : null}
+      {rows.map((item) => (
         <Pressable key={item.signature} style={styles.item} onPress={() => Linking.openURL(item.explorerUrl)}>
           <View style={styles.top}>
-            <Text style={item.status === 'failed' ? styles.failed : styles.dir}>{directionLabel(item)}</Text>
+            <Text style={item.status === 'failed' ? styles.failed : styles.dir}>
+              {directionLabel(item)}
+              {solanaActivityHiddenReason(item) ? ` · ${solanaActivityHiddenReason(item)}` : ''}
+            </Text>
             <Text style={styles.link}>Solscan ↗</Text>
           </View>
           {item.amount > 0n ? (
