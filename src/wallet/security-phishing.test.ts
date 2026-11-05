@@ -6,7 +6,10 @@ import { checkPhishing, refreshPhishingList } from './security/phishing';
 test('official and common dApp sites are never blocked', () => {
   for (const u of ['https://app.uniswap.org', 'opensea.io', 'pro.opensea.io', 'jup.ag', 'https://mevvy.app', 'www.boredefi.com',
     'magiceden.io', 'aave.com', 'lido.fi', 'blur.io', 'etherscan.io', 'phantom.app', 'li.fi', 'jumper.exchange',
-    'apecoin.com', 'yuga.com', 'metamask.io', 'portfolio.metamask.io', 'raydium.io', 'solscan.io']) {
+    'apecoin.com', 'yuga.com', 'metamask.io', 'portfolio.metamask.io', 'raydium.io', 'solscan.io',
+    'uniswap.org', 'uniswapfoundation.org', 'blog.uniswap.org', 'apechain.com', 'docs.apechain.com', 'apescan.io', 'apestake.io',
+    'phantom.com', 'help.phantom.app', 'station.jup.ag', 'support.metamask.io', 'yugalabs.io', 'otherside.xyz', 'boredapeyachtclub.com',
+    'lilmutantapeclub.com', 'mevvy.app/swap', 'magiceden.us']) {
     assert.equal(checkPhishing(u).blocked, false, u);
   }
 });

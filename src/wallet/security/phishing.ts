@@ -10,7 +10,7 @@ export const PHISHING_LIST_URL = 'https://raw.githubusercontent.com/MetaMask/eth
 /** Official domains for brands we protect. Any other host that imitates one of these is treated as phishing. */
 export const PROTECTED_BRANDS: { brand: string; domains: string[] }[] = [
   { brand: 'opensea', domains: ['opensea.io'] },
-  { brand: 'uniswap', domains: ['uniswap.org', 'app.uniswap.org'] },
+  { brand: 'uniswap', domains: ['uniswap.org', 'app.uniswap.org', 'uniswapfoundation.org', 'uniswap.foundation'] },
   { brand: 'yuga', domains: ['yuga.com', 'yugalabs.io'] },
   { brand: 'bayc', domains: ['boredapeyachtclub.com', 'bayc.com'] },
   { brand: 'boredape', domains: ['boredapeyachtclub.com'] },
