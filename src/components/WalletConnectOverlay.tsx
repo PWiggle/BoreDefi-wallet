@@ -5,6 +5,7 @@ import { useWallet } from '../context/WalletContext';
 import { inspectDappApproval } from '../wallet/approval-risk';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
+import { neutralizeUrls } from '../wallet/security/text-safety';
 import { hexToUtf8, pickSignMessage } from '../wallet/wc';
 import { formatNetworkFee } from '../wallet/network-fee';
 import { reviewDappRequest } from '../wallet/request-review';
@@ -88,7 +89,7 @@ export function WalletConnectOverlay() {
     return (
       <ConfirmSheet
         visible
-        title={`Connect to ${pendingProposal.name}`}
+        title={`Connect to ${neutralizeUrls(pendingProposal.name)}`}
         network={selectedChain.name}
         from={session?.address}
         extra={[
@@ -114,7 +115,7 @@ export function WalletConnectOverlay() {
       <ProtectedGuardSheet
         verdict={verdict}
         network={CHAINS[pendingRequest.chainId].name}
-        dapp={pendingRequest.peerName}
+        dapp={neutralizeUrls(pendingRequest.peerName)}
         preview={preview}
         busy={busy}
         error={error}
@@ -135,7 +136,7 @@ export function WalletConnectOverlay() {
   return (
     <ConfirmSheet
       visible
-      title={risk?.danger ? 'Danger: collection-wide approval' : pendingRequest.peerName}
+      title={risk?.danger ? 'Danger: collection-wide approval' : neutralizeUrls(pendingRequest.peerName)}
       network={CHAINS[pendingRequest.chainId].name}
       from={tx?.from ?? session?.address}
       to={isSend ? tx?.to : undefined}
@@ -153,7 +154,7 @@ export function WalletConnectOverlay() {
         { label: 'Request', value: requestText },
         ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
         ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
-        { label: 'dApp', value: pendingRequest.peerName },
+        { label: 'dApp', value: neutralizeUrls(pendingRequest.peerName) },
       ]}
       warnings={[...(risk?.warnings ?? []), ...(error ? [error] : [])]}
       variant={risk?.danger ? 'danger' : 'default'}
@@ -168,7 +169,7 @@ export function WalletConnectOverlay() {
 
 function safePreview(params: unknown[]): string {
   try {
-    return hexToUtf8(pickSignMessage(params)).slice(0, 400);
+    return neutralizeUrls(hexToUtf8(pickSignMessage(params))).slice(0, 400);
   } catch {
     return 'Message preview unavailable.';
   }

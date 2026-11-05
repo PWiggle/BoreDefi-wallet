@@ -1,6 +1,7 @@
 import { getAddress, isAddress } from 'ethers';
 
 import { safeNftImageUrl } from './nft-media';
+import { neutralizeUrls, spamTextReasons } from './security/text-safety';
 import { type NftItem } from './nfts';
 import {
   FAKE_LABEL,
@@ -142,9 +143,12 @@ export function classifyNftSpam(item: NftItem, revealed: ReadonlySet<string>): N
     reasons.push('Unknown collection — treated as an unsolicited airdrop until you show it.');
   }
 
+  const lure = spamTextReasons(item.name, item.collection, item.imageUrl && !image ? item.imageUrl : null);
+  reasons.push(...lure);
   const key = nftStorageKey(item);
   // A Yuga lookalike stays hidden even after "Show anyway" was tapped before this check existed.
-  const hidden = yugaFake ? true : reasons.length > 0 && !revealed.has(key);
+  // Lookalikes and link / bait lures stay hidden even after an old "Show anyway".
+  const hidden = yugaFake || lure.length > 0 ? true : reasons.length > 0 && !revealed.has(key);
   return {
     hidden,
     reasons,
@@ -166,7 +170,7 @@ export function displayNftName(item: Pick<NftItem, 'chainId' | 'contract' | 'tok
   if (asset && asset.standard !== 'ERC-20') {
     return `${asset.name} #${item.tokenId}`;
   }
-  return item.name;
+  return neutralizeUrls(item.name) || `#${item.tokenId}`;
 }
 
 export function displayCollectionName(item: Pick<NftItem, 'chainId' | 'contract' | 'collection'>): string {
@@ -174,5 +178,5 @@ export function displayCollectionName(item: Pick<NftItem, 'chainId' | 'contract'
   if (asset && asset.standard !== 'ERC-20') {
     return asset.name;
   }
-  return item.collection.trim() || 'Collection';
+  return neutralizeUrls(item.collection.trim()) || 'Collection';
 }
