@@ -73,17 +73,14 @@ export function SolanaActivityScreen() {
       {hidden.length > 0 ? (
         <Pressable onPress={() => setShowHidden((v) => !v)} style={styles.item}>
           <Text style={styles.meta}>
-            {showHidden ? 'Hide' : 'Show hidden'} ({hidden.length}): spam, dust and failed transactions others sent you. Never copy an address from these.
+            {showHidden ? 'Hide' : 'Show hidden'} ({hidden.length}): spam, dust and failed transactions. Never copy an address from these.
           </Text>
         </Pressable>
       ) : null}
       {rows.map((item) => (
         <Pressable key={item.signature} style={styles.item} onPress={() => Linking.openURL(item.explorerUrl)}>
           <View style={styles.top}>
-            <Text style={item.status === 'failed' ? styles.failed : styles.dir}>
-              {directionLabel(item)}
-              {solanaActivityHiddenReason(item) ? ` · ${solanaActivityHiddenReason(item)}` : ''}
-            </Text>
+            <Text style={item.status === 'failed' ? styles.failed : styles.dir}>{directionLabel(item)}</Text>
             <Text style={styles.link}>Solscan ↗</Text>
           </View>
           {item.amount > 0n ? (
@@ -92,6 +89,7 @@ export function SolanaActivityScreen() {
               {hide ? '••••' : formatSolanaAmount(item.amount, item.decimals)} {item.symbol}
             </Text>
           ) : null}
+          {solanaActivityHiddenReason(item) ? <Text style={styles.meta}>{solanaActivityHiddenReason(item)}</Text> : null}
           <Text style={styles.meta}>
             {item.blockTime ? formatTimestamp(item.blockTime) : 'Pending'}
             {item.counterparty ? ` · ${item.direction === 'in' ? 'from' : 'to'} ${shortenAddress(item.counterparty)}` : ''}

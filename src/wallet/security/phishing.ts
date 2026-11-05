@@ -110,7 +110,7 @@ export function checkPhishing(raw: string | null | undefined): PhishingVerdict {
   if (!raw) return { blocked: false, reason: null };
   const trimmed = raw.trim();
   if (/^(javascript|data|vbscript|file):/i.test(trimmed)) {
-    return { blocked: true, reason: 'This link runs code or opens a local file. Blocked.' };
+    return { blocked: true, reason: 'this link runs code or opens a local file.' };
   }
   const host = hostOf(trimmed);
   if (!host) return { blocked: false, reason: null };
@@ -119,11 +119,11 @@ export function checkPhishing(raw: string | null | undefined): PhishingVerdict {
     return { blocked: true, reason: `${host} is on the public phishing blocklist.` };
   }
   if (host.split('.').some((l) => l.startsWith('xn--')) || /[^\x00-\x7f]/.test(host)) {
-    return { blocked: true, reason: `${host} uses lookalike (punycode) letters. Blocked to protect your wallet.` };
+    return { blocked: true, reason: `${host} uses lookalike (punycode) letters.` };
   }
   const brand = lookalikeBrand(host);
   if (brand) {
-    return { blocked: true, reason: `${host} imitates ${brand} but is not its official site. Blocked.` };
+    return { blocked: true, reason: `${host} imitates ${brand} but is not its official site.` };
   }
   return { blocked: false, reason: null };
 }
