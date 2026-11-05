@@ -17,6 +17,8 @@ export const DAPP_BOOKMARKS: DappBookmark[] = [
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
   { name: 'Lido', url: 'https://stake.lido.fi', blurb: 'Stake ETH' },
   { name: 'Jumper', url: 'https://jumper.exchange', blurb: 'Bridge and swap' },
+  // Mevvy (built by Mev): Jupiter-powered Solana swaps; signs in Phantom until in-app Solana swaps ship.
+  { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' },
 ];
 
 export const DEFAULT_BROWSER_URL = 'https://app.uniswap.org';

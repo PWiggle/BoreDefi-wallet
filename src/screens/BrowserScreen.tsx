@@ -415,7 +415,13 @@ export function BrowserScreen() {
       </View>
       <View style={styles.bookmarks}>
         {DAPP_BOOKMARKS.map((item) => (
-          <Pressable key={item.url} onPress={() => open(item.url)} style={styles.chip}>
+          <Pressable
+            key={item.url}
+            onPress={() => open(item.url)}
+            style={styles.chip}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name}, ${item.blurb}`}
+          >
             <Text style={styles.chipText}>{item.name}</Text>
           </Pressable>
         ))}

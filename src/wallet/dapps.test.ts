@@ -65,3 +65,13 @@ test('URL bar and prompt origin follow redirects to the page actually loaded', (
   // Look-alike hosts are different origins.
   assert.notEqual(dappOrigin('https://www.boredefi.com.evil.io/connect'), dappOrigin(loaded));
 });
+
+test('Browser tab has a Mevvy tile for Solana swaps (1.0.6), on every platform', () => {
+  const mevvy = DAPP_BOOKMARKS.find((item) => item.name === 'Mevvy');
+  assert.deepEqual(mevvy, { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' });
+  assert.equal(normalizeDappUrl(mevvy!.url), 'https://mevvy.app');
+  // Uniswap and the other EVM tiles stay.
+  for (const name of ['BoreDefi', 'BoreDash', 'Uniswap', 'Aave', 'Lido', 'Jumper']) {
+    assert.ok(DAPP_BOOKMARKS.some((item) => item.name === name), name);
+  }
+});
