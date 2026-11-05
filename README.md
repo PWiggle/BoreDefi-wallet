@@ -79,7 +79,7 @@ The NFTs tab is a Collectibles-style **2-column image grid**, grouped by collect
 
 ### dApp browser
 
-In-app WebView with an injected provider. Sites can call `eth_requestAccounts`, read RPCs, switch among supported chains, and sign. `wc:` URIs from the address bar or page navigation pair through WalletConnect. Bookmarks: Uniswap, Aave, Lido, Jumper.
+In-app WebView with an injected provider. Sites can call `eth_requestAccounts`, read RPCs, switch among supported chains, and sign. `wc:` URIs from the address bar or page navigation pair through WalletConnect. Bookmarks: BoredSwap, Aave, Lido, Morpho, Mevvy.
 
 ## Requirements
 
@@ -239,7 +239,7 @@ Swap / bridge token list (per chain): native + wrapped native + USDC + USDT. Eth
 20. **Stake** on Base (or Arbitrum / Optimism / Polygon / Avalanche): Aave V3 USDC appears. Supply a small USDC amount, then withdraw. BNB Chain shows no market.
 21. **Bridge**: from and to chains must differ. Amount larger than balance fails. Quote names the LI.FI tool and a minimum received amount. Confirming without funds fails cleanly. Funded account: bridge a small native amount and confirm the source-chain hash.
 22. **NFTs**: 2-column collectibles grid grouped by collection. Tap opens detail (View primary, Send secondary, Hide NFT). Empty state shows No NFTs yet + Import. Import warns to paste the collectible contract, not a wallet. Hidden / possible spam is collapsed. Invalid recipient is rejected. Send is blocked if `ownerOf` / `balanceOf` does not match this wallet. Funded throwaway only: send an ERC-721 you own. In Browser / WalletConnect, a `setApprovalForAll` request is a red danger sheet with Reject first.
-23. **Browser**: open **Connect** / Uniswap / Aave / Lido / Jumper from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
+23. **Browser**: open BoredSwap / Aave / Lido / Morpho from bookmarks. The site can request accounts; reject once, then approve. A sign or send prompt can be rejected. Paste a `wc:` URI in the address bar and confirm the existing WalletConnect overlay appears. Switching the wallet network emits `chainChanged` to the page.
 24. Confirm logs still never print the recovery phrase or private key.
 
 ### Phase 4

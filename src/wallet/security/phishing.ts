@@ -20,6 +20,7 @@ export const PROTECTED_BRANDS: { brand: string; domains: string[] }[] = [
   { brand: 'jup', domains: ['jup.ag'] },
   { brand: 'mevvy', domains: ['mevvy.app'] },
   { brand: 'boredefi', domains: ['boredefi.com'] },
+  { brand: 'morpho', domains: ['morpho.org', 'app.morpho.org'] },
   { brand: 'apecoin', domains: ['apecoin.com'] },
 ];
 

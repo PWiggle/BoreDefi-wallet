@@ -71,7 +71,12 @@ test('Browser tab has a Mevvy tile for Solana swaps (1.0.6), on every platform',
   assert.deepEqual(mevvy, { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' });
   assert.equal(normalizeDappUrl(mevvy!.url), 'https://mevvy.app');
   // BoredSwap and the other EVM tiles stay.
-  for (const name of ['BoreDefi', 'BoreDash', 'BoredSwap', 'Aave', 'Lido', 'Jumper']) {
+  for (const name of ['BoreDefi', 'BoreDash', 'BoredSwap', 'Aave', 'Lido', 'Morpho']) {
     assert.ok(DAPP_BOOKMARKS.some((item) => item.name === name), name);
   }
+  const morpho = DAPP_BOOKMARKS.find((item) => item.name === 'Morpho');
+  assert.deepEqual(morpho, { name: 'Morpho', url: 'https://app.morpho.org', blurb: 'Lending' });
+  assert.equal(DAPP_BOOKMARKS.some((item) => /jumper/i.test(item.name) || /jumper\./i.test(item.url)), false);
+  const boredSwap = DAPP_BOOKMARKS.find((item) => item.name === 'BoredSwap');
+  assert.equal(boredSwap?.blurb, 'Swap and bridge');
 });

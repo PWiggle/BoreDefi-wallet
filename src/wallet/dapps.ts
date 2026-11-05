@@ -14,10 +14,10 @@ export const DAPP_BOOKMARKS: DappBookmark[] = [
   { name: 'BoreDefi', url: BOREDEFI_SITE_URL, blurb: 'Portfolio and Safety check' },
   { name: 'BoreDash', url: 'https://www.boredash.com', blurb: 'Live markets' },
   // BoredSwap (built by Mev): 0x-powered EVM swaps, 0.30% fee.
-  { name: 'BoredSwap', url: 'https://boredswap.app', blurb: 'Swap tokens' },
+  { name: 'BoredSwap', url: 'https://boredswap.app', blurb: 'Swap and bridge' },
   { name: 'Aave', url: 'https://app.aave.com', blurb: 'Supply and borrow' },
   { name: 'Lido', url: 'https://stake.lido.fi', blurb: 'Stake ETH' },
-  { name: 'Jumper', url: 'https://jumper.exchange', blurb: 'Bridge and swap' },
+  { name: 'Morpho', url: 'https://app.morpho.org', blurb: 'Lending' },
   // Mevvy (built by Mev): Jupiter-powered Solana swaps; signs in Phantom until in-app Solana swaps ship.
   { name: 'Mevvy', url: 'https://mevvy.app', blurb: 'Solana swaps' },
 ];
