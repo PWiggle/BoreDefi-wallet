@@ -1,7 +1,7 @@
 import { Contract, getAddress, isAddress, type TransactionResponse } from 'ethers';
 
 import { logger } from '../logger';
-import { alchemyEnabledFor, fetchAlchemyNfts, getAlchemyKey } from './alchemy';
+import { ALCHEMY_NETWORK, alchemyEnabledFor, fetchAlchemyNfts, getAlchemyKey } from './alchemy';
 import { CHAINS, type ChainId } from './chains';
 import { sendContractMethod } from './gas-limit';
 import { connectedWallet, getProvider } from './rpc';
@@ -160,7 +160,12 @@ export async function fetchNfts(
     }
     // Fall through to Blockscout.
   }
-  return fetchBlockscoutNfts(owner, chainId, fetchImpl, timeoutMs);
+  const viaBlockscout = await fetchBlockscoutNfts(owner, chainId, fetchImpl, timeoutMs);
+  if (viaBlockscout.autodetect === 'ok' || !alchemyKey || alchemyEnabledFor(chainId, alchemyKey) || !ALCHEMY_NETWORK[chainId]) {
+    return viaBlockscout;
+  }
+  // Blockscout unreachable on a Blockscout-first chain (Ethereum): try Alchemy as a backup before giving up.
+  return fetchAlchemyNfts(owner, chainId, alchemyKey, fetchImpl, timeoutMs);
 }
 
 export async function fetchBlockscoutNfts(

@@ -22,6 +22,7 @@ const DEK_KEY = 'boredefi.vault.dek';
 const NFT_REVEAL_KEY = 'boredefi.nft.revealed.v1';
 const NFT_HIDDEN_KEY = 'boredefi.nft.hidden.v1';
 const NFT_IMPORT_KEY = 'boredefi.nft.imported.v1';
+const NFT_LAST_GOOD_PREFIX = 'boredefi.nft.lastgood.v1.';
 const PROTECTED_POLICY_KEY = 'boredefi.protected.policy.v1';
 
 const secureOptions: SecureStore.SecureStoreOptions = {
@@ -232,4 +233,26 @@ export async function clearAllWalletData(): Promise<void> {
     removeItem(PROTECTED_POLICY_KEY),
   ]);
   logger.info('Local wallet data cleared');
+}
+
+/** Last NFT list that loaded for one wallet + network; shown when the catalog is briefly unreachable. */
+function nftLastGoodKey(owner: string, chainId: number): string {
+  return `${NFT_LAST_GOOD_PREFIX}${chainId}.${owner.toLowerCase()}`;
+}
+
+export async function loadLastGoodNfts(owner: string, chainId: number): Promise<NftItem[] | null> {
+  try {
+    const stored = parseJson<NftItem[]>(await readItem(nftLastGoodKey(owner, chainId)));
+    return Array.isArray(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastGoodNfts(owner: string, chainId: number, items: NftItem[]): Promise<void> {
+  try {
+    await writeItem(nftLastGoodKey(owner, chainId), JSON.stringify(items));
+  } catch {
+    // Cache only; never block the NFT tab.
+  }
 }

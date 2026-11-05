@@ -26,9 +26,12 @@ import {
   nftStorageKey,
   type NftSpamAssessment,
 } from '../wallet/nft-spam';
+import { buildNftGallery, reconcileNftFetch } from '../wallet/nft-gallery';
 import { fetchNfts, groupNftsByCollection, mergeNftLists, nftAutodetectLabel, type NftItem } from '../wallet/nfts';
 import {
   loadHiddenNfts,
+  loadLastGoodNfts,
+  saveLastGoodNfts,
   loadImportedNfts,
   loadRevealedNfts,
   saveHiddenNfts,
@@ -212,12 +215,18 @@ export function NftsScreen() {
     setBusy(true);
     setError(null);
     try {
-      const [{ items: catalog, autodetect }, imported, shown, hidden] = await Promise.all([
-        fetchNfts(PROOF_NFT_OWNER ?? session.address, selectedChain.id),
-        loadImportedNfts(),
-        loadRevealedNfts(),
-        loadHiddenNfts(),
+      const owner = PROOF_NFT_OWNER ?? session.address;
+      const [fetched, lastGood, imported, shown, hidden] = await Promise.all([
+        fetchNfts(owner, selectedChain.id),
+        loadLastGoodNfts(owner, selectedChain.id),
+        loadImportedNfts().catch(() => [] as NftItem[]),
+        loadRevealedNfts().catch(() => [] as string[]),
+        loadHiddenNfts().catch(() => [] as string[]),
       ]);
+      const { items: catalog, autodetect } = reconcileNftFetch(fetched, lastGood);
+      if (fetched.autodetect === 'ok') {
+        void saveLastGoodNfts(owner, selectedChain.id, fetched.items);
+      }
       setItems(mergeNftLists(catalog, imported.filter((item) => item.chainId === selectedChain.id)));
       setAutodetectDown(autodetect === 'unavailable');
       setRevealed(new Set(shown));
@@ -235,21 +244,7 @@ export function NftsScreen() {
     }, [load]),
   );
 
-  const gallery = useMemo<GalleryItem[]>(
-    () =>
-      items.map((item) => {
-        const risk = classifyNftSpam(item, revealed);
-        const key = nftStorageKey(item);
-        return {
-          item,
-          risk: {
-            ...risk,
-            hidden: userHidden.has(key) || risk.hidden,
-          },
-        };
-      }),
-    [items, revealed, userHidden],
-  );
+  const gallery = useMemo<GalleryItem[]>(() => buildNftGallery(items, revealed, userHidden), [items, revealed, userHidden]);
   const visible = gallery.filter((entry) => !entry.risk.hidden);
   const hidden = gallery.filter((entry) => entry.risk.hidden);
   const groups = groupNftsByCollection(visible);
