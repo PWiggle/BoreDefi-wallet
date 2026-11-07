@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Image, Text, TextInput, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -9,6 +10,7 @@ import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainStackParamList } from '../navigation';
+import { neutralizeUrls } from '../wallet/security/text-safety';
 import { extractWalletConnectUri } from '../wallet/wc';
 
 function wcStyles({ colors, card, field, spacing }: Theme) {
@@ -31,6 +33,17 @@ function wcStyles({ colors, card, field, spacing }: Theme) {
     name: {
       color: colors.text,
       fontWeight: '700' as const,
+    },
+    sessionHead: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      gap: spacing.sm,
+    },
+    icon: {
+      backgroundColor: colors.bg,
+      borderRadius: 8,
+      height: 32,
+      width: 32,
     },
   };
 }
@@ -81,14 +94,10 @@ export function WalletConnectScreen() {
   }, [projectId, ready, route.params?.uri]);
 
   return (
-    <Screen title="WalletConnect" subtitle="Pair a dApp with this wallet. Browser tab can also open wc: links.">
+    <Screen title="WalletConnect" subtitle="Connect desktop and mobile dApps: scan their QR code or paste their wc: link.">
       <ErrorBanner message={localError ?? error} />
       {!projectId ? (
-        <Text style={styles.help}>
-          Create a free project at dashboard.reown.com and set EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID
-          in a local .env file, then restart Metro. The project ID is a public client identifier, not
-          a key that can move funds. Do not commit secrets.
-        </Text>
+        <Text style={styles.help}>WalletConnect is not configured in this build.</Text>
       ) : (
         <Text style={styles.help}>
           {ready ? 'Relay is ready. Scan or paste a wc: URI from a dApp.' : 'Starting WalletConnect…'}
@@ -107,19 +116,50 @@ export function WalletConnectScreen() {
       />
       <Button label="Pair" loading={busy} disabled={!projectId} onPress={() => connect()} />
       <Button
+        label="Paste link"
+        variant="secondary"
+        disabled={!projectId}
+        onPress={async () => {
+          const text = await Clipboard.getStringAsync().catch(() => '');
+          const pasted = extractWalletConnectUri(text);
+          if (!pasted) {
+            setLocalError(null);
+            setNotice('No WalletConnect link on the clipboard. Copy the wc: link from the dApp first.');
+            return;
+          }
+          setUri(pasted);
+          void connect(pasted);
+        }}
+      />
+      <Button
         label="Scan QR"
         variant="secondary"
         onPress={() => navigation.navigate('ScanQr', { purpose: 'walletconnect' })}
       />
-      <Text style={styles.section}>Sessions</Text>
+      <Text style={styles.section}>Connected apps</Text>
       {sessions.length === 0 ? (
-        <Text style={styles.help}>No connected dApps.</Text>
+        <Text style={styles.help}>No connected apps.</Text>
       ) : (
         sessions.map((item) => (
           <View key={item.topic} style={styles.session}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.help}>{item.url}</Text>
-            <Button label="Disconnect" variant="ghost" onPress={() => disconnect(item.topic)} />
+            <View style={styles.sessionHead}>
+              {item.icon ? <Image source={{ uri: item.icon }} style={styles.icon} /> : null}
+              <Text style={[styles.name, { flex: 1 }]}>{neutralizeUrls(item.name)}</Text>
+            </View>
+            {item.url ? <Text style={styles.help}>{item.url}</Text> : null}
+            {item.chains.length ? <Text style={styles.help}>{item.chains.join(', ')}</Text> : null}
+            {item.expiry ? (
+              <Text style={styles.help}>Expires {new Date(item.expiry * 1000).toLocaleDateString()}</Text>
+            ) : null}
+            <Button
+              label="Disconnect"
+              variant="ghost"
+              onPress={() => {
+                disconnect(item.topic).catch((err: unknown) =>
+                  setLocalError(err instanceof Error ? err.message : 'Could not disconnect.'),
+                );
+              }}
+            />
           </View>
         ))
       )}

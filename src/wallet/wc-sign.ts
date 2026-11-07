@@ -6,12 +6,15 @@ import { assertProtectedClearance } from './protected-guard';
 import { evaluateProtectedRequest } from './protected-runtime';
 import { resolveGasLimit, sendWithBufferedGas } from './gas-limit';
 import { connectedWallet } from './rpc';
+import { solanaKeypairFromMnemonic, signSolanaMessage } from './solana/derive';
+import { signSolanaWcMessage, signSolanaWcTransaction } from './solana/wc-solana';
 import { hexToUtf8, parseSwitchChainId, pickSignMessage } from './wc';
 
 export const ETH_SIGN_BLOCKED = 'Blocked: eth_sign can sign anything blind, so BoreDefi never signs it. Ask the site to use personal_sign or typed data.';
 
 export type WalletConnectRequestResult =
   | { kind: 'signature' | 'hash' | 'accounts' | 'switched'; value: string | string[] | true }
+  | { kind: 'solana'; value: { signature: string; transaction?: string } }
   | { kind: 'switch'; chainId: ChainId };
 
 function parseTypedData(raw: unknown): { domain: Record<string, unknown>; types: Record<string, unknown[]>; message: Record<string, unknown> } {
@@ -40,8 +43,25 @@ export async function handleWalletConnectRequest(input: {
   chainId: ChainId;
   /** Fingerprint returned by the red protected-asset warning after typed confirm + re-auth. */
   clearance?: string | null;
+  /** Solana address (same phrase, m/44'/501'/0'/0'). Required for solana_* methods. */
+  solanaAddress?: string | null;
 }): Promise<WalletConnectRequestResult> {
   const { mnemonic, address, method, params, chainId } = input;
+  if (method === 'solana_signMessage' || method === 'solana_signTransaction') {
+    if (!input.solanaAddress) {
+      throw new Error('Solana is not turned on in this wallet.');
+    }
+    const keypair = await solanaKeypairFromMnemonic(mnemonic);
+    if (keypair.address !== input.solanaAddress) {
+      throw new Error('Solana account mismatch. Nothing was signed.');
+    }
+    const sign = (bytes: Uint8Array) => signSolanaMessage(keypair, bytes);
+    const value =
+      method === 'solana_signMessage'
+        ? signSolanaWcMessage(params[0], keypair.address, sign)
+        : signSolanaWcTransaction(params[0], keypair.address, sign);
+    return { kind: 'solana', value };
+  }
   // Last line of defense: recompute the Yuga / BAYC guard right before the key is used.
   const verdict = await evaluateProtectedRequest({ method, params, chainId, owner: address, simulation: 'auto' });
   if (verdict) {

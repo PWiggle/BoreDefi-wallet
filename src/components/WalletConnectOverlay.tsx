@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Modal, ScrollView, Text, View } from 'react-native';
 
 import { describeRequest, useWalletConnect } from '../context/WalletConnectContext';
+import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
+import { requiresReauth, routeWalletConnectRequest, verifyLabel } from '../wallet/wc-session';
+import { readSolanaWcTransaction, reviewSolanaTransaction, decodeSignableMessage } from '../wallet/solana/wc-solana';
+import { Button } from './Button';
+import { ProtectedReauth } from './ProtectedReauth';
+import { WarningBanner } from './WarningBanner';
 import { inspectDappApproval } from '../wallet/approval-risk';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
@@ -27,21 +34,39 @@ function txValue(value: unknown, symbol: string): string | undefined {
 }
 
 export function WalletConnectOverlay() {
-  const { phase, session, selectedChain } = useWallet();
-  const { pendingProposal, pendingRequest, approveProposal, rejectProposal, approveRequest, rejectRequest } =
-    useWalletConnect();
+  const { phase, session, selectedChain, solanaAddress } = useWallet();
+  const {
+    pendingProposal,
+    pendingRequest,
+    queuedRequests,
+    notice,
+    clearNotice,
+    approveProposal,
+    rejectProposal,
+    approveRequest,
+    rejectRequest,
+  } = useWalletConnect();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [verdict, setVerdict] = useState<ProtectedVerdict | null>(null);
   const [checking, setChecking] = useState(false);
   const [preview, setPreview] = useState<TxPreview | null>(null);
+  // Set after Hold to approve on a signing request: a fresh PIN / biometric check runs before the key is used.
+  const [reauth, setReauth] = useState(false);
+  const styles = useThemedStyles(overlayStyles);
   const fee = useNetworkFee(pendingRequest?.chainId ?? 1, preview?.gasUsed ?? null, Boolean(pendingRequest));
 
   useEffect(() => {
     let cancelled = false;
     setVerdict(null);
     setPreview(null);
+    setReauth(false);
+    setError(null);
     if (!pendingRequest || !session) {
+      return;
+    }
+    if (routeWalletConnectRequest(pendingRequest.method) === 'solana') {
+      // Solana is decoded locally (wc-solana); the EVM simulator and Yuga guard don't apply.
       return;
     }
     setChecking(true);
@@ -69,8 +94,41 @@ export function WalletConnectOverlay() {
     };
   }, [pendingRequest, session]);
 
+  const solanaReview = useMemo(() => {
+    if (!pendingRequest || !solanaAddress) {
+      return null;
+    }
+    try {
+      if (pendingRequest.method === 'solana_signTransaction') {
+        const { tx } = readSolanaWcTransaction(pendingRequest.params[0]);
+        return { kind: 'tx' as const, review: reviewSolanaTransaction(tx, solanaAddress), error: null };
+      }
+      if (pendingRequest.method === 'solana_signMessage') {
+        const message = (pendingRequest.params[0] as { message?: string } | undefined)?.message ?? '';
+        return { kind: 'message' as const, text: decodeSignableMessage(message).text, error: null };
+      }
+    } catch (err) {
+      return { kind: 'invalid' as const, error: err instanceof Error ? err.message : 'Request could not be read.' };
+    }
+    return null;
+  }, [pendingRequest, solanaAddress]);
+
   if (phase !== 'unlocked') {
     return null;
+  }
+
+  if (notice && !pendingProposal && !pendingRequest) {
+    return (
+      <Modal transparent animationType="fade" visible onRequestClose={clearNotice}>
+        <View style={styles.backdrop}>
+          <View style={styles.card}>
+            <Text style={styles.title}>WalletConnect</Text>
+            <WarningBanner danger lines={[neutralizeUrls(notice)]} />
+            <Button label="OK" onPress={clearNotice} />
+          </View>
+        </View>
+      </Modal>
+    );
   }
 
   const run = async (action: () => Promise<void>) => {
@@ -86,19 +144,33 @@ export function WalletConnectOverlay() {
   };
 
   if (pendingProposal) {
+    const mismatch = pendingProposal.verify === 'mismatch';
     return (
       <ConfirmSheet
         visible
-        title={`Connect to ${neutralizeUrls(pendingProposal.name)}`}
-        network={selectedChain.name}
+        title={`Connect to ${pendingProposal.name}`}
+        icon={pendingProposal.icon}
+        network={pendingProposal.chains.length ? pendingProposal.chains.join(', ') : selectedChain.name}
         from={session?.address}
         extra={[
-          { label: 'dApp', value: pendingProposal.url },
-          { label: 'Access', value: 'Shares your public address. Keys stay on this device. Never auto-sign.' },
+          { label: 'dApp', value: pendingProposal.url || 'No website given' },
+          { label: 'Verify', value: verifyLabel(pendingProposal.verify) },
+          ...(pendingProposal.methods.length
+            ? [{ label: 'Can ask you to', value: pendingProposal.methods.join(', ') }]
+            : []),
+          ...(pendingProposal.unsupportedChains.length
+            ? [{ label: 'Not supported (skipped)', value: pendingProposal.unsupportedChains.join(', ') }]
+            : []),
+          ...(solanaAddress && pendingProposal.chains.some((name) => name.startsWith('Solana'))
+            ? [{ label: 'Solana account', value: solanaAddress }]
+            : []),
+          { label: 'Access', value: 'Shares your public address. Keys stay on this device. Every signature asks you first.' },
         ]}
-        warnings={error ? [error] : []}
+        warnings={[...pendingProposal.warnings, ...(error ? [error] : [])]}
+        variant={mismatch ? 'danger' : 'default'}
         mode="buttons"
-        confirmLabel="Connect"
+        confirmLabel={mismatch ? 'Connect anyway' : 'Connect'}
+        cancelLabel="Reject"
         loading={busy}
         onConfirm={() => run(approveProposal)}
         onCancel={() => run(rejectProposal)}
@@ -108,6 +180,101 @@ export function WalletConnectOverlay() {
 
   if (!pendingRequest) {
     return null;
+  }
+
+  const approve = () => {
+    if (requiresReauth(pendingRequest.method)) {
+      setError(null);
+      setReauth(true);
+      return;
+    }
+    void run(() => approveRequest());
+  };
+
+  if (reauth) {
+    return (
+      <Modal transparent animationType="fade" visible onRequestClose={() => setReauth(false)}>
+        <View style={styles.backdrop}>
+          <ScrollView contentContainerStyle={styles.scroll}>
+            <View style={styles.card}>
+              <Text style={styles.title}>Confirm it's you</Text>
+              <Text style={styles.body}>
+                {neutralizeUrls(pendingRequest.peerName)} wants a signature. Nothing is signed until you confirm.
+              </Text>
+              {error ? <WarningBanner danger lines={[error]} /> : null}
+              <ProtectedReauth
+                reason="Sign a WalletConnect request"
+                busy={busy}
+                confirmLabel="Sign"
+                onVerified={() => {
+                  void run(async () => {
+                    await approveRequest();
+                    setReauth(false);
+                  });
+                }}
+              />
+              <Button
+                label="Reject"
+                variant="ghost"
+                disabled={busy}
+                onPress={() => {
+                  setReauth(false);
+                  void run(rejectRequest);
+                }}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  }
+
+  const queued = queuedRequests > 0 ? [`${queuedRequests} more request${queuedRequests === 1 ? '' : 's'} waiting after this one.`] : [];
+  const verifyWarning =
+    pendingRequest.verify === 'mismatch'
+      ? ['Reown Verify: this request did not come from the site it claims. Reject unless you are sure.']
+      : [];
+
+  if (routeWalletConnectRequest(pendingRequest.method) === 'solana') {
+    const review = solanaReview?.kind === 'tx' ? solanaReview.review : null;
+    const invalid = solanaReview?.kind === 'invalid' ? solanaReview.error : null;
+    const danger = Boolean(review?.danger) || Boolean(invalid);
+    return (
+      <ConfirmSheet
+        visible
+        title={review?.danger ? 'Danger: Solana transaction' : neutralizeUrls(pendingRequest.peerName)}
+        network="Solana"
+        from={solanaAddress ?? undefined}
+        amount={
+          invalid
+            ? 'Cannot be signed'
+            : solanaReview?.kind === 'message'
+              ? 'Message signature'
+              : review?.summary ?? pendingRequest.method
+        }
+        fee={pendingRequest.method === 'solana_signTransaction' ? 'Paid when the dApp sends it' : 'None (signature only)'}
+        extra={[
+          {
+            label: 'Request',
+            value:
+              solanaReview?.kind === 'message'
+                ? neutralizeUrls(solanaReview.text).slice(0, 400)
+                : describeRequest(pendingRequest),
+          },
+          ...(review ? [{ label: 'Programs', value: review.programs.join(', ') }] : []),
+          ...(review && !review.feePayerIsWallet ? [{ label: 'Fee payer', value: 'Another account (not you)' }] : []),
+          { label: 'dApp', value: neutralizeUrls(pendingRequest.peerName) },
+        ]}
+        warnings={[...(invalid ? [invalid] : []), ...(review?.warnings ?? []), ...verifyWarning, ...queued, ...(error ? [error] : [])]}
+        variant={danger ? 'danger' : 'default'}
+        mode={invalid ? 'buttons' : 'hold'}
+        loading={busy}
+        confirmLabel={invalid ? 'Reject' : danger ? 'Hold to approve anyway' : 'Hold to approve'}
+        cancelLabel="Reject"
+        onConfirm={invalid ? () => run(rejectRequest) : approve}
+        onCancel={() => run(rejectRequest)}
+      />
+    );
   }
 
   if (verdict?.protected) {
@@ -156,12 +323,12 @@ export function WalletConnectOverlay() {
         ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
         { label: 'dApp', value: neutralizeUrls(pendingRequest.peerName) },
       ]}
-      warnings={[...(risk?.warnings ?? []), ...(error ? [error] : [])]}
-      variant={risk?.danger ? 'danger' : 'default'}
+      warnings={[...(risk?.warnings ?? []), ...verifyWarning, ...queued, ...(error ? [error] : [])]}
+      variant={risk?.danger || pendingRequest.verify === 'mismatch' ? 'danger' : 'default'}
       loading={busy || checking}
       confirmLabel={risk?.danger ? 'Hold to approve anyway' : 'Hold to approve'}
       cancelLabel="Reject"
-      onConfirm={() => run(() => approveRequest())}
+      onConfirm={approve}
       onCancel={() => run(rejectRequest)}
     />
   );
@@ -173,4 +340,22 @@ function safePreview(params: unknown[]): string {
   } catch {
     return 'Message preview unavailable.';
   }
+}
+
+function overlayStyles({ colors, radius, spacing, type }: Theme) {
+  return {
+    backdrop: { backgroundColor: colors.overlay, flex: 1, justifyContent: 'center' as const },
+    scroll: { flexGrow: 1, justifyContent: 'center' as const, padding: spacing.lg },
+    card: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      gap: spacing.sm,
+      margin: spacing.lg,
+      padding: spacing.lg,
+    },
+    title: { color: colors.text, fontSize: 22, fontWeight: '800' as const },
+    body: { ...type.body, fontSize: 14 },
+  };
 }

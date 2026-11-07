@@ -17,19 +17,22 @@ export const WALLETCONNECT_METHODS = [
 ] as const;
 
 /**
- * Public Reown Cloud client ID used by the live BoreDefi listing.
- * Not a secret. Override with EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID.
+ * Public Reown WalletKit project ID (team "BoreDefi Wallet", free Starter plan). It's a client identifier,
+ * not a secret, and can't move funds. Override with EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID.
+ * Never use the dApp-side AppKit ID (boredefi.com's Connect button) here.
  */
-export const PUBLIC_WALLETCONNECT_PROJECT_ID = 'c884e13aaa967e608946ee76f636f27b';
+export const PUBLIC_WALLETCONNECT_PROJECT_ID = '5c2313b9c1b69242e695208c052e18a9';
+/** boredefi.com's dApp-side AppKit project. Wallet code must never run on it. */
+export const DAPP_APPKIT_PROJECT_ID = 'bbd12489086c59bfdb9e0a49fc05c22f';
 
-/** Relay allowlists this HTTPS origin. The package name is also accepted. */
-export const WALLETCONNECT_RELAY_ORIGIN = 'https://boredefi.money';
+/** Origin header sent to the relay (and WalletKit metadata URL). Reown accepts it while the project has no allowlist; add it there (plus com.boredefi.wallet) if one is ever set. */
+export const WALLETCONNECT_RELAY_ORIGIN = 'https://www.boredefi.com';
 
 export const WALLETCONNECT_EVENTS = ['accountsChanged', 'chainChanged', 'disconnect'] as const;
 
 export function getWalletConnectProjectId(): string | null {
   const value = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
-  return value ? value : PUBLIC_WALLETCONNECT_PROJECT_ID;
+  return value && value !== DAPP_APPKIT_PROJECT_ID ? value : PUBLIC_WALLETCONNECT_PROJECT_ID;
 }
 
 export function relayWebSocketOptions(
