@@ -9,6 +9,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
 import { envFromProcess, handleOnrampRequest } from './handler';
+import { onrampMode } from './stripe';
 
 const port = Number(process.env.PORT ?? 8787);
 const host = '127.0.0.1';
@@ -60,5 +61,5 @@ createServer((req, res) => {
     res.end(JSON.stringify({ error: 'Could not start the Stripe onramp.' }));
   });
 }).listen(port, host, () => {
-  console.log(`BoreDefi onramp test server on http://${host}:${port}/api/onramp-session`);
+  console.log(`BoreDefi onramp ${onrampMode(process.env.ONRAMP_MODE)} server on http://${host}:${port}/api/onramp-session`);
 });

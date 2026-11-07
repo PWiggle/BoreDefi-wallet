@@ -80,7 +80,9 @@ test('posted JSON is only those three fields, and a non-Stripe redirect is dropp
     appToken: '  public-token  ',
     fetchImpl: async (_url, init) => {
       captured = String(init?.body ?? '');
-      header = new Headers(init?.headers).get('x-boredefi-onramp') ?? '';
+      const headers = new Headers(init?.headers);
+      header = headers.get('x-boredefi-onramp') ?? '';
+      assert.equal(headers.get('x-vercel-protection-bypass'), null);
       return new Response(
         JSON.stringify({
           redirect_url: 'https://crypto.link.com?session_hash=unit',
@@ -105,6 +107,19 @@ test('posted JSON is only those three fields, and a non-Stripe redirect is dropp
     fetchImpl: async () => new Response(JSON.stringify({ redirect_url: 'https://crypto.link.com.evil.test/phish' }), { status: 200 }),
   });
   assert.equal(phish.ok, false);
+
+  let bypassHeader: string | null = 'missing';
+  await postOnrampSession({
+    endpoint: 'https://preview.example/api/onramp-session',
+    body: built.body,
+    appToken: null,
+    vercelBypass: '  preview-bypass  ',
+    fetchImpl: async (_url, init) => {
+      bypassHeader = new Headers(init?.headers).get('x-vercel-protection-bypass');
+      return new Response(JSON.stringify({ redirect_url: 'https://crypto.link.com?session_hash=unit' }), { status: 200 });
+    },
+  });
+  assert.equal(bypassHeader, 'preview-bypass');
 
   const insecure = await postOnrampSession({
     endpoint: 'http://10.1.2.3/api/onramp-session',

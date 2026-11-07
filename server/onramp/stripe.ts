@@ -38,12 +38,23 @@ export class OnrampRefused extends Error {
   }
 }
 
+export type OnrampMode = 'test' | 'live';
+
+/** Only the exact value `live` selects live mode. Anything else stays in test mode. */
+export function onrampMode(value: string | undefined): OnrampMode {
+  return value?.trim().toLowerCase() === 'live' ? 'live' : 'test';
+}
+
+function normalizedKey(value: string | undefined): string {
+  return value?.normalize('NFKC').trim() ?? '';
+}
+
 /**
  * Accepts only a test-mode secret key. Live keys (`sk_live`, `rk_live`) are refused
  * even if they were placed in STRIPE_SECRET_KEY_TEST. There is no fallback env var.
  */
 export function assertTestSecretKey(value: string | undefined): string {
-  const key = value?.normalize('NFKC').trim() ?? '';
+  const key = normalizedKey(value);
   const lower = key.toLowerCase();
   if (!key) {
     throw new OnrampRefused('STRIPE_SECRET_KEY_TEST is not set on the server.', 503);
@@ -57,6 +68,27 @@ export function assertTestSecretKey(value: string | undefined): string {
   return key;
 }
 
+/** Accepts only a live secret (`sk_live_` or `rk_live_`). Test keys are refused. */
+export function assertLiveSecretKey(value: string | undefined): string {
+  const key = normalizedKey(value);
+  const lower = key.toLowerCase();
+  if (!key) {
+    throw new OnrampRefused('STRIPE_SECRET_KEY_LIVE is not set on the server.', 503);
+  }
+  if (lower.includes('sk_test') || lower.includes('rk_test')) {
+    throw new OnrampRefused('Test Stripe keys are refused in live mode.', 403);
+  }
+  const livePrefix = key.startsWith('sk_live_') ? 'sk_live_' : key.startsWith('rk_live_') ? 'rk_live_' : null;
+  if (!livePrefix || key.length < livePrefix.length + 8) {
+    throw new OnrampRefused('Live mode requires a live Stripe secret key (sk_live_ or rk_live_).', 403);
+  }
+  return key;
+}
+
+export function assertSecretForMode(mode: OnrampMode, value: string | undefined): string {
+  return mode === 'live' ? assertLiveSecretKey(value) : assertTestSecretKey(value);
+}
+
 export function redactSecrets(value: string): string {
   return value
     .replace(/[sr]k_(test|live)_[A-Za-z0-9_]+/gi, '[redacted]')
@@ -67,6 +99,8 @@ export function redactSecrets(value: string): string {
 
 export type StripeOnrampInput = {
   secretKey: string;
+  /** Defaults to test so a forgotten mode cannot create a live session. */
+  mode?: OnrampMode;
   currency: string;
   network: string;
   walletAddress: string;
@@ -111,7 +145,8 @@ export async function createStripeOnrampSession(
   input: StripeOnrampInput,
   fetchImpl: typeof fetch = fetch,
 ): Promise<CreatedOnrampSession> {
-  const secretKey = assertTestSecretKey(input.secretKey);
+  const mode = input.mode ?? 'test';
+  const secretKey = assertSecretForMode(mode, input.secretKey);
   let response: Response;
   try {
     response = await fetchImpl(STRIPE_ONRAMP_API, {
@@ -136,7 +171,11 @@ export async function createStripeOnrampSession(
   } catch {
     throw new OnrampRefused('Stripe returned an unreadable onramp session.', 502);
   }
-  if (parsed.livemode !== false) {
+  if (mode === 'live') {
+    if (parsed.livemode !== true) {
+      throw new OnrampRefused('Stripe did not return a live-mode session.', 502);
+    }
+  } else if (parsed.livemode !== false) {
     throw new OnrampRefused('Stripe returned a live-mode session. This endpoint is test-mode only.', 502);
   }
   if (typeof parsed.redirect_url !== 'string' || !isStripeHostedOnrampUrl(parsed.redirect_url)) {

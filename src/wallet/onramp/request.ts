@@ -1,7 +1,7 @@
 import { isAddress } from 'ethers';
 
 import { isValidSolanaAddress } from '../solana/address';
-import { isAllowedOnrampEndpoint, onrampAppToken } from './config';
+import { isAllowedOnrampEndpoint, onrampAppToken, vercelBypassToken } from './config';
 import { ONRAMP_OFFERS, type OnrampOffer } from './offers';
 import { isStripeHostedOnrampUrl } from './url';
 
@@ -62,6 +62,8 @@ export async function postOnrampSession(input: {
   endpoint: string;
   body: OnrampSessionRequest;
   appToken: string | null;
+  /** Vercel Deployment Protection bypass. Omitted from the request when unset. */
+  vercelBypass?: string | null;
   fetchImpl?: typeof fetch;
 }): Promise<{ ok: true; redirectUrl: string } | { ok: false; error: string }> {
   if (!isAllowedOnrampEndpoint(input.endpoint)) {
@@ -79,6 +81,10 @@ export async function postOnrampSession(input: {
   const token = onrampAppToken(input.appToken ?? undefined);
   if (token) {
     headers['x-boredefi-onramp'] = token;
+  }
+  const bypass = vercelBypassToken(input.vercelBypass ?? undefined);
+  if (bypass) {
+    headers['x-vercel-protection-bypass'] = bypass;
   }
   const fetchImpl = input.fetchImpl ?? fetch;
   const controller = new AbortController();

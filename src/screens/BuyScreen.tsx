@@ -7,7 +7,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { ONRAMP_APP_TOKEN, ONRAMP_ENDPOINT } from '../wallet/onramp/config';
+import { ONRAMP_APP_TOKEN, ONRAMP_ENDPOINT, ONRAMP_VERCEL_BYPASS } from '../wallet/onramp/config';
 import { openStripeHostedOnramp } from '../wallet/onramp/open';
 import { assetChoices, offersForAsset, offersForWallet, initialOffer, type OnrampOffer } from '../wallet/onramp/offers';
 import { buildOnrampSessionRequest, postOnrampSession } from '../wallet/onramp/request';
@@ -83,6 +83,7 @@ export function BuyScreen() {
         endpoint: ONRAMP_ENDPOINT,
         body: built.body,
         appToken: ONRAMP_APP_TOKEN,
+        vercelBypass: ONRAMP_VERCEL_BYPASS,
       });
       if (!result.ok) {
         setError(result.error);

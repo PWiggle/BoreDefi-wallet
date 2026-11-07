@@ -12,6 +12,7 @@ const TEST_KEY = 'sk_test_unit_test_key';
 
 function env(overrides: Partial<OnrampServerEnv> = {}): OnrampServerEnv {
   return {
+    mode: 'test',
     stripeSecretKey: TEST_KEY,
     allowedOrigins: undefined,
     appToken: undefined,
@@ -31,7 +32,9 @@ function post(body: unknown, headers: Record<string, string> = {}): Request {
   });
 }
 
-function okDeps(onCall?: (input: { secretKey: string; currency: string; network: string; walletAddress: string }) => void): OnrampDeps {
+function okDeps(
+  onCall?: (input: { secretKey: string; mode?: 'test' | 'live'; currency: string; network: string; walletAddress: string }) => void,
+): OnrampDeps {
   return {
     now: () => 1_700_000_000_000,
     rateLimit: createRateLimiter(10, 60_000),
@@ -42,17 +45,28 @@ function okDeps(onCall?: (input: { secretKey: string; currency: string; network:
   };
 }
 
-test('envFromProcess reads only STRIPE_SECRET_KEY_TEST', () => {
+test('envFromProcess reads only the key for the selected mode', () => {
   const read = envFromProcess({
     STRIPE_SECRET_KEY: 'sk_live_abcdefghijklmnop',
     STRIPE_SECRET_KEY_TEST: TEST_KEY,
+    STRIPE_SECRET_KEY_LIVE: 'sk_live_abcdefghijklmnop',
     ONRAMP_ALLOWED_ORIGINS: 'https://app.example',
     ONRAMP_APP_TOKEN: 'app-token',
   });
+  assert.equal(read.mode, 'test');
   assert.equal(read.stripeSecretKey, TEST_KEY);
   assert.equal(read.allowedOrigins, 'https://app.example');
   assert.equal(read.appToken, 'app-token');
   assert.equal(envFromProcess({ STRIPE_SECRET_KEY: 'sk_live_abcdefghijklmnop' }).stripeSecretKey, undefined);
+  const live = envFromProcess({
+    ONRAMP_MODE: 'live',
+    STRIPE_SECRET_KEY_TEST: TEST_KEY,
+    STRIPE_SECRET_KEY_LIVE: 'sk_live_abcdefghijklmnop',
+  });
+  assert.equal(live.mode, 'live');
+  assert.equal(live.stripeSecretKey, 'sk_live_abcdefghijklmnop');
+  assert.equal(envFromProcess({ ONRAMP_MODE: 'live', STRIPE_SECRET_KEY_TEST: TEST_KEY }).stripeSecretKey, undefined);
+  assert.equal(envFromProcess({ ONRAMP_MODE: 'production' }).mode, 'test');
 });
 
 test('a valid Ethereum USDC purchase returns the hosted redirect and nothing else', async () => {
@@ -257,6 +271,43 @@ test('rate limit and optional app token', async () => {
   );
 });
 
+test('live mode accepts a mobile request with no Origin and refuses a test key', async () => {
+  const LIVE_KEY = 'sk_live_unit_test_key';
+  let seenMode = '';
+  const response = await handleOnrampRequest(
+    post({ destination_currency: 'eth', destination_network: 'ethereum', wallet_address: EVM }),
+    env({ mode: 'live', stripeSecretKey: LIVE_KEY }),
+    okDeps((input) => {
+      seenMode = `${input.mode ?? ''}:${input.secretKey.startsWith('sk_live_')}`;
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(seenMode, 'live:true');
+  assert.doesNotMatch(await response.clone().text().catch(() => ''), /sk_live/);
+  const body = (await response.json()) as { redirect_url?: string };
+  assert.equal(body.redirect_url, REDIRECT);
+
+  let fetched = false;
+  const refused = await handleOnrampRequest(
+    post({ destination_currency: 'eth', destination_network: 'ethereum', wallet_address: EVM }),
+    env({ mode: 'live', stripeSecretKey: TEST_KEY }),
+    {
+      now: () => 90,
+      rateLimit: createRateLimiter(),
+      stripe: (input) =>
+        createStripeOnrampSession(input, async () => {
+          fetched = true;
+          throw new Error('fetch should not run');
+        }),
+    },
+  );
+  assert.equal(refused.status, 403);
+  assert.equal(fetched, false);
+  const refusedText = await refused.text();
+  assert.match(refusedText, /Test Stripe keys are refused/);
+  assert.doesNotMatch(refusedText, /sk_test|sk_live/);
+});
+
 test('the deploy entrypoint does not embed a Stripe key', () => {
   const src = readFileSync(new URL('../../api/onramp-session.ts', import.meta.url), 'utf8');
   assert.match(src, /envFromProcess/);
@@ -264,4 +315,6 @@ test('the deploy entrypoint does not embed a Stripe key', () => {
   const dev = readFileSync(new URL('./dev-server.ts', import.meta.url), 'utf8');
   assert.match(dev, /127\.0\.0\.1/);
   assert.doesNotMatch(dev, /sk_live_|sk_test_[A-Za-z0-9]/);
+  const server = readFileSync(new URL('./stripe.ts', import.meta.url), 'utf8') + readFileSync(new URL('./handler.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(server, /console\.(log|info|debug|warn|error)/);
 });

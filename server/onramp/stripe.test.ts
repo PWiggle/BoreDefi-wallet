@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  assertLiveSecretKey,
+  assertSecretForMode,
   assertTestSecretKey,
   createStripeOnrampSession,
   OnrampRefused,
@@ -26,6 +28,45 @@ test('refuses a missing key, a live key, and anything that is not sk_test_', () 
   assert.throws(() => assertTestSecretKey('pk_test_abcdefghij'), /sk_test_/);
   assert.throws(() => assertTestSecretKey('sk_test_short'), /sk_test_/);
   assert.equal(assertTestSecretKey(`  ${TEST_KEY}  `), TEST_KEY);
+});
+
+test('live mode accepts sk_live_ and rk_live_ and refuses test keys', async () => {
+  assert.equal(assertLiveSecretKey('sk_live_unit_test_key'), 'sk_live_unit_test_key');
+  assert.equal(assertSecretForMode('live', '  rk_live_unit_test_key  '), 'rk_live_unit_test_key');
+  assert.throws(() => assertLiveSecretKey(undefined), /STRIPE_SECRET_KEY_LIVE is not set/);
+  assert.throws(() => assertLiveSecretKey(TEST_KEY), /Test Stripe keys are refused/);
+  assert.throws(() => assertLiveSecretKey('rk_test_unit_test_key'), /Test Stripe keys are refused/);
+  assert.throws(() => assertLiveSecretKey('SK_LIVE_unit_test_key'), /sk_live_ or rk_live_/);
+  assert.throws(() => assertLiveSecretKey('sk_live_short'), /sk_live_ or rk_live_/);
+  assert.throws(() => assertSecretForMode('test', 'sk_live_unit_test_key'), /test mode only/);
+
+  let fetched = false;
+  await assert.rejects(
+    createStripeOnrampSession(
+      { secretKey: TEST_KEY, mode: 'live', currency: 'eth', network: 'ethereum', walletAddress: EVM, customerIp: null },
+      async () => {
+        fetched = true;
+        throw new Error('fetch should not run');
+      },
+    ),
+    /Test Stripe keys are refused/,
+  );
+  assert.equal(fetched, false);
+
+  const session = await createStripeOnrampSession(
+    { secretKey: 'sk_live_unit_test_key', mode: 'live', currency: 'usdc', network: 'base', walletAddress: EVM, customerIp: null },
+    async () =>
+      new Response(JSON.stringify({ livemode: true, redirect_url: 'https://crypto.link.com?session_hash=live' }), { status: 200 }),
+  );
+  assert.deepEqual(session, { redirectUrl: 'https://crypto.link.com?session_hash=live' });
+
+  await assert.rejects(
+    createStripeOnrampSession(
+      { secretKey: 'sk_live_unit_test_key', mode: 'live', currency: 'eth', network: 'ethereum', walletAddress: EVM, customerIp: null },
+      async () => new Response(JSON.stringify({ livemode: false, redirect_url: 'https://crypto.link.com?session_hash=test' }), { status: 200 }),
+    ),
+    /did not return a live-mode session/,
+  );
 });
 
 test('wallet address keys follow the session object, not the destination_network enum', () => {

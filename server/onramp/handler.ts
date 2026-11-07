@@ -2,9 +2,17 @@ import { timingSafeEqual, createHash } from 'node:crypto';
 
 import { findOnrampOffer } from '../../src/wallet/onramp/offers';
 import { addressMatchesFamily } from './addresses';
-import { createStripeOnrampSession, OnrampRefused, type CreatedOnrampSession, type StripeOnrampInput } from './stripe';
+import {
+  createStripeOnrampSession,
+  onrampMode,
+  OnrampRefused,
+  type CreatedOnrampSession,
+  type OnrampMode,
+  type StripeOnrampInput,
+} from './stripe';
 
 export type OnrampServerEnv = {
+  mode: OnrampMode;
   stripeSecretKey: string | undefined;
   allowedOrigins: string | undefined;
   appToken: string | undefined;
@@ -27,8 +35,11 @@ const RATE_WINDOW_MS = 60_000;
 const REQUEST_FIELDS = new Set(['destination_currency', 'destination_network', 'wallet_address']);
 
 export function envFromProcess(source: { [key: string]: string | undefined } = process.env): OnrampServerEnv {
+  const mode = onrampMode(source.ONRAMP_MODE);
   return {
-    stripeSecretKey: source.STRIPE_SECRET_KEY_TEST,
+    mode,
+    // Live mode never reads the test key, and test mode never reads the live key.
+    stripeSecretKey: mode === 'live' ? source.STRIPE_SECRET_KEY_LIVE : source.STRIPE_SECRET_KEY_TEST,
     allowedOrigins: source.ONRAMP_ALLOWED_ORIGINS,
     appToken: source.ONRAMP_APP_TOKEN,
   };
@@ -248,6 +259,7 @@ export async function handleOnrampRequest(request: Request, env: OnrampServerEnv
     const stripe = deps.stripe ?? createStripeOnrampSession;
     const session = await stripe({
       secretKey: env.stripeSecretKey ?? '',
+      mode: env.mode,
       currency: body.currency,
       network: body.network,
       walletAddress: body.walletAddress,

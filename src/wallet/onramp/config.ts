@@ -6,14 +6,17 @@
  *  - unset                   on only in __DEV__, off in every release/store build.
  *
  * The endpoint base URL is EXPO_PUBLIC_ONRAMP_URL (https, or http://localhost for a local server).
- * EXPO_PUBLIC_ONRAMP_TOKEN is optional and not a secret: it is bundled into the app. The Stripe
- * secret key is never read here.
+ * A missing URL, or the eas.json placeholder https://REPLACE_ME/api/onramp-session, hides Buy.
+ * EXPO_PUBLIC_ONRAMP_TOKEN is optional and not a secret: it is bundled into the app.
+ * EXPO_PUBLIC_VERCEL_BYPASS is optional and must stay unset on store builds. When set, it is sent
+ * only as the Vercel Deployment Protection header. The Stripe secret key is never read here.
  *
  * Expo only inlines literal `process.env.EXPO_PUBLIC_*` reads, so each one below is read literally.
  */
 const BUILD_BUY_FLAG: string | undefined = process.env.EXPO_PUBLIC_BUY_CRYPTO;
 const BUILD_ONRAMP_URL: string | undefined = process.env.EXPO_PUBLIC_ONRAMP_URL;
 const BUILD_ONRAMP_TOKEN: string | undefined = process.env.EXPO_PUBLIC_ONRAMP_TOKEN;
+const BUILD_VERCEL_BYPASS: string | undefined = process.env.EXPO_PUBLIC_VERCEL_BYPASS;
 
 declare const __DEV__: boolean | undefined;
 
@@ -31,6 +34,19 @@ export function buyCryptoEnabled(flag: string | undefined, dev: boolean): boolea
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__ === true;
 
 export const BUY_CRYPTO_ENABLED = buyCryptoEnabled(BUILD_BUY_FLAG, IS_DEV);
+
+/** The eas.json production placeholder, and any other unset host, must not open Buy. */
+export function isOnrampPlaceholder(value: string | undefined): boolean {
+  return /replace_me/i.test(value ?? '');
+}
+
+/** Buy is shown only when the flag is on and the endpoint is a real URL. */
+export function buyCryptoVisible(flag: string | undefined, dev: boolean, endpointBase: string | undefined): boolean {
+  if (!buyCryptoEnabled(flag, dev) || isOnrampPlaceholder(endpointBase)) {
+    return false;
+  }
+  return onrampEndpointUrl(endpointBase) !== null;
+}
 
 /** True for the onramp endpoint the app is allowed to call. */
 export function isAllowedOnrampEndpoint(value: string): boolean {
@@ -65,7 +81,7 @@ export function onrampEndpointUrl(base: string | undefined): string | null {
   } catch {
     return null;
   }
-  if (url.username || url.password) {
+  if (url.username || url.password || isOnrampPlaceholder(trimmed)) {
     return null;
   }
   const loopback = url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
@@ -85,5 +101,14 @@ export function onrampAppToken(value: string | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/** Sent only when set. Store builds leave EXPO_PUBLIC_VERCEL_BYPASS unset. */
+export function vercelBypassToken(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed ? trimmed : null;
+}
+
 export const ONRAMP_ENDPOINT = onrampEndpointUrl(BUILD_ONRAMP_URL);
 export const ONRAMP_APP_TOKEN = onrampAppToken(BUILD_ONRAMP_TOKEN);
+export const ONRAMP_VERCEL_BYPASS = vercelBypassToken(BUILD_VERCEL_BYPASS);
+/** Home and the Buy route. Hidden when the flag is off or the URL is missing or a placeholder. */
+export const BUY_CRYPTO_VISIBLE = buyCryptoVisible(BUILD_BUY_FLAG, IS_DEV, BUILD_ONRAMP_URL);
