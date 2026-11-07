@@ -21,6 +21,7 @@ import {
   supportedCaipChains,
 } from '../wallet/wc';
 import { installRelayOriginWebSocket } from '../wallet/wc-origin';
+import { loadWalletConnectUtils, loadWalletKitSdk } from '../wallet/wc-sdk';
 import { ETH_SIGN_BLOCKED, handleWalletConnectRequest } from '../wallet/wc-sign';
 import {
   chainAllowedInSession,
@@ -171,8 +172,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         installRelayOriginWebSocket();
-        const { Core } = await import('@walletconnect/core');
-        const { WalletKit } = await import('@reown/walletkit');
+        const { Core, WalletKit } = loadWalletKitSdk();
         const core = new Core({ projectId });
         const kit = (await WalletKit.init({
           core,
@@ -338,7 +338,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     if (!client || !pendingProposal || !address) {
       throw new Error('Unlock the wallet before approving a connection.');
     }
-    const { buildApprovedNamespaces, getSdkError } = await import('@walletconnect/utils');
+    const { buildApprovedNamespaces, getSdkError } = loadWalletConnectUtils();
     const proposal = pendingProposal.raw as { id: number; params: unknown };
     const solana = solanaRef.current;
     try {
@@ -389,7 +389,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
       setPendingProposal(null);
       return;
     }
-    const { getSdkError } = await import('@walletconnect/utils');
+    const { getSdkError } = loadWalletConnectUtils();
     await client
       .rejectSession({
         id: pendingProposal.id,
@@ -480,7 +480,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
       if (!client) {
         return;
       }
-      const { getSdkError } = await import('@walletconnect/utils');
+      const { getSdkError } = loadWalletConnectUtils();
       try {
         await client.disconnectSession({ topic, reason: getSdkError('USER_DISCONNECTED') });
       } finally {
