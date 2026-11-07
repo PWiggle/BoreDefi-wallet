@@ -12,7 +12,17 @@ Non-custodial React Native wallet. Android is the first target; the same codebas
 
 ## What is not included
 
-No fiat on-ramp, Apple Pay, or bank rails. There is no backend that holds keys.
+There is no backend that holds keys, and no BoreDefi fee on a card purchase. Card-to-crypto uses Stripe as merchant of record (see below).
+
+## Release notes
+
+### 1.0.9
+
+Buy crypto with card or bank via Stripe — no BoreDefi fee.
+
+## Buy crypto
+
+Home shows **Buy** next to Send and Receive only when `EXPO_PUBLIC_BUY_CRYPTO` is on **and** `EXPO_PUBLIC_ONRAMP_URL` is a real endpoint. The production profile sets the flag to `1` and leaves the URL as `https://REPLACE_ME/api/onramp-session`, which hides the button until that placeholder is replaced at build time. `0` forces Buy off. The screen asks for an asset and network this wallet can receive, then sends only that account's public address to `POST /api/onramp-session`. The server creates a Stripe Crypto Onramp session and the app opens the returned `https://crypto.link.com` link in an in-app browser tab (system browser if that tab is unavailable). Stripe is the merchant of record. The secret key never ships in the app. Deploy notes: [`server/onramp/README.md`](server/onramp/README.md).
 
 ## Security model
 
@@ -43,7 +53,7 @@ A companion **Chrome extension** lives in `extension/` (see [Load the Chrome ext
 
 ### Discover / Market
 
-Home shows a live USD total (native balance × CoinGecko price, including `$0.00`), a compact Send / Receive / Swap / Stake / Bridge action row, native + USDC/USDT rows in the Discover MarketRow style, and a short top-market strip. Bottom tabs: Wallet, Markets, Browser, NFTs, Settings. Ledger, WalletConnect, and Activity live under Settings. **Markets** is a full in-app CoinGecko screen: rank, logo, name, symbol, live USD, 24h change, market cap, and 7d sparkline from public `/coins/markets?vs_currency=usd&sparkline=true&price_change_percentage=24h` (100 coins). Tabs: All / Trending / Gainers. Search uses CoinGecko search + details. Pull-to-refresh and Retry on failure. Tapping a coin (or **Open CoinGecko**) loads `www.coingecko.com` in the in-app Browser WebView — not Safari. On Expo web, CoinGecko blocks iframes (`X-Frame-Options: SAMEORIGIN`), so the Browser shows a live CoinGecko embed from the same public API. No API key and no custom browser `User-Agent`.
+Home shows a live USD total (native balance × CoinGecko price, including `$0.00`), a compact Send / Receive / Swap / Stake / Bridge action row (plus Buy when the onramp flag is on), native + USDC/USDT rows in the Discover MarketRow style, and a short top-market strip. Bottom tabs: Wallet, Markets, Browser, NFTs, Settings. Ledger, WalletConnect, and Activity live under Settings. **Markets** is a full in-app CoinGecko screen: rank, logo, name, symbol, live USD, 24h change, market cap, and 7d sparkline from public `/coins/markets?vs_currency=usd&sparkline=true&price_change_percentage=24h` (100 coins). Tabs: All / Trending / Gainers. Search uses CoinGecko search + details. Pull-to-refresh and Retry on failure. Tapping a coin (or **Open CoinGecko**) loads `www.coingecko.com` in the in-app Browser WebView — not Safari. On Expo web, CoinGecko blocks iframes (`X-Frame-Options: SAMEORIGIN`), so the Browser shows a live CoinGecko embed from the same public API. No API key and no custom browser `User-Agent`.
 
 ### Ledger
 
@@ -168,8 +178,8 @@ npm run export:web   # writes dist/ (gitignored)
 | Setting | Value |
 | --- | --- |
 | Application ID / package | `com.boredefi.wallet` |
-| versionName | 1.0.0 |
-| versionCode | 26 |
+| versionName | 1.0.9 |
+| versionCode | 36 |
 | compileSdk | 36 |
 | targetSdk | 36 |
 | minSdk | 24 |
