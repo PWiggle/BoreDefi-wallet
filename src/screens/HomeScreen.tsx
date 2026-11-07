@@ -28,6 +28,7 @@ import {
   usdValueFromUnits,
 } from '../wallet/markets';
 import { fetchBalance } from '../wallet/rpc';
+import { BUY_CRYPTO_ENABLED } from '../wallet/onramp/config';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
 import { fetchTokenBalance } from '../wallet/swap';
 import { type TokenConfig } from '../wallet/tokens';
@@ -232,6 +233,7 @@ export function HomeScreen() {
       <View style={styles.rail}>
         <CircleAction label="Send" name="send" onPress={() => navigation.navigate('Send', {})} />
         <CircleAction label="Receive" name="receive" onPress={() => navigation.navigate('Receive')} />
+        {BUY_CRYPTO_ENABLED ? <CircleAction label="Buy" name="buy" onPress={() => navigation.navigate('Buy')} /> : null}
         <CircleAction label="Swap" name="swap" onPress={() => navigation.navigate('Swap', {})} />
         <CircleAction label="Stake" name="stake" onPress={() => navigation.navigate('Stake', {})} />
         <CircleAction label="Bridge" name="bridge" onPress={() => navigation.navigate('Bridge')} />

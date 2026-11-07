@@ -3,11 +3,12 @@ import Svg, { Path } from 'react-native-svg';
 
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 
-type Name = 'send' | 'receive' | 'swap' | 'stake' | 'bridge';
+type Name = 'send' | 'receive' | 'buy' | 'swap' | 'stake' | 'bridge';
 
 const ICONS: Record<Name, string> = {
   send: 'M12 19V6M12 6 7 11M12 6l5 5',
   receive: 'M12 5v13M12 18l5-5M12 18 7 13',
+  buy: 'M4 7.5h16v11H4zM4 11.5h16M8 15.5h4',
   swap: 'M7 8h11M18 8l-3-3M18 8l-3 3M17 16H6M6 16l3-3M6 16l3 3',
   stake: 'M12 4 14.2 9.2 20 10l-4 3.8.9 5.7L12 16.8 7.1 19.5 8 13.8 4 10l5.8-.8L12 4Z',
   bridge: 'M5 12h14M8 8 5 12l3 4M16 8l3 4-3 4',
@@ -59,7 +60,7 @@ export function CircleAction({
             strokeWidth={1.8}
             strokeLinecap="round"
             strokeLinejoin="round"
-            fill={name === 'stake' ? 'none' : undefined}
+            fill={name === 'stake' || name === 'buy' ? 'none' : undefined}
           />
         </Svg>
       </View>

@@ -18,6 +18,7 @@ import { MainTabs } from './src/navigation/MainTabs';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { BackupSeedScreen } from './src/screens/BackupSeedScreen';
 import { BridgeScreen } from './src/screens/BridgeScreen';
+import { BuyScreen } from './src/screens/BuyScreen';
 import { ChangePinScreen } from './src/screens/ChangePinScreen';
 import { GasScreen } from './src/screens/GasScreen';
 import { ProofScreen } from './src/screens/ProofScreen';
@@ -37,6 +38,7 @@ import { SetPinScreen } from './src/screens/SetPinScreen';
 import { SolanaActivityScreen } from './src/screens/SolanaActivityScreen';
 import { SolanaReceiveScreen } from './src/screens/SolanaReceiveScreen';
 import { SolanaSendScreen } from './src/screens/SolanaSendScreen';
+import { BUY_CRYPTO_ENABLED } from './src/wallet/onramp/config';
 import { SOLANA_ENABLED } from './src/wallet/solana/config';
 import { StakeScreen } from './src/screens/StakeScreen';
 import { SwapScreen } from './src/screens/SwapScreen';
@@ -127,6 +129,7 @@ function RootNavigator() {
       <MainStack.Navigator screenOptions={stackScreenOptions}>
         <MainStack.Screen name="Tabs" component={MainTabs} options={{ headerShown: false }} />
         <MainStack.Screen name="Receive" component={ReceiveScreen} />
+        {BUY_CRYPTO_ENABLED ? <MainStack.Screen name="Buy" component={BuyScreen} options={{ title: 'Buy crypto' }} /> : null}
         <MainStack.Screen name="Send" component={SendScreen} initialParams={{}} />
         <MainStack.Screen name="ScanQr" component={ScanQrScreen} options={{ title: 'Scan QR' }} />
         <MainStack.Screen name="Swap" component={SwapScreen} initialParams={{}} />

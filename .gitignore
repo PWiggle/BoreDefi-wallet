@@ -33,6 +33,9 @@ yarn-error.*
 .env.*
 !.env.example
 
+# Vercel local link (the onramp preview). Do not commit project settings that can hold env.
+.vercel
+
 # typescript
 *.tsbuildinfo
 

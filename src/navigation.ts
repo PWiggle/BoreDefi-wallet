@@ -15,6 +15,8 @@ export type MainTabParamList = {
 export type MainStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Receive: undefined;
+  /** Card-to-crypto. Registered only when EXPO_PUBLIC_BUY_CRYPTO is on (off in store builds). */
+  Buy: undefined;
   Send: { to?: string; amount?: string; tokenSymbol?: string };
   ScanQr: { purpose?: 'payment' | 'walletconnect' | 'nft' | 'solana'; nft?: NftItem };
   Activity: undefined;
