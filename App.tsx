@@ -56,6 +56,7 @@ const navigationRef = createNavigationContainerRef<MainStackParamList>();
 function WalletConnectDeepLink() {
   const { phase } = useWallet();
   const pendingRef = useRef<string | null>(null);
+  const initialHandled = useRef(false);
   useEffect(() => {
     const tryNavigate = (uri: string) => {
       if (phase !== 'unlocked' || !navigationRef.isReady()) {
@@ -75,7 +76,15 @@ function WalletConnectDeepLink() {
       }
     };
     const sub = Linking.addEventListener('url', ({ url }) => open(url));
-    void Linking.getInitialURL().then(open);
+    // The launch URL is handled once; re-reading it after every lock/unlock would re-pair a used link.
+    if (!initialHandled.current) {
+      void Linking.getInitialURL().then((url) => {
+        if (url && extractWalletConnectUri(url)) {
+          initialHandled.current = true;
+        }
+        open(url);
+      });
+    }
     return () => sub.remove();
   }, [phase]);
   return null;
