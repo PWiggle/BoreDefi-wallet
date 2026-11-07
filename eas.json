@@ -16,7 +16,7 @@
       "env": {
         "EXPO_PUBLIC_SOLANA": "1",
         "EXPO_PUBLIC_BUY_CRYPTO": "1",
-        "EXPO_PUBLIC_ONRAMP_URL": "https://REPLACE_ME/api/onramp-session"
+        "EXPO_PUBLIC_ONRAMP_URL": "https://pay.boredefi.com/api/onramp-session"
       }
     }
   },

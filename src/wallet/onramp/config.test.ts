@@ -32,15 +32,16 @@ test('the flag and endpoint are read with literal process.env so Expo can inline
   assert.doesNotMatch(src, /STRIPE_SECRET|sk_live_|sk_test_/);
 });
 
-test('production turns the flag on but hides Buy until the endpoint placeholder is replaced', () => {
+test('production turns Buy on against the live pay.boredefi.com endpoint', () => {
   const eas = JSON.parse(readFileSync(new URL('../../../eas.json', import.meta.url), 'utf8')) as {
     build: { production: { env?: Record<string, string> } };
   };
   const production = eas.build.production.env ?? {};
   assert.equal(production.EXPO_PUBLIC_BUY_CRYPTO, '1');
-  assert.equal(production.EXPO_PUBLIC_ONRAMP_URL, 'https://REPLACE_ME/api/onramp-session');
+  assert.equal(production.EXPO_PUBLIC_ONRAMP_URL, 'https://pay.boredefi.com/api/onramp-session');
   assert.equal(production.EXPO_PUBLIC_VERCEL_BYPASS, undefined);
-  assert.equal(buyCryptoVisible('1', false, production.EXPO_PUBLIC_ONRAMP_URL), false);
+  assert.equal(buyCryptoVisible('1', false, production.EXPO_PUBLIC_ONRAMP_URL), true);
+  assert.equal(buyCryptoVisible('1', false, 'https://REPLACE_ME/api/onramp-session'), false);
   assert.equal(buyCryptoVisible('1', false, undefined), false);
   assert.equal(buyCryptoVisible('1', false, 'https://onramp.example'), true);
   assert.equal(buyCryptoVisible('0', true, 'https://onramp.example'), false);
