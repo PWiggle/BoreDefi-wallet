@@ -22,9 +22,11 @@ Success:
 { "redirect_url": "https://crypto.link.com?session_hash=…" }
 ```
 
-The server calls `POST https://api.stripe.com/v1/crypto/onramp_sessions` with `Stripe-Version: 2026-10-28.endive;crypto_onramp_beta=v2`, locks the wallet address, and locks the asset and network to the pair the app chose. The response to the app is only `redirect_url`. `client_secret` is not forwarded.
+The server calls `POST https://api.stripe.com/v1/crypto/onramp_sessions` with `Stripe-Version: 2026-10-28.endive` (no `crypto_onramp_beta` suffix; this account rejects that beta header). It locks the wallet address and locks the asset and network to the pair the app chose. The response to the app is only `redirect_url`. `client_secret` is not forwarded.
 
-Allowed pairs are the ones in `src/wallet/onramp/offers.ts` (ETH and USDC on Ethereum and Base, POL/MATIC and USDC on Polygon, AVAX and USDC on Avalanche, SOL and USDC on Solana).
+`destination_network` stays the Stripe network enum (`base`, `polygon`, …). The `wallet_addresses` key is separate: Ethereum `ethereum`, Base `base_network`, Polygon `polygon`, Solana `solana`. `wallet_addresses[base]` is an unknown parameter. Avalanche has no wallet address field on the session object, so it is not offered.
+
+Allowed pairs are the ones in `src/wallet/onramp/offers.ts` (ETH and USDC on Ethereum and Base, POL/MATIC and USDC on Polygon, SOL and USDC on Solana).
 
 ## Environment
 

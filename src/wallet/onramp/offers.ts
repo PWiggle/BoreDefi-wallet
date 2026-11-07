@@ -8,11 +8,14 @@
  *
  * BTC, XLM, and other assets this wallet cannot hold are omitted. USDC on
  * Optimism, Arbitrum, and BNB is in the wallet but not in Stripe's hosted list.
+ * Avalanche is a destination_network, but the session object's wallet_addresses
+ * hash has no avalanche field (unknown keys are rejected, as `base` was).
  * Polygon's native token is POL in the wallet; Stripe's API enum is still `matic`.
+ * Base is destination_network `base` and wallet_addresses key `base_network`.
  */
 
-export type OnrampCurrency = 'eth' | 'usdc' | 'sol' | 'matic' | 'avax';
-export type OnrampNetwork = 'ethereum' | 'base' | 'polygon' | 'avalanche' | 'solana';
+export type OnrampCurrency = 'eth' | 'usdc' | 'sol' | 'matic';
+export type OnrampNetwork = 'ethereum' | 'base' | 'polygon' | 'solana';
 export type OnrampFamily = 'evm' | 'solana';
 
 export type OnrampOffer = {
@@ -42,8 +45,6 @@ export const ONRAMP_OFFERS: readonly OnrampOffer[] = [
     detail: "Stripe calls Polygon's native token MATIC. It arrives as the POL balance in this wallet.",
   },
   { id: 'usdc-polygon', currency: 'usdc', network: 'polygon', asset: 'USDC', networkLabel: 'Polygon', family: 'evm' },
-  { id: 'avax-avalanche', currency: 'avax', network: 'avalanche', asset: 'AVAX', networkLabel: 'Avalanche', family: 'evm' },
-  { id: 'usdc-avalanche', currency: 'usdc', network: 'avalanche', asset: 'USDC', networkLabel: 'Avalanche', family: 'evm' },
   { id: 'sol-solana', currency: 'sol', network: 'solana', asset: 'SOL', networkLabel: 'Solana', family: 'solana' },
   { id: 'usdc-solana', currency: 'usdc', network: 'solana', asset: 'USDC', networkLabel: 'Solana', family: 'solana' },
 ];
@@ -52,7 +53,6 @@ const DEFAULT_BY_CHAIN: Record<number, string> = {
   1: 'eth-ethereum',
   8453: 'eth-base',
   137: 'matic-polygon',
-  43114: 'avax-avalanche',
 };
 
 export function findOnrampOffer(currency: string, network: string): OnrampOffer | undefined {

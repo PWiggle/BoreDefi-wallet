@@ -20,22 +20,23 @@ test('offers are the wallet networks Stripe’s hosted onramp can pay, and nothi
     'usdc-base',
     'matic-polygon',
     'usdc-polygon',
-    'avax-avalanche',
-    'usdc-avalanche',
     'sol-solana',
     'usdc-solana',
   ]);
   assert.equal(findOnrampOffer('btc', 'bitcoin'), undefined);
   assert.equal(findOnrampOffer('eth', 'solana'), undefined);
   assert.equal(findOnrampOffer('usdc', 'optimism'), undefined);
+  assert.equal(findOnrampOffer('avax', 'avalanche'), undefined);
+  assert.equal(findOnrampOffer('usdc', 'avalanche'), undefined);
   assert.equal(offersForWallet(false).some((offer) => offer.family === 'solana'), false);
   assert.equal(offersForWallet(true).some((offer) => offer.id === 'sol-solana'), true);
   assert.equal(initialOffer(offersForWallet(false), 8453).id, 'eth-base');
   assert.equal(initialOffer(offersForWallet(false), 137).id, 'matic-polygon');
-  assert.deepEqual(assetChoices(offersForWallet(false)), ['ETH', 'USDC', 'POL', 'AVAX']);
+  assert.equal(initialOffer(offersForWallet(false), 43114).id, 'eth-ethereum');
+  assert.deepEqual(assetChoices(offersForWallet(false)), ['ETH', 'USDC', 'POL']);
   assert.deepEqual(
     offersForAsset(ONRAMP_OFFERS, 'USDC').map((offer) => offer.network),
-    ['ethereum', 'base', 'polygon', 'avalanche', 'solana'],
+    ['ethereum', 'base', 'polygon', 'solana'],
   );
 });
 

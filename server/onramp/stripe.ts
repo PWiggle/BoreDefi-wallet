@@ -1,8 +1,32 @@
 import { isStripeHostedOnrampUrl } from '../../src/wallet/onramp/url';
 
 export const STRIPE_ONRAMP_API = 'https://api.stripe.com/v1/crypto/onramp_sessions';
-/** Public-preview onramp API. v2 is the flat (non-beta-body) parameter shape. */
-export const STRIPE_ONRAMP_VERSION = '2026-10-28.endive;crypto_onramp_beta=v2';
+/**
+ * Version this Stripe account accepts. A `crypto_onramp_beta=v2` suffix is rejected
+ * ("You do not have permission to pass this beta header").
+ */
+export const STRIPE_ONRAMP_VERSION = '2026-10-28.endive';
+
+/**
+ * `wallet_addresses` keys from the Crypto Onramp Session object. They are not the
+ * `destination_network` enum: Base is `base_network`, not `base`. There is no
+ * avalanche key, so Avalanche is not offered.
+ * https://docs.stripe.com/api/crypto/onramp_sessions/object
+ */
+const WALLET_ADDRESS_KEYS: Record<string, string> = {
+  ethereum: 'ethereum',
+  base: 'base_network',
+  polygon: 'polygon',
+  solana: 'solana',
+};
+
+export function walletAddressKey(network: string): string {
+  const key = WALLET_ADDRESS_KEYS[network];
+  if (!key) {
+    throw new OnrampRefused('That network has no Stripe wallet address field.', 400);
+  }
+  return key;
+}
 
 export class OnrampRefused extends Error {
   constructor(
@@ -51,13 +75,14 @@ export type StripeOnrampInput = {
 
 export function stripeOnrampForm(input: StripeOnrampInput): URLSearchParams {
   const body = new URLSearchParams();
+  const addressKey = walletAddressKey(input.network);
   body.set('destination_currency', input.currency);
   body.set('destination_network', input.network);
   // A single-value list locks the asset and network so a later change inside
   // Stripe cannot retarget a chain this wallet does not receive on.
   body.append('destination_currencies[]', input.currency);
   body.append('destination_networks[]', input.network);
-  body.set(`wallet_addresses[${input.network}]`, input.walletAddress);
+  body.set(`wallet_addresses[${addressKey}]`, input.walletAddress);
   body.set('lock_wallet_address', 'true');
   body.set('metadata[source]', 'boredefi-wallet');
   if (input.customerIp) {

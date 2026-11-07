@@ -5,6 +5,8 @@ import { addressMatchesFamily, isEvmAddress, isSolanaAddress } from './addresses
 
 const EVM = '0x9858effd232b4033e47d90003d41ec34ecaeda94';
 const SOL = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
+const SOL_OTHER = 'BLeUXTx9thHGT7VJUtF9vHEmfMDgW1nnKZ9UVer2CoLX';
+const SOL_EXAMPLE = 'bufoH37MTiMTNAfBS4VEZ94dCEwMsmeSijD2vZRShuV';
 
 test('accepts an Ethereum-style address in any hex case and rejects junk', () => {
   assert.equal(isEvmAddress(EVM), true);
@@ -17,6 +19,9 @@ test('accepts an Ethereum-style address in any hex case and rejects junk', () =>
 
 test('accepts a canonical Solana address and rejects EVM, PDAs-length junk, and the system program', () => {
   assert.equal(isSolanaAddress(SOL), true);
+  assert.equal(isSolanaAddress(SOL_OTHER), true);
+  assert.equal(isSolanaAddress(SOL_EXAMPLE), true);
+  assert.equal(isSolanaAddress('1'.repeat(32)), false);
   assert.equal(addressMatchesFamily(SOL, 'solana'), true);
   assert.equal(addressMatchesFamily(EVM, 'evm'), true);
   assert.equal(addressMatchesFamily(EVM, 'solana'), false);
