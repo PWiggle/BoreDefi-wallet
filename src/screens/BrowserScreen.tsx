@@ -35,9 +35,15 @@ import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing'
 import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
+  blockedSchemeMessage,
+  classifyBrowserNavigation,
+  isUnknownSchemeError,
+} from '../wallet/browser-nav';
+import {
   chainIdHex,
   INJECTED_PROVIDER_SOURCE,
   isOriginConnected,
+  parseOpenMessage,
   providerEmitScript,
   providerResolveScript,
   providerSyncScript,
@@ -105,6 +111,15 @@ function browserStyles({ colors, field, radius, spacing, type }: Theme) {
       paddingVertical: spacing.sm,
     },
     chipText: { color: colors.text, fontWeight: '700' as const },
+    notice: {
+      borderColor: colors.border,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      marginBottom: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    noticeText: { color: colors.muted, fontSize: 13, lineHeight: 18 },
     web: {
       backgroundColor: colors.surface,
       borderColor: colors.border,
@@ -138,6 +153,11 @@ export function BrowserScreen() {
     connectedOriginRef.current = next;
   }, []);
   const [error, setError] = useState<string | null>(null);
+  // Small, self-clearing note (not an error) for app links a page tried to open.
+  const [notice, setNotice] = useState<string | null>(null);
+  // Bumped to remount the WebView on the last good page after a failed app-link load.
+  const [webKey, setWebKey] = useState(0);
+  const lastPairRef = useRef<{ uri: string; at: number } | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
 
   const [pendingProtected, setPendingProtected] = useState<{
@@ -160,7 +180,9 @@ export function BrowserScreen() {
   const open = useCallback((raw: string) => {
     setError(null);
     try {
-      const next = normalizeDappUrl(raw);
+      // Pasted pairing links in any wrapper (WC:, wc%3A, boredefi://wc?uri=, metamask://wc?uri=).
+      const pasted = /^\s*https?:/i.test(raw) ? null : extractWalletConnectUri(raw);
+      const next = pasted ?? normalizeDappUrl(raw);
       const verdict = next.startsWith('wc:') ? null : checkPhishing(next);
       if (verdict?.blocked) {
         setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
@@ -191,6 +213,14 @@ export function BrowserScreen() {
     void refreshPhishingList();
   }, []);
 
+  useEffect(() => {
+    if (!notice) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   useFocusEffect(
     useCallback(() => {
       if (route.params?.url) {
@@ -209,6 +239,15 @@ export function BrowserScreen() {
 
   const onMessage = async (event: WebViewMessageEvent) => {
     let id = 0;
+    const openUrl = parseOpenMessage(event.nativeEvent.data);
+    if (openUrl !== null) {
+      // window.open / link click to an app scheme, caught by the injected script.
+      if (checkPhishing(event.nativeEvent.url || pageUrl).blocked) {
+        return;
+      }
+      handleAppLink(openUrl);
+      return;
+    }
     try {
       const parsed = JSON.parse(event.nativeEvent.data) as {
         id: number;
@@ -389,18 +428,58 @@ export function BrowserScreen() {
     }
   };
 
+  const pairFromPage = (wcUri: string) => {
+    // A page can fire the same link twice (window.open plus a redirect); pair it once.
+    const now = Date.now();
+    const last = lastPairRef.current;
+    if (last && last.uri === wcUri && now - last.at < 5000) {
+      return;
+    }
+    lastPairRef.current = { uri: wcUri, at: now };
+    setNotice('Opening WalletConnect in BoreDefi. Review the request before you approve it.');
+    pair(wcUri).catch((err) =>
+      setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
+    );
+  };
+
+  /**
+   * Handles anything that isn't a plain web page load. Returns true when the WebView must NOT
+   * load the URL itself. WalletConnect links pair in-app (proposal sheet with Verify + phishing
+   * review); other app schemes are never loaded (that's the ERR_UNKNOWN_URL_SCHEME page) and never
+   * launch another app from an untrusted page; intent:// fallbacks load in-app after the phishing check.
+   */
+  const handleAppLink = (target: string): boolean => {
+    if (isWalletConnectNavigation(target) && !extractWalletConnectUri(target)) {
+      // Never hand an empty/malformed link to the WalletConnect screen.
+      setError('This page tried to open WalletConnect without a valid link. Use Connect on the page instead.');
+      return true;
+    }
+    const decision = classifyBrowserNavigation(target);
+    if (decision.kind === 'load') {
+      return false;
+    }
+    if (decision.kind === 'walletconnect') {
+      pairFromPage(decision.uri);
+      return true;
+    }
+    if (decision.kind === 'redirect') {
+      const verdict = checkPhishing(decision.url);
+      if (verdict.blocked) {
+        setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+        return true;
+      }
+      setUrl(decision.url);
+      setDraft(decision.url);
+      setPageUrl(decision.url);
+      return true;
+    }
+    setNotice(blockedSchemeMessage(decision.scheme));
+    return true;
+  };
+
   const intercept = (request: WebViewNavigation) => {
     const target = request.url || '';
-    if (isWalletConnectNavigation(target)) {
-      const wcUri = extractWalletConnectUri(target);
-      if (!wcUri) {
-        // Never hand an empty/malformed link to the WalletConnect screen.
-        setError('This page tried to open WalletConnect without a valid link. Use Connect on the page instead.');
-        return false;
-      }
-      pair(wcUri).catch((err) =>
-        setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
-      );
+    if (handleAppLink(target)) {
       return false;
     }
     const verdict = checkPhishing(target);
@@ -411,11 +490,32 @@ export function BrowserScreen() {
     return true;
   };
 
+  const onLoadError = (err: { description: string; code?: number; url?: string }) => {
+    if (!isUnknownSchemeError(err)) {
+      setError(err.description);
+      return;
+    }
+    // Android's native hook lets a navigation through if the JS thread is busy for 250 ms, so an
+    // app link can still reach the loader. Handle the link now and put the last good page back
+    // instead of leaving the "Error loading page" screen up.
+    if (!err.url || !handleAppLink(err.url)) {
+      setNotice('This page tried to open a link the in-app browser cannot show. It was skipped.');
+    }
+    setUrl(pageUrl);
+    setDraft(pageUrl);
+    setWebKey((key) => key + 1);
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Text style={styles.title}>Browser</Text>
       <Text style={styles.copy}>dApps stay in-app. Injected EIP-1193 provider. Not a Chrome extension.</Text>
       {error ? <ErrorBanner message={error} /> : null}
+      {notice ? (
+        <Pressable onPress={() => setNotice(null)} style={styles.notice} accessibilityRole="alert">
+          <Text style={styles.noticeText}>{notice}</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.bar}>
         <TextInput
           value={draft}
@@ -454,6 +554,7 @@ export function BrowserScreen() {
         </View>
       ) : (
         <InAppBrowserView
+          key={webKey}
           ref={webRef}
           uri={url}
           style={styles.web}
@@ -477,7 +578,7 @@ export function BrowserScreen() {
               webRef.current?.injectJavaScript(providerEmitScript('accountsChanged', []));
             }
           }}
-          onError={(message) => setError(message)}
+          onError={onLoadError}
         />
       )}
       {pendingProtected ? (

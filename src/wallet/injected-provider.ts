@@ -49,11 +49,29 @@ export const INJECTED_PROVIDER_SOURCE = `
       this._listeners[event].push(handler);
       return this;
     },
+    once: function (event, handler) {
+      var self = this;
+      function wrapped(data) { self.removeListener(event, wrapped); handler(data); }
+      return this.on(event, wrapped);
+    },
     removeListener: function (event, handler) {
       this._listeners[event] = (this._listeners[event] || []).filter(function (item) { return item !== handler; });
+      return this;
+    },
+    off: function (event, handler) {
+      return this.removeListener(event, handler);
+    },
+    removeAllListeners: function (event) {
+      if (event) { delete this._listeners[event]; } else { this._listeners = {}; }
+      return this;
+    },
+    isConnected: function () {
+      return true;
     },
     emit: function (event, data) {
-      (this._listeners[event] || []).forEach(function (handler) { handler(data); });
+      (this._listeners[event] || []).slice().forEach(function (handler) {
+        try { handler(data); } catch (e) {}
+      });
     }
   };
   window.__boredefiResolve = function (id, result, error) {
@@ -91,12 +109,60 @@ export const INJECTED_PROVIDER_SOURCE = `
   } catch (e) {
     try { Object.defineProperty(window, 'ethereum', { value: provider, configurable: true, writable: true }); } catch (e2) {}
   }
+  // App links (wc:, metamask://wc?uri=..., intent://...) never reach the WebView loader: Android
+  // shows "net::ERR_UNKNOWN_URL_SCHEME" for them, and its native navigation hook falls back to
+  // "load" if the app is busy for 250 ms. Hand them to the wallet, which decides (pair, block,
+  // or load a safe fallback). Plain http(s) behaves exactly as before.
+  var WEB_SCHEMES = /^(https?|about|blob|data|javascript):/i;
+  function isAppLink(url) {
+    return typeof url === 'string' && /^[a-z][a-z0-9+.-]*:/i.test(url.trim()) && !WEB_SCHEMES.test(url.trim());
+  }
+  function handOff(url) {
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'boredefi:open', url: String(url).trim() }));
+    }
+  }
+  try {
+    var nativeOpen = window.open;
+    window.open = function (url) {
+      var href = url == null ? '' : String(url);
+      if (isAppLink(href)) {
+        handOff(href);
+        return null;
+      }
+      return nativeOpen.apply(window, arguments);
+    };
+  } catch (e) {}
+  try {
+    document.addEventListener('click', function (event) {
+      var node = event.target;
+      while (node && node.nodeType === 1 && String(node.tagName).toUpperCase() !== 'A') {
+        node = node.parentNode;
+      }
+      if (!node || node.nodeType !== 1) { return; }
+      var href = node.getAttribute && node.getAttribute('href');
+      if (href && isAppLink(href)) {
+        event.preventDefault();
+        handOff(href);
+      }
+    }, true);
+  } catch (e) {}
   window.addEventListener('eip6963:requestProvider', announce);
   announce();
   try { window.dispatchEvent(new Event('ethereum#initialized')); } catch (e) {}
 })();
 true;
 `;
+
+/** A navigation hand-off posted by the injected script (window.open / link click to an app scheme). */
+export function parseOpenMessage(data: string): string | null {
+  try {
+    const parsed = JSON.parse(data) as { type?: unknown; url?: unknown };
+    return parsed && parsed.type === 'boredefi:open' && typeof parsed.url === 'string' ? parsed.url : null;
+  } catch {
+    return null;
+  }
+}
 
 export function providerResolveScript(id: number, result: unknown, error?: string): string {
   return `window.__boredefiResolve(${id}, ${error ? 'null' : JSON.stringify(result)}, ${
