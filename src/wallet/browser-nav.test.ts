@@ -235,3 +235,25 @@ test('Browser screen routes every app link through the classifier and never show
   assert.match(view, /setSupportMultipleWindows=\{false\}/);
   assert.match(view, /originWhitelist=\{\['\*'\]\}/);
 });
+
+test('BoredSwap (RainbowKit) wallet links seen in a real page run pair in BoreDefi on Android and iOS', () => {
+  // Captured from boredswap.app on Nov 9, 2026 with no injected provider: tapping "BoreDefi" sets
+  // location.href to this; when BoreDefi isn't detected RainbowKit also lists MetaMask, whose iOS
+  // link is metamask://wc?uri= (the iPhone "NSURLErrorDomain -1002 unsupported URL" page).
+  const boredswapWc =
+    'wc:d8b7145b82f16012149ee605786ad991ea0b713e7303f208715622bcdfe6937b@2?relay-protocol=irn&symKey=c500d215e3a3311d091fa21ea0dcc102eb23376d53cd330f4806d187e83aff70&expiryTimestamp=1794266818';
+  for (const link of [
+    `boredefi://wc?uri=${encodeURIComponent(boredswapWc)}`,
+    `metamask://wc?uri=${encodeURIComponent(boredswapWc)}`,
+    `https://metamask.app.link/wc?uri=${encodeURIComponent(boredswapWc)}`,
+  ]) {
+    assert.deepEqual(classifyBrowserNavigation(link), { kind: 'walletconnect', uri: boredswapWc }, link);
+  }
+  // iOS reports the failed load as NSURLErrorDomain -1002 with the page URL, not the app link.
+  assert.equal(isUnknownSchemeError({ code: -1002, description: 'unsupported URL', url: 'https://boredswap.app/?chain=ethereum' }), true);
+});
+
+test('a second connect request from an already-connected site does not prompt again', () => {
+  const screen = readFileSync(join(__dirname, '../screens/BrowserScreen.tsx'), 'utf8');
+  assert.match(screen, /if \(kind === 'connect'\) \{\s*if \(isConnected\) \{/);
+});

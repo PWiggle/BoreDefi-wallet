@@ -285,6 +285,17 @@ export function BrowserScreen() {
         return;
       }
       if (kind === 'connect') {
+        if (isConnected) {
+          // Already approved for this origin (RainbowKit/wagmi send wallet_requestPermissions and then
+          // eth_requestAccounts back to back): answer without a second Connect sheet.
+          resolve(
+            id,
+            method === 'wallet_requestPermissions'
+              ? [{ parentCapability: 'eth_accounts' }]
+              : [session.address],
+          );
+          return;
+        }
         const approved = await requestConfirm({
           title: 'Connect wallet',
           network: selectedChain.name,
