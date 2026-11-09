@@ -38,7 +38,7 @@ test('1.0.6 release builds turn Solana on (EAS production env); the code default
   const app = JSON.parse(read('../../../app.json')).expo;
   assert.equal(app.version, '1.0.10');
   assert.equal(app.android.versionCode, 36);
-  assert.equal(app.ios.buildNumber, '21');
+  assert.equal(app.ios.buildNumber, '22');
 });
 
 test('Solana amounts use one formatter (no 6-decimal truncation) on Home, Send balance and Activity', () => {
