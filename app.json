@@ -3,7 +3,7 @@
     "name": "BoreDefi Wallet",
     "slug": "boredefi-wallet",
     "scheme": "boredefi",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -21,7 +21,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.boredefi.wallet",
-      "buildNumber": "20",
+      "buildNumber": "21",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
         "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID.",
