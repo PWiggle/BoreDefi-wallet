@@ -3,8 +3,8 @@ import test from 'node:test';
 
 import { addressPoisoningCheck } from './security/address-poisoning';
 
-const REAL = '0x640Ebc069e89e5691AaD192420D22a4B92443387';
-const FAKE = '0x640E000000000000000000000000000000003387';
+const REAL = '0xAaBbCcDd111111111111111111111111EeFf0011';
+const FAKE = '0xAaBb000000000000000000000000000000Ff0011';
 
 test('EVM: same first/last chars but different middle warns', () => {
   assert.ok(addressPoisoningCheck(FAKE, [REAL], 'evm'));

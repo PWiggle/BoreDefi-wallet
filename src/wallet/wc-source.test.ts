@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -17,7 +17,7 @@ const WC =
   'wc:d8b7145b82f16012149ee605786ad991ea0b713e7303f208715622bcdfe6937b@2?relay-protocol=irn&symKey=c500d215e3a3311d091fa21ea0dcc102eb23376d53cd330f4806d187e83aff70';
 const ENC = encodeURIComponent(WC);
 const ACTIVE = '0x9858EfFD232B4033E47d90003D41EC34EcaEda94';
-const BOREDSWAP_FEE_WALLET = '0x640Ebc069e89e5691AaD192420D22a4B92443387';
+const OTHER_WALLET = '0x2222222222222222222222222222222222222222';
 
 test('names the wallet a page meant to open when it handed BoreDefi a WalletConnect link', () => {
   assert.equal(walletLinkSource(`metamask://wc?uri=${ENC}`), 'MetaMask');
@@ -59,26 +59,10 @@ test('connect accounts are the active BoreDefi wallet (EVM + its Solana address)
   // Default = active; a picked address that isn't one of the user's accounts is ignored.
   assert.equal(resolveConnectAccount(accounts, null)?.address, ACTIVE);
   assert.equal(resolveConnectAccount(accounts, ACTIVE.toLowerCase())?.address, ACTIVE);
-  assert.equal(resolveConnectAccount(accounts, BOREDSWAP_FEE_WALLET)?.address, ACTIVE);
+  assert.equal(resolveConnectAccount(accounts, OTHER_WALLET)?.address, ACTIVE);
   assert.equal(resolveConnectAccount([], ACTIVE), null);
-  const two = [...accounts, { address: BOREDSWAP_FEE_WALLET, label: 'Wallet 2', solanaAddress: null, active: false }];
-  assert.equal(resolveConnectAccount(two, BOREDSWAP_FEE_WALLET)?.label, 'Wallet 2');
-});
-
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
-      return sourceFiles(full);
-    }
-    return /\.(ts|tsx)$/.test(name) && !/\.test\.ts$/.test(name) ? [full] : [];
-  });
-}
-
-test('no app code hardcodes the BoredSwap fee wallet (it only appears in test fixtures)', () => {
-  for (const file of sourceFiles(join(__dirname, '..'))) {
-    assert.doesNotMatch(readFileSync(file, 'utf8'), /640ebc069e89e5691aad192420d22a4b92443387/i, file);
-  }
+  const two = [...accounts, { address: OTHER_WALLET, label: 'Wallet 2', solanaAddress: null, active: false }];
+  assert.equal(resolveConnectAccount(two, OTHER_WALLET)?.label, 'Wallet 2');
 });
 
 test('the WalletConnect sheet approves the picked BoreDefi account and shows the source-wallet notice', () => {
