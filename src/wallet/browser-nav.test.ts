@@ -9,6 +9,7 @@ import {
   classifyBrowserNavigation,
   intentFallbackUrl,
   isUnknownSchemeError,
+  parseIntentUrl,
   urlScheme,
 } from './browser-nav';
 import { INJECTED_PROVIDER_SOURCE, parseOpenMessage } from './injected-provider';
@@ -34,41 +35,77 @@ test('plain web navigations load as before', () => {
   assert.deepEqual(classifyBrowserNavigation('https://example.com/?uri=https%3A%2F%2Fx.com'), { kind: 'load' });
 });
 
-test('raw and wrapped WalletConnect links pair in BoreDefi instead of hitting the WebView loader', () => {
-  const cases = [
+test("BoreDefi's own WalletConnect links pair BoreDefi", () => {
+  for (const url of [
     WC,
-    WC.toUpperCase().replace(/^WC:/, 'WC:').slice(0, 3) + WC.slice(3),
+    'WC:' + WC.slice(3),
     ENC,
     `boredefi://wc?uri=${ENC}`,
-    `metamask://wc?uri=${ENC}`,
-    `trust://wc?uri=${ENC}`,
-    `rainbow://wc?uri=${ENC}`,
-    `https://metamask.app.link/wc?uri=${ENC}`,
-    `https://link.trustwallet.com/wc?uri=${ENC}`,
     `https://www.boredefi.com/wc?uri=${ENC}`,
-    `intent://wc?uri=${ENC}#Intent;scheme=metamask;package=io.metamask;S.browser_fallback_url=https%3A%2F%2Fmetamask.io;end`,
-  ];
-  for (const url of cases) {
-    const decision = classifyBrowserNavigation(url);
-    assert.equal(decision.kind, 'walletconnect', url);
-    assert.equal(decision.kind === 'walletconnect' && decision.uri, WC, url);
+    `intent://wc?uri=${ENC}#Intent;scheme=boredefi;package=com.boredefi.wallet;end`,
+  ]) {
+    assert.deepEqual(classifyBrowserNavigation(url), { kind: 'walletconnect', uri: WC }, url);
   }
 });
 
-test('other app schemes are blocked, never loaded and never launched', () => {
+test("another wallet's link goes to that wallet through the OS (like Safari), never paired by BoreDefi", () => {
+  const cases: [string, string, string | null][] = [
+    [`metamask://wc?uri=${ENC}`, 'MetaMask', WC],
+    [`trust://wc?uri=${ENC}`, 'Trust Wallet', WC],
+    [`rainbow://wc?uri=${ENC}`, 'Rainbow', WC],
+    [`cbwallet://wc?uri=${ENC}`, 'Coinbase Wallet', WC],
+    [`https://metamask.app.link/wc?uri=${ENC}`, 'MetaMask', WC],
+    [`https://link.trustwallet.com/wc?uri=${ENC}`, 'Trust Wallet', WC],
+    [`https://unknownwallet.example/wc?uri=${ENC}`, 'another wallet app', WC],
+    [`zengo://wc?uri=${ENC}`, 'another wallet app', WC],
+    ['metamask://dapp/app.aave.com', 'MetaMask', null],
+    ['trust://open_url?url=https://app.aave.com', 'Trust Wallet', null],
+    ['https://metamask.app.link/dapp/boredswap.app', 'MetaMask', null],
+  ];
+  for (const [url, wallet, wcUri] of cases) {
+    const decision = classifyBrowserNavigation(url);
+    assert.equal(decision.kind, 'external', url);
+    if (decision.kind === 'external') {
+      assert.equal(decision.url, url);
+      assert.equal(decision.wallet, wallet, url);
+      assert.equal(decision.wcUri, wcUri, url);
+    }
+  }
+});
+
+test('Android intent:// for another wallet becomes its app link, with package and https fallbacks', () => {
+  const decision = classifyBrowserNavigation(
+    `intent://wc?uri=${ENC}#Intent;scheme=metamask;package=io.metamask;S.browser_fallback_url=https%3A%2F%2Fmetamask.io%2Fdownload;end`,
+  );
+  assert.deepEqual(decision, {
+    kind: 'external',
+    url: `metamask://wc?uri=${ENC}`,
+    wallet: 'MetaMask',
+    wcUri: WC,
+    fallbackUrl: 'https://metamask.io/download',
+    packageName: 'io.metamask',
+  });
+  assert.equal(parseIntentUrl('intent://x#Intent;scheme=foo;package=bad pkg;end').packageName, null);
+});
+
+test('regular wallet websites still load in-app (no wc: link, not a pure app-link host)', () => {
+  for (const url of ['https://phantom.app/', 'https://app.uniswap.org/swap', 'https://keys.coinbase.com/connect', 'https://rainbow.me/']) {
+    assert.deepEqual(classifyBrowserNavigation(url), { kind: 'load' }, url);
+  }
+});
+
+test('non-wallet app schemes stay blocked', () => {
   for (const [url, scheme] of [
-    ['metamask://dapp/app.aave.com', 'metamask'],
-    ['trust://open_url?url=https://app.aave.com', 'trust'],
     ['tel:+15555550100', 'tel'],
     ['market://details?id=io.metamask', 'market'],
-    ['cbwallet://dapp?url=x', 'cbwallet'],
+    ['sms:123', 'sms'],
     ['intent://scan/#Intent;scheme=zxing;package=com.google.zxing.client.android;end', 'intent'],
     ['wc:', 'wc'],
     ['boredefi://wc?uri=', 'boredefi'],
   ] as const) {
     assert.deepEqual(classifyBrowserNavigation(url), { kind: 'blocked', scheme }, url);
   }
-  assert.match(blockedSchemeMessage('metamask'), /metamask:/);
+  assert.match(blockedSchemeMessage('tel'), /tel:/);
 });
 
 test('intent:// links fall back to their http(s) browser_fallback_url only', () => {
@@ -85,9 +122,9 @@ test('intent:// links fall back to their http(s) browser_fallback_url only', () 
     assert.equal(intentFallbackUrl(bad), null, bad);
     assert.equal(classifyBrowserNavigation(bad).kind, 'blocked', bad);
   }
-  // A fallback that is itself a WalletConnect universal link pairs in-app.
+  // A fallback that is itself another wallet's universal link goes to that wallet.
   const wcFallback = `intent://x#Intent;scheme=foo;S.browser_fallback_url=${encodeURIComponent(`https://metamask.app.link/wc?uri=${ENC}`)};end`;
-  assert.deepEqual(classifyBrowserNavigation(wcFallback), { kind: 'walletconnect', uri: WC });
+  assert.equal(classifyBrowserNavigation(wcFallback).kind, 'external');
 });
 
 test('recognises the Android ERR_UNKNOWN_URL_SCHEME page error (code -10) and iOS unsupported URL', () => {
@@ -231,25 +268,27 @@ test('Browser screen routes every app link through the classifier and never show
   assert.match(screen, /isUnknownSchemeError\(err\)/);
   // Other apps open only from the user's "Open <wallet>" choice, for a known wallet, after the
   // one-link-one-wallet claim (untrusted pages can't launch apps by themselves).
-  assert.equal(screen.match(/Linking\.openURL\(/g)?.length, 1);
-  assert.match(screen, /claimHandoff\(handoffsRef\.current, choice\.wcUri, 'external'\)[\s\S]*Linking\.openURL\(choice\.link\)/);
+  assert.match(screen, /if \(decision\.kind === 'external'\) \{\s*openOtherWallet\(decision\);/);
+  assert.match(screen, /Date\.now\(\) - lastTouchRef\.current > TAP_WINDOW_MS/);
+  assert.match(screen, /onTouchStart=\{\(\) => \{\s*lastTouchRef\.current = Date\.now\(\);/);
+  assert.match(screen, /claimHandoff\(handoffsRef\.current, decision\.wcUri, 'external'\)[\s\S]*Linking\.openURL\(decision\.url\)/);
+  // The tap window check comes before any Linking call.
+  assert.ok(screen.indexOf('TAP_WINDOW_MS)') < screen.indexOf('Linking.openURL('));
   assert.match(view, /renderError=/);
   assert.match(view, /setSupportMultipleWindows=\{false\}/);
   assert.match(view, /originWhitelist=\{\['\*'\]\}/);
 });
 
-test('BoredSwap (RainbowKit) wallet links seen in a real page run pair in BoreDefi on Android and iOS', () => {
-  // Captured from boredswap.app on Nov 9, 2026 with no injected provider: tapping "BoreDefi" sets
-  // location.href to this; when BoreDefi isn't detected RainbowKit also lists MetaMask, whose iOS
-  // link is metamask://wc?uri= (the iPhone "NSURLErrorDomain -1002 unsupported URL" page).
+test('BoredSwap (RainbowKit): its BoreDefi tile pairs BoreDefi; its MetaMask/Trust tiles open those wallets', () => {
+  // Captured from boredswap.app on Nov 9, 2026: the BoreDefi tile sets location.href to boredefi://wc.
   const boredswapWc =
     'wc:d8b7145b82f16012149ee605786ad991ea0b713e7303f208715622bcdfe6937b@2?relay-protocol=irn&symKey=c500d215e3a3311d091fa21ea0dcc102eb23376d53cd330f4806d187e83aff70&expiryTimestamp=1794266818';
-  for (const link of [
-    `boredefi://wc?uri=${encodeURIComponent(boredswapWc)}`,
-    `metamask://wc?uri=${encodeURIComponent(boredswapWc)}`,
-    `https://metamask.app.link/wc?uri=${encodeURIComponent(boredswapWc)}`,
-  ]) {
-    assert.deepEqual(classifyBrowserNavigation(link), { kind: 'walletconnect', uri: boredswapWc }, link);
+  const enc = encodeURIComponent(boredswapWc);
+  assert.deepEqual(classifyBrowserNavigation(`boredefi://wc?uri=${enc}`), { kind: 'walletconnect', uri: boredswapWc });
+  for (const link of [`metamask://wc?uri=${enc}`, `https://metamask.app.link/wc?uri=${enc}`, `trust://wc?uri=${enc}`]) {
+    const decision = classifyBrowserNavigation(link);
+    assert.equal(decision.kind, 'external', link);
+    assert.equal(decision.kind === 'external' && decision.wcUri, boredswapWc);
   }
   // iOS reports the failed load as NSURLErrorDomain -1002 with the page URL, not the app link.
   assert.equal(isUnknownSchemeError({ code: -1002, description: 'unsupported URL', url: 'https://boredswap.app/?chain=ethereum' }), true);

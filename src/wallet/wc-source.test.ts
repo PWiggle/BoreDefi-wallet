@@ -93,11 +93,8 @@ test('the WalletConnect sheet approves the picked BoreDefi account and shows the
   assert.match(overlay, /approveProposal\(account\?\.address \?\? null\)/);
   assert.match(overlay, /sourceWalletNotice\(pendingProposal\.sourceWallet\)/);
   assert.match(overlay, /Connect as/);
-  // Other wallets' links never auto-pair: they open the BoreDefi-or-<wallet> choice.
-  assert.match(browser, /const source = walletLinkSource\(target\);\s*if \(!source\) \{\s*\/\/[^\n]*\n\s*pairFromPage\(decision\.uri, null\);/);
-  assert.match(browser, /setWalletChoice\(/);
-  assert.match(browser, /confirmLabel="Connect with BoreDefi instead"/);
-  assert.match(browser, /label=\{`Open \$\{walletChoice\.openable\}`\}/);
+  // Only BoreDefi's own links pair from the page; other wallets' links never reach pair().
+  assert.match(browser, /if \(decision\.kind === 'walletconnect'\) \{[^}]*pairFromPage\(decision\.uri, null\);/);
   assert.match(browser, /claimHandoff\(handoffsRef\.current, wcUri, 'boredefi'\)/);
 });
 

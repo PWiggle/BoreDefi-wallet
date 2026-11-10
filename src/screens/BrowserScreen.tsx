@@ -33,11 +33,12 @@ import {
   urlBarAfterNavigation,
 } from '../wallet/dapps';
 import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
-import { claimHandoff, openableWalletLink, walletLinkSource, type HandoffTarget } from '../wallet/wc-source';
+import { claimHandoff, walletLinkSource, type HandoffTarget } from '../wallet/wc-source';
 import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
   blockedSchemeMessage,
+  type BrowserNavDecision,
   classifyBrowserNavigation,
   isUnknownSchemeError,
 } from '../wallet/browser-nav';
@@ -59,6 +60,9 @@ import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
 import { reviewDappRequest } from '../wallet/request-review';
 import type { TxPreview } from '../wallet/tx-simulate';
+
+/** A page may open another wallet's app only this soon after the user touched it. */
+const TAP_WINDOW_MS = 10_000;
 
 type BrowserConfirm = {
   title: string;
@@ -122,6 +126,7 @@ function browserStyles({ colors, field, radius, spacing, type }: Theme) {
       paddingVertical: spacing.sm,
     },
     noticeText: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+    webWrap: { flex: 1 },
     web: {
       backgroundColor: colors.surface,
       borderColor: colors.border,
@@ -160,15 +165,12 @@ export function BrowserScreen() {
   // Bumped to remount the WebView on the last good page after a failed app-link load.
   const [webKey, setWebKey] = useState(0);
   const lastPairRef = useRef<{ uri: string; at: number } | null>(null);
+  const lastExternalRef = useRef<{ url: string; at: number } | null>(null);
   // Pairing topic -> where that link went (BoreDefi or another wallet). One link, one wallet.
   const handoffsRef = useRef(new Map<string, HandoffTarget>());
-  // A page opened another wallet's WalletConnect link: the user picks BoreDefi or that wallet.
-  const [walletChoice, setWalletChoice] = useState<{
-    wcUri: string;
-    link: string;
-    source: string;
-    openable: string | null;
-  } | null>(null);
+  // Last time the user touched the page (native touch, the page can't fake it). Other wallets'
+  // links only go to the OS shortly after a real tap, like Safari, so pages can't drive-by launch apps.
+  const lastTouchRef = useRef(0);
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
 
   const [pendingProtected, setPendingProtected] = useState<{
@@ -489,19 +491,12 @@ export function BrowserScreen() {
       return false;
     }
     if (decision.kind === 'walletconnect') {
-      const source = walletLinkSource(target);
-      if (!source) {
-        // wc:, boredefi://wc, boredefi.com/wc: meant for BoreDefi, pair right away.
-        pairFromPage(decision.uri, null);
-        return true;
-      }
-      // Meant for another wallet (metamask://, trust://, link.trustwallet.com, ...): never pair
-      // automatically and never let it out on its own. Ask which wallet should get it.
-      setWalletChoice((current) =>
-        current && current.wcUri === decision.uri
-          ? current
-          : { wcUri: decision.uri, link: target, source, openable: openableWalletLink(target) },
-      );
+      // BoreDefi's own option (wc:, boredefi://wc, boredefi.com/wc): pair right away.
+      pairFromPage(decision.uri, null);
+      return true;
+    }
+    if (decision.kind === 'external') {
+      openOtherWallet(decision);
       return true;
     }
     if (decision.kind === 'redirect') {
@@ -532,28 +527,37 @@ export function BrowserScreen() {
     return true;
   };
 
-  const chooseBoreDefi = () => {
-    const choice = walletChoice;
-    setWalletChoice(null);
-    if (choice) {
-      pairFromPage(choice.wcUri, choice.source);
-    }
-  };
-
-  const chooseOtherWallet = () => {
-    const choice = walletChoice;
-    setWalletChoice(null);
-    if (!choice || !choice.openable) {
+  /**
+   * Another wallet's link (metamask://, trust://, its universal link, Android intent://): hand it to
+   * the OS like Safari, so that wallet opens and approves; the dApp here gets the session over the
+   * WalletConnect relay. BoreDefi never pairs it, and only after a real tap on the page.
+   */
+  const openOtherWallet = (decision: Extract<BrowserNavDecision, { kind: 'external' }>) => {
+    if (Date.now() - lastTouchRef.current > TAP_WINDOW_MS) {
+      setNotice(`This page tried to open ${decision.wallet} without a tap. Tap the wallet button on the page to open it.`);
       return;
     }
-    if (!claimHandoff(handoffsRef.current, choice.wcUri, 'external')) {
-      setNotice('BoreDefi already used that link, so it was not sent to another wallet.');
+    if (decision.wcUri && !claimHandoff(handoffsRef.current, decision.wcUri, 'external')) {
+      setNotice('BoreDefi already connected with that link, so it was not sent to another wallet.');
       return;
     }
-    // Only a known wallet's link, and only after the user tapped "Open <wallet>".
-    Linking.openURL(choice.link).catch(() =>
-      setNotice(`${choice.openable} didn't open. It may not be installed on this device.`),
-    );
+    const last = lastExternalRef.current;
+    const now = Date.now();
+    if (last && last.url === decision.url && now - last.at < 3000) {
+      return; // window.open + redirect for the same link: open once
+    }
+    lastExternalRef.current = { url: decision.url, at: now };
+    Linking.openURL(decision.url).catch(() => {
+      if (decision.fallbackUrl) {
+        handleAppLink(decision.fallbackUrl) || open(decision.fallbackUrl);
+        return;
+      }
+      if (decision.packageName) {
+        Linking.openURL(`https://play.google.com/store/apps/details?id=${decision.packageName}`).catch(() => undefined);
+        return;
+      }
+      setNotice(`${decision.wallet} didn't open. It may not be installed on this device.`);
+    });
   };
 
   const onLoadError = (err: { description: string; code?: number; url?: string }) => {
@@ -619,6 +623,12 @@ export function BrowserScreen() {
           <CoinGeckoWebEmbed url={url} onOpenUrl={open} />
         </View>
       ) : (
+        <View
+          style={styles.webWrap}
+          onTouchStart={() => {
+            lastTouchRef.current = Date.now();
+          }}
+        >
         <InAppBrowserView
           key={webKey}
           ref={webRef}
@@ -646,6 +656,7 @@ export function BrowserScreen() {
           }}
           onError={onLoadError}
         />
+        </View>
       )}
       {pendingProtected ? (
         <ProtectedGuardSheet
@@ -662,24 +673,6 @@ export function BrowserScreen() {
             setPendingProtected(null);
           }}
         />
-      ) : null}
-      {walletChoice ? (
-        <ConfirmSheet
-          visible
-          title={`Connect with ${walletChoice.source}?`}
-          network={selectedChain.name}
-          notice={`This site asked to open ${walletChoice.source}. You're in BoreDefi, so choose which wallet connects.`}
-          extra={[{ label: 'Site', value: dappHost(pageUrl) ?? 'This page' }]}
-          mode="buttons"
-          confirmLabel="Connect with BoreDefi instead"
-          cancelLabel="Cancel"
-          onConfirm={chooseBoreDefi}
-          onCancel={() => setWalletChoice(null)}
-        >
-          {walletChoice.openable ? (
-            <Button label={`Open ${walletChoice.openable}`} variant="secondary" onPress={chooseOtherWallet} />
-          ) : null}
-        </ConfirmSheet>
       ) : null}
       <ConfirmSheet
         visible={Boolean(pendingConfirm)}

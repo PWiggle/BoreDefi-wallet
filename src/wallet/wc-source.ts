@@ -18,6 +18,18 @@ const WALLET_LINKS: { name: string; schemes: string[]; hosts: string[] }[] = [
   { name: 'Safe', schemes: ['safe'], hosts: [] },
 ];
 
+/** https link on a known wallet's universal-link host (opens that wallet like Safari would). */
+export function isKnownWalletUniversalLink(raw: string): boolean {
+  const host = /^https?:\/\/([^/?#:]+)/i.exec(raw.trim())?.[1]?.toLowerCase() ?? '';
+  return Boolean(host) && UNIVERSAL_LINK_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+}
+
+/**
+ * Hosts that exist only to open a wallet app (not websites people browse). Other wallet hosts
+ * (phantom.app, uniswap.org, keys.coinbase.com, ...) load in-app unless they carry a wc: link.
+ */
+const UNIVERSAL_LINK_HOSTS = ['metamask.app.link', 'link.trustwallet.com', 'rnbwapp.com', 'go.cb-w.com'];
+
 /**
  * The other wallet a page meant to open, when a WalletConnect link was addressed to it
  * (metamask://wc?uri=..., https://metamask.app.link/wc?uri=..., intent://...;scheme=trust;...).

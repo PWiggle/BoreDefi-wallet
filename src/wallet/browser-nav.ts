@@ -1,13 +1,13 @@
 import { extractWalletConnectUri } from './wc';
+import { isKnownWalletUniversalLink, walletLinkSource } from './wc-source';
 
 /**
  * What the in-app browser should do with a URL a page tries to open (link, redirect,
  * window.open, iframe, or a failed load). Pure so it can be unit tested.
  *
  * - load:          an ordinary web URL; the WebView loads it (phishing check still applies).
- * - walletconnect: a WalletConnect pairing hand-off (wc:, boredefi://wc, metamask://wc?uri=,
- *                  https://.../wc?uri=wc:..., intent://wc?uri=...). Pair inside BoreDefi so the
- *                  session proposal sheet (with Verify + phishing review) appears.
+ * - walletconnect: BoreDefi's own pairing link (wc:, boredefi://wc, boredefi.com/wc?uri=).
+ * - external:      another wallet's link; handed to the OS like Safari does, never paired here.
  * - redirect:      an Android intent:// link with an http(s) browser_fallback_url; load the
  *                  fallback in-app instead (after the phishing check), never launch the intent.
  * - blocked:       any other app scheme (metamask:, trust:, intent:, tel:, market:, ...). The
@@ -17,11 +17,25 @@ import { extractWalletConnectUri } from './wc';
 export type BrowserNavDecision =
   | { kind: 'load' }
   | { kind: 'walletconnect'; uri: string }
+  | {
+      kind: 'external';
+      /** What to hand to the OS (Linking.openURL). For intent:// this is the converted app link. */
+      url: string;
+      /** Wallet the page meant to open ("MetaMask", "Trust Wallet", or "another wallet app"). */
+      wallet: string;
+      /** Pairing URI inside the link, if any (claimed so BoreDefi never pairs the same link). */
+      wcUri: string | null;
+      /** Android intent:// fallbacks if the app isn't installed. */
+      fallbackUrl: string | null;
+      packageName: string | null;
+    }
   | { kind: 'redirect'; url: string }
   | { kind: 'blocked'; scheme: string };
 
 /** Schemes the WebView can render itself. Everything else is an app hand-off. */
 const WEBVIEW_SCHEMES = new Set(['http', 'https', 'about', 'blob', 'data', 'javascript']);
+/** Links that are BoreDefi's own WalletConnect option. */
+const OWN_SCHEMES = new Set(['wc', 'boredefi']);
 
 export function urlScheme(raw: string | null | undefined): string | null {
   const match = /^\s*([a-z][a-z0-9+.-]*):/i.exec(raw ?? '');
@@ -36,25 +50,50 @@ function safeDecode(value: string): string {
   }
 }
 
-/** Android intent:// URL -> its browser_fallback_url, only when that is a plain http(s) URL. */
-export function intentFallbackUrl(raw: string): string | null {
-  const hash = raw.indexOf('#Intent;');
-  if (hash < 0) {
-    return null;
-  }
-  const extras = raw.slice(hash + '#Intent;'.length).split(';');
-  for (const part of extras) {
-    if (part.startsWith('S.browser_fallback_url=')) {
-      const value = safeDecode(part.slice('S.browser_fallback_url='.length)).trim();
-      if (/^https?:\/\/[^\s/?#]+/i.test(value) && !/[\s<>"]/.test(value)) {
-        return value;
-      }
-      return null;
-    }
-  }
-  return null;
+function isBoreDefiHost(url: string): boolean {
+  const host = /^https?:\/\/([^/?#:]+)/i.exec(url)?.[1]?.toLowerCase() ?? '';
+  return host === 'boredefi.com' || host.endsWith('.boredefi.com');
 }
 
+type IntentParts = { target: string | null; scheme: string | null; packageName: string | null; fallbackUrl: string | null };
+
+/** Splits an Android intent:// URL into the app link it stands for and its fallbacks. */
+export function parseIntentUrl(raw: string): IntentParts {
+  const hash = raw.indexOf('#Intent;');
+  const body = hash < 0 ? raw : raw.slice(0, hash);
+  const extras = hash < 0 ? [] : raw.slice(hash + '#Intent;'.length).split(';');
+  let scheme: string | null = null;
+  let packageName: string | null = null;
+  let fallbackUrl: string | null = null;
+  for (const part of extras) {
+    if (part.startsWith('scheme=')) {
+      const value = part.slice('scheme='.length).toLowerCase();
+      scheme = /^[a-z][a-z0-9+.-]*$/.test(value) ? value : null;
+    } else if (part.startsWith('package=')) {
+      const value = part.slice('package='.length);
+      packageName = /^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$/.test(value) ? value : null;
+    } else if (part.startsWith('S.browser_fallback_url=')) {
+      const value = safeDecode(part.slice('S.browser_fallback_url='.length)).trim();
+      fallbackUrl = /^https?:\/\/[^\s/?#]+/i.test(value) && !/[\s<>"]/.test(value) ? value : null;
+    }
+  }
+  const rest = body.replace(/^intent:(\/\/)?/i, '');
+  return { target: scheme ? `${scheme}://${rest}` : null, scheme, packageName, fallbackUrl };
+}
+
+/** Android intent:// URL -> its browser_fallback_url, only when that is a plain http(s) URL. */
+export function intentFallbackUrl(raw: string): string | null {
+  return parseIntentUrl(raw).fallbackUrl;
+}
+
+/**
+ * Safari-like routing for the in-app browser:
+ * - BoreDefi's own WalletConnect option (bare wc:, boredefi://wc, boredefi.com/wc) pairs BoreDefi.
+ * - Another wallet's link (metamask://, trust://, rainbow://, cbwallet://, its universal link, or
+ *   any link carrying a wc: URI meant for someone else) goes to that wallet through the OS. BoreDefi
+ *   never pairs it; the dApp in our WebView gets the session over the WalletConnect relay.
+ * - Other app schemes (tel:, market:, unknown apps) are blocked.
+ */
 export function classifyBrowserNavigation(raw: string | null | undefined): BrowserNavDecision {
   const url = (raw ?? '').trim();
   if (!url) {
@@ -62,25 +101,55 @@ export function classifyBrowserNavigation(raw: string | null | undefined): Brows
   }
   const scheme = urlScheme(url);
   if (scheme === 'http' || scheme === 'https') {
-    // Universal links that carry a pairing URI (https://metamask.app.link/wc?uri=wc:..., our own
-    // https://www.boredefi.com/wc?uri=...). Only when uri= really is a wc: pairing link.
     const wc = /[?&]uri=/i.test(url) ? extractWalletConnectUri(url) : null;
-    return wc ? { kind: 'walletconnect', uri: wc } : { kind: 'load' };
+    if (wc) {
+      return isBoreDefiHost(url)
+        ? { kind: 'walletconnect', uri: wc }
+        : { kind: 'external', url, wallet: walletLinkSource(url) ?? 'another wallet app', wcUri: wc, fallbackUrl: null, packageName: null };
+    }
+    const wallet = walletLinkSource(url);
+    // Known wallet universal links (metamask.app.link/..., link.trustwallet.com/...) open the wallet.
+    return wallet && wallet !== 'another wallet app' && isKnownWalletUniversalLink(url)
+      ? { kind: 'external', url, wallet, wcUri: null, fallbackUrl: null, packageName: null }
+      : { kind: 'load' };
   }
   if (scheme && WEBVIEW_SCHEMES.has(scheme)) {
     return { kind: 'load' };
   }
-  // wc:, wc%3A..., boredefi://wc?uri=, metamask://wc?uri=, trust://wc?uri=, rainbow://wc?uri=...
-  const wc = extractWalletConnectUri(scheme === 'intent' ? url.split('#Intent;')[0] : url);
-  if (wc) {
+  if (scheme === 'intent') {
+    const intent = parseIntentUrl(url);
+    const wc = extractWalletConnectUri(url.split('#Intent;')[0]);
+    if (intent.scheme && OWN_SCHEMES.has(intent.scheme)) {
+      return wc ? { kind: 'walletconnect', uri: wc } : { kind: 'blocked', scheme: 'intent' };
+    }
+    const wallet = intent.target ? walletLinkSource(intent.target) : null;
+    if (intent.target && (wc || (wallet && wallet !== 'another wallet app'))) {
+      return {
+        kind: 'external',
+        url: intent.target,
+        wallet: wallet ?? 'another wallet app',
+        wcUri: wc,
+        fallbackUrl: intent.fallbackUrl,
+        packageName: intent.packageName,
+      };
+    }
+    if (intent.fallbackUrl) {
+      const inner = classifyBrowserNavigation(intent.fallbackUrl);
+      return inner.kind === 'load' ? { kind: 'redirect', url: intent.fallbackUrl } : inner;
+    }
+    return { kind: 'blocked', scheme: 'intent' };
+  }
+  const wc = extractWalletConnectUri(url);
+  if (scheme && OWN_SCHEMES.has(scheme)) {
+    return wc ? { kind: 'walletconnect', uri: wc } : { kind: 'blocked', scheme };
+  }
+  // wc%3A... (scheme-less encoded pairing link) is BoreDefi's to pair.
+  if (!scheme && wc) {
     return { kind: 'walletconnect', uri: wc };
   }
-  if (scheme === 'intent') {
-    const fallback = intentFallbackUrl(url);
-    if (fallback) {
-      const inner = classifyBrowserNavigation(fallback);
-      return inner.kind === 'walletconnect' ? inner : { kind: 'redirect', url: fallback };
-    }
+  const wallet = walletLinkSource(url);
+  if (wc || (wallet && wallet !== 'another wallet app')) {
+    return { kind: 'external', url, wallet: wallet ?? 'another wallet app', wcUri: wc, fallbackUrl: null, packageName: null };
   }
   return { kind: 'blocked', scheme: scheme ?? 'unknown' };
 }
