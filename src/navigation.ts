@@ -39,6 +39,8 @@ export type MainStackParamList = {
   SolanaReceive: undefined;
   SolanaSend: { to?: string; amount?: string; mint?: string };
   SolanaActivity: undefined;
+  /** Native Solana swap (Jupiter Ultra). */
+  SolanaSwap: { mint?: string };
 };
 
 export type MainNavigation = CompositeNavigationProp<

@@ -42,6 +42,7 @@ import { BUY_CRYPTO_VISIBLE } from './src/wallet/onramp/config';
 import { SOLANA_ENABLED } from './src/wallet/solana/config';
 import { StakeScreen } from './src/screens/StakeScreen';
 import { SwapScreen } from './src/screens/SwapScreen';
+import { SolanaSwapScreen } from './src/screens/SolanaSwapScreen';
 import { UnlockScreen } from './src/screens/UnlockScreen';
 import { VerifySeedScreen } from './src/screens/VerifySeedScreen';
 import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
@@ -154,6 +155,9 @@ function RootNavigator() {
         ) : null}
         {SOLANA_ENABLED ? (
           <MainStack.Screen name="SolanaActivity" component={SolanaActivityScreen} options={{ title: 'Solana activity' }} />
+        ) : null}
+        {SOLANA_ENABLED ? (
+          <MainStack.Screen name="SolanaSwap" component={SolanaSwapScreen} options={{ title: 'Swap on Solana' }} initialParams={{}} />
         ) : null}
         <MainStack.Screen name="Ledger" component={LedgerScreen} />
         <MainStack.Screen name="NftSend" component={NftSendScreen} options={{ title: 'Send NFT' }} initialParams={{}} />

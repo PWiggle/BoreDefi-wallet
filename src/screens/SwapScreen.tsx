@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { Button } from '../components/Button';
+import { ProtectedReauth } from '../components/ProtectedReauth';
 import { ChainPicker } from '../components/ChainPicker';
 import { SwapConfirmSheet } from '../components/SwapConfirmSheet';
 import { useProtectedGate } from '../components/useProtectedGate';
@@ -17,6 +19,7 @@ import { formatTokenAmount, parseTokenAmount } from '../wallet/format';
 import {
   ensureSpendAllowance,
   fetchSwapQuote,
+  fetchTokenBalance,
   loadSpendBalance,
   sendSwapTransaction,
   SWAP_STEPS,
@@ -34,6 +37,11 @@ import { prepareSwapReview, swapFeeGasUnits } from '../wallet/swap-preview';
 import type { TxPreview } from '../wallet/tx-simulate';
 import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
 import { canReviewSwap, checkSwapPrice, swapBalanceGate, swapQuoteKey, type PriceCheck } from '../wallet/swap-guard';
+import { fetchZeroExQuote } from '../wallet/zerox';
+import { BOREDEFI_SWAP_FEE_BPS, bpsLabel, zeroExSupported } from '../wallet/swap-config';
+import { checkPriceImpact, requoteStillFair, swapSummaryRows } from '../wallet/swap-summary';
+import { holdingsFirst } from '../wallet/swap-holdings';
+import { SOLANA_ENABLED } from '../wallet/solana/config';
 
 function swapStyles({ colors, card, chip, field, spacing }: Theme) {
   return {
@@ -72,6 +80,11 @@ function swapStyles({ colors, card, chip, field, spacing }: Theme) {
       fontWeight: '700' as const,
       fontSize: 16,
     },
+    row: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, gap: spacing.sm },
+    rowValue: { color: colors.text, fontWeight: '600' as const, flexShrink: 1, textAlign: 'right' as const },
+    backdrop: { backgroundColor: colors.overlay, flex: 1 },
+    scroll: { flexGrow: 1, justifyContent: 'center' as const, padding: spacing.lg },
+    sheet: { ...card, gap: spacing.sm },
   };
 }
 
@@ -79,10 +92,17 @@ export function SwapScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(swapStyles);
   const route = useRoute<RouteProp<MainStackParamList, 'Swap'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { session, selectedChain, setSelectedChain } = useWallet();
   const ledger = useLedger();
   const fromAddress = ledger.account?.address ?? session?.address ?? '';
   const tokens = useMemo(() => tokensForChain(selectedChain.id), [selectedChain.id]);
+  // Native 0x swap (BoredSwap's server, 0.30% fee) where it's supported; LI.FI stays as the fallback (ApeChain).
+  const useZeroEx = zeroExSupported(selectedChain.id);
+  // Balances of every listed token on this chain, so From shows what the wallet actually holds first.
+  const [holdings, setHoldings] = useState<Record<string, bigint>>({});
+  // Fresh PIN / biometric check after Hold to confirm, before the wallet's key signs (skipped for Ledger).
+  const [reauth, setReauth] = useState(false);
   const [fromToken, setFromToken] = useState<TokenConfig>(tokens[0]!);
   const [toToken, setToToken] = useState<TokenConfig>(tokens[1] ?? tokens[0]!);
   const [amount, setAmount] = useState('');
@@ -171,6 +191,33 @@ export function SwapScreen() {
       .catch(() => setMaxFeePerGas(null));
   }, [fromAddress, selectedChain.id, session, txHash]);
 
+  useEffect(() => {
+    if (!session || !fromAddress) {
+      return;
+    }
+    let cancelled = false;
+    setHoldings({});
+    Promise.all(
+      tokens.map(async (token) => [token.address.toLowerCase(), await fetchTokenBalance(fromAddress, token, selectedChain.id).catch(() => null)] as const),
+    ).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+      const next: Record<string, bigint> = {};
+      for (const [address, value] of rows) {
+        if (value !== null) {
+          next[address] = value;
+        }
+      }
+      setHoldings(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromAddress, selectedChain.id, session, tokens, txHash]);
+
+  const fromTokens = useMemo(() => holdingsFirst(tokens, holdings), [tokens, holdings]);
+
   if (!session) {
     return null;
   }
@@ -195,13 +242,17 @@ export function SwapScreen() {
   const hint = preflightLine([swapCheck], amount.trim().length > 0);
   const currentKey = swapQuoteKey(selectedChain.id, fromToken, toToken, typedUnits);
   const quoteIsCurrent = quote !== null && quoteKey === currentKey;
-  const reviewEnabled = canReviewSwap({
-    quoteKey,
-    currentKey,
-    preflightOk: swapCheck.ok,
-    priceOk: priceCheck?.ok === true,
-    busy,
-  });
+  const impact = checkPriceImpact(quote?.fees?.priceImpactPct);
+  const reviewEnabled =
+    impact.level !== 'block' &&
+    canReviewSwap({
+      quoteKey,
+      currentKey,
+      preflightOk: swapCheck.ok,
+      priceOk: priceCheck?.ok === true,
+      busy,
+    });
+  const summaryRows = quote ? swapSummaryRows(quote, { symbol: selectedChain.symbol, decimals: selectedChain.decimals }) : [];
 
   const quoteSwap = async () => {
     setError(null);
@@ -210,13 +261,15 @@ export function SwapScreen() {
     try {
       const fromAmount = parseTokenAmount(amount, fromToken.decimals);
       const requestedKey = swapQuoteKey(selectedChain.id, fromToken, toToken, fromAmount);
-      const next = await fetchSwapQuote({
-        chainId: selectedChain.id,
-        fromToken,
-        toToken,
-        fromAmount,
-        fromAddress,
-      });
+      const next = useZeroEx
+        ? await fetchZeroExQuote({ chainId: selectedChain.id, fromToken, toToken, fromAmount, fromAddress })
+        : await fetchSwapQuote({
+            chainId: selectedChain.id,
+            fromToken,
+            toToken,
+            fromAmount,
+            fromAddress,
+          });
       const ids = [geckoIdForToken(fromToken), geckoIdForToken(toToken)];
       const prices = await fetchUsdPrices(ids.filter((id): id is string => Boolean(id))).catch(() => ({}) as Record<string, number>);
       setPriceCheck(
@@ -283,7 +336,22 @@ export function SwapScreen() {
     }
   };
 
-  const confirm = async () => {
+  // Hold to confirm → fresh PIN / biometric check → sign. A Ledger confirms on the device instead.
+  const confirm = () => {
+    if (!quote || !reviewEnabled) {
+      setReview(false);
+      return;
+    }
+    if (ledger.account) {
+      void execute();
+      return;
+    }
+    setReview(false);
+    setReauth(true);
+  };
+
+  const execute = async () => {
+    setReauth(false);
     if (protectedFrom && (clearedKey === null || clearedKey !== quoteKey)) {
       setReview(false);
       setError(`${protectedFrom.name} is protected. Review the swap again to confirm it.`);
@@ -311,8 +379,9 @@ export function SwapScreen() {
               chainId: selectedChain.id,
             })
         : undefined;
+      let toSend = quote;
       if (quote.approvalAddress) {
-        await ensureSpendAllowance({
+        const approval = await ensureSpendAllowance({
           mnemonic: session.mnemonic,
           token: fromToken,
           owner: fromAddress,
@@ -321,8 +390,20 @@ export function SwapScreen() {
           chainId: selectedChain.id,
           sendTx,
         });
+        // 0x quotes are short-lived: after an approval, swap with a fresh quote, but only if it's as good.
+        if ((approval || sendTx) && quote.fees?.provider === '0x') {
+          const fresh = await fetchZeroExQuote({ chainId: selectedChain.id, fromToken, toToken, fromAmount: quote.fromAmount, fromAddress });
+          if (!requoteStillFair(quote.toAmountMin, fresh.toAmountMin)) {
+            setReview(false);
+            setQuote(null);
+            setQuoteKey(null);
+            setError('Approval done. The price moved since you reviewed it, so get a new quote and confirm again.');
+            return;
+          }
+          toSend = fresh;
+        }
       }
-      const tx = await sendSwapTransaction(session.mnemonic, quote, selectedChain.id, sendTx);
+      const tx = await sendSwapTransaction(session.mnemonic, toSend, selectedChain.id, sendTx);
       setReview(false);
       setTxHash(tx.hash);
     } catch (err) {
@@ -344,11 +425,21 @@ export function SwapScreen() {
   }
 
   return (
-    <Screen title="Swap" subtitle="Best same-chain route via LI.FI (aggregates 1inch, 0x, Kyber, and others).">
+    <Screen
+      title="Swap"
+      subtitle={
+        useZeroEx
+          ? `Best price via 0x, signed by this wallet. BoreDefi fee ${bpsLabel(BOREDEFI_SWAP_FEE_BPS)}.`
+          : 'Best same-chain route via LI.FI (aggregates 1inch, 0x, Kyber, and others).'
+      }
+    >
       <ChainPicker selected={selectedChain.id} onSelect={setSelectedChain} />
+      {SOLANA_ENABLED ? (
+        <Button label="Swap on Solana instead" variant="ghost" onPress={() => navigation.navigate('SolanaSwap', {})} />
+      ) : null}
       <ErrorBanner message={spendBanner(view)} />
       <Text style={styles.label}>From</Text>
-      <TokenRow tokens={tokens} selected={fromToken} onSelect={setFromToken} />
+      <TokenRow tokens={fromTokens} selected={fromToken} onSelect={setFromToken} />
       <TextInput
         value={amount}
         onChangeText={(value) => { setAmount(value); setQuote(null); setQuoteKey(null); setPriceCheck(null); }}
@@ -365,12 +456,15 @@ export function SwapScreen() {
       {quote && quoteIsCurrent ? (
         <View style={styles.quote}>
           <Text style={styles.quoteTitle}>Best route · {quote.toolName}</Text>
-          <Text style={styles.meta}>
-            You receive ≈ {formatTokenAmount(quote.toAmount, quote.toToken.decimals)} {quote.toToken.symbol}
-          </Text>
-          <Text style={styles.meta}>
-            Minimum {formatTokenAmount(quote.toAmountMin, quote.toToken.decimals)} {quote.toToken.symbol}
-          </Text>
+          {summaryRows.map((row) => (
+            <View key={row.label} style={styles.row}>
+              <Text style={styles.meta}>{row.label}</Text>
+              <Text style={styles.rowValue}>{row.value}</Text>
+            </View>
+          ))}
+          {impact.message ? (
+            <WarningBanner title="Price impact" lines={[impact.message]} danger={impact.level === 'block'} />
+          ) : null}
           {priceCheck && !priceCheck.ok ? (
             <WarningBanner title="Price check failed" lines={[priceCheck.message]} danger />
           ) : null}
@@ -390,9 +484,28 @@ export function SwapScreen() {
         preview={swapPreview}
         previewLoading={previewLoading}
         loading={busy || previewLoading}
+        extraRows={summaryRows}
         onConfirm={confirm}
         onCancel={() => setReview(false)}
       />
+      {reauth ? (
+        <Modal transparent animationType="fade" visible onRequestClose={() => setReauth(false)}>
+          <View style={styles.backdrop}>
+            <ScrollView contentContainerStyle={styles.scroll}>
+              <View style={styles.sheet}>
+                <Text style={styles.quoteTitle}>Confirm it's you</Text>
+                <Text style={styles.meta}>
+                  {quote
+                    ? `Swap ${formatTokenAmount(quote.fromAmount, quote.fromToken.decimals)} ${quote.fromToken.symbol} for at least ${formatTokenAmount(quote.toAmountMin, quote.toToken.decimals)} ${quote.toToken.symbol}. Nothing is signed until you confirm.`
+                    : 'Nothing is signed until you confirm.'}
+                </Text>
+                <ProtectedReauth reason="Confirm swap" busy={busy} confirmLabel="Swap" onVerified={() => void execute()} />
+                <Button label="Cancel" variant="ghost" disabled={busy} onPress={() => setReauth(false)} />
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+      ) : null}
     </Screen>
   );
 }
