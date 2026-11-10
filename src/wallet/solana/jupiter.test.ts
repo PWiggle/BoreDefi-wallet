@@ -20,6 +20,7 @@ import {
   WSOL_MINT,
   type JupiterOrderPayload,
 } from './jupiter';
+import { SWAP_EXECUTE_TIMEOUT_MS, SWAP_QUOTE_TIMEOUT_MS } from '../swap-request';
 
 // Throwaway test keys (fixed bytes). Never a real wallet.
 const ME = keypairFromSecret(new Uint8Array(32).fill(3));
@@ -159,3 +160,111 @@ test('order and execute go to the Mevvy-compatible proxy; only the signed transa
   assert.ok(!JSON.stringify(sent).includes(encodeBase58(ME.secretKey)));
   assert.equal(jupiterOrderUrl({ ...expected, slippageBps: 30, proxy: 'https://p' }).includes('slippageBps=30'), true);
 });
+
+function abortingHang(onCall?: () => void): typeof fetch {
+  return (async (_url: string, init?: RequestInit) => {
+    onCall?.();
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        const error = new Error('This operation was aborted');
+        error.name = 'AbortError';
+        reject(error);
+      });
+    });
+  }) as unknown as typeof fetch;
+}
+
+test('fetchJupiterOrder aborts a hung quote after the timeout and does not retry', async () => {
+  let calls = 0;
+  await assert.rejects(
+    fetchJupiterOrder({
+      ...expected,
+      fetcher: abortingHang(() => {
+        calls += 1;
+      }),
+      timeoutMs: 20,
+      sleep: async () => {
+        throw new Error('should not retry a timed-out order');
+      },
+    }),
+    /took too long while getting a Solana swap quote from Jupiter/,
+  );
+  assert.equal(calls, 1);
+  assert.equal(SWAP_QUOTE_TIMEOUT_MS, 15_000);
+});
+
+test('fetchJupiterOrder retries 429 then 5xx with 500ms and 1500ms backoff, then succeeds', async () => {
+  const sleeps: number[] = [];
+  let n = 0;
+  const fetcher = (async () => {
+    n += 1;
+    if (n === 1) return new Response('{}', { status: 429 });
+    if (n === 2) return new Response('{}', { status: 503 });
+    return new Response(JSON.stringify(order()), { status: 200 });
+  }) as unknown as typeof fetch;
+  const parsed = await fetchJupiterOrder({
+    ...expected,
+    fetcher,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
+  });
+  assert.equal(parsed.requestId, 'req-1');
+  assert.equal(n, 3);
+  assert.deepEqual(sleeps, [500, 1_500]);
+});
+
+test('fetchJupiterOrder does not retry a 4xx, and gives up after two 429 retries', async () => {
+  let clientCalls = 0;
+  const client = (async () => {
+    clientCalls += 1;
+    return new Response(JSON.stringify({ error: 'Choose a supported mint.' }), { status: 400 });
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    fetchJupiterOrder({
+      ...expected,
+      fetcher: client,
+      sleep: async () => {
+        throw new Error('should not retry a 4xx');
+      },
+    }),
+    /supported mint/,
+  );
+  assert.equal(clientCalls, 1);
+
+  let busyCalls = 0;
+  const busy = (async () => {
+    busyCalls += 1;
+    return new Response('{}', { status: 429 });
+  }) as unknown as typeof fetch;
+  await assert.rejects(fetchJupiterOrder({ ...expected, fetcher: busy, sleep: async () => {} }), /swap service is busy/);
+  assert.equal(busyCalls, 3);
+});
+
+test('executeJupiterOrder never retries a 429, and a timeout still says the swap may have gone through', async () => {
+  const parsed = parseJupiterOrder(order(), expected);
+  const signed = signJupiterOrder(parsed, ME.address, sign);
+  let calls = 0;
+  const busy = (async () => {
+    calls += 1;
+    return new Response('{}', { status: 429 });
+  }) as unknown as typeof fetch;
+  await assert.rejects(executeJupiterOrder({ order: parsed, ...signed, fetcher: busy }), /Check Activity before you try again/);
+  assert.equal(calls, 1);
+
+  let hung = 0;
+  await assert.rejects(
+    executeJupiterOrder({
+      order: parsed,
+      ...signed,
+      fetcher: abortingHang(() => {
+        hung += 1;
+      }),
+      timeoutMs: 20,
+    }),
+    /may still go through: check Activity before you try again/,
+  );
+  assert.equal(hung, 1);
+  assert.equal(SWAP_EXECUTE_TIMEOUT_MS, 30_000);
+});
+

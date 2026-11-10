@@ -13,6 +13,7 @@ import {
   zeroExTokenAddress,
   type ProxyQuoteResponse,
 } from './zerox';
+import { SWAP_QUOTE_TIMEOUT_MS } from './swap-request';
 
 const HOLDER = '0x0000000000001fF3684f28c67538d4D072C22734';
 const TAKER = '0x1111111111111111111111111111111111111111';
@@ -149,3 +150,27 @@ test('the swap preview simulates every approval step before the 0x swap', () => 
   assert.equal(calls[0]?.to, USDC.address);
   assert.equal(calls[2]?.to, HOLDER);
 });
+
+test('fetchZeroExQuote aborts a hung quote after the timeout and does not retry', async () => {
+  let calls = 0;
+  let sawSignal = false;
+  const hang = (async (_url: string, init?: RequestInit) => {
+    calls += 1;
+    sawSignal = init?.signal instanceof AbortSignal;
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        const error = new Error('This operation was aborted');
+        error.name = 'AbortError';
+        reject(error);
+      });
+    });
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    fetchZeroExQuote({ ...expectUsdc, fromAddress: TAKER, fetcher: hang, timeoutMs: 20 }),
+    /took too long while getting a swap quote from 0x/,
+  );
+  assert.equal(calls, 1);
+  assert.equal(sawSignal, true);
+  assert.equal(SWAP_QUOTE_TIMEOUT_MS, 15_000);
+});
+

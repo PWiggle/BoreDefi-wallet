@@ -264,7 +264,8 @@ export async function fetchQuoteResponse<R extends { status: number }>(
       }
       return response;
     } catch (error) {
-      if (last) {
+      // UserFacingError is a final mapped answer (including a quote timeout). Do not retry it.
+      if (last || error instanceof UserFacingError) {
         throw error;
       }
       await sleep(delayMs * (attempt + 1));

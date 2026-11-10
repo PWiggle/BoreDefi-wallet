@@ -13,6 +13,7 @@ import { UserFacingError, toUserError } from './tx-errors';
 import { type ChainId } from './chains';
 import { BOREDEFI_SWAP_FEE_BPS, DEFAULT_SLIPPAGE_BPS, EVM_SWAP_PROXY } from './swap-config';
 import { fetchQuoteResponse, NO_ROUTE_MESSAGE, type QuoteToken, type SwapQuote } from './swap';
+import { fetchWithTimeout, isAbortError, SWAP_QUOTE_TIMEOUT_MS } from './swap-request';
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
 
 /** 0x uses the 0xEeee… placeholder for the chain's native token; the wallet uses 0x000…0. */
@@ -169,6 +170,7 @@ export type ZeroExQuoteInput = {
   slippageBps?: number;
   proxy?: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
 };
 
 export function zeroExRequestBody(input: ZeroExQuoteInput): Record<string, unknown> {
@@ -192,14 +194,22 @@ export async function fetchZeroExQuote(input: ZeroExQuoteInput): Promise<SwapQuo
   }
   const run = input.fetcher ?? fetch;
   const url = `${input.proxy ?? EVM_SWAP_PROXY}/api/quote`;
+  const timeoutMs = input.timeoutMs ?? SWAP_QUOTE_TIMEOUT_MS;
   try {
-    const response = await fetchQuoteResponse(() =>
-      run(url, {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'BoreDefiWallet/1.0' },
-        body: JSON.stringify(zeroExRequestBody(input)),
-      }),
-    );
+    const response = await fetchQuoteResponse(async () => {
+      try {
+        return await fetchWithTimeout(run, url, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'BoreDefiWallet/1.0' },
+          body: JSON.stringify(zeroExRequestBody(input)),
+        }, timeoutMs);
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw new UserFacingError('The network took too long while getting a swap quote from 0x. Try again in a moment.');
+        }
+        throw error;
+      }
+    });
     const payload = (await response.json().catch(() => ({}))) as ProxyQuoteResponse;
     if (!response.ok) {
       if (response.status === 429 || response.status >= 500) {

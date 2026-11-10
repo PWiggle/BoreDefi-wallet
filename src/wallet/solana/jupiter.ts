@@ -11,6 +11,13 @@
  */
 import { JUPITER_REFERRAL_FEE_BPS, SOLANA_SWAP_PROXY } from '../swap-config';
 import {
+  fetchWithTimeout,
+  isAbortError,
+  retryBusyResponse,
+  SWAP_EXECUTE_TIMEOUT_MS,
+  SWAP_QUOTE_TIMEOUT_MS,
+} from '../swap-request';
+import {
   decodeWireTransaction,
   parseSolanaTransaction,
   reviewSolanaTransaction,
@@ -210,6 +217,8 @@ export type JupiterOrderInput = {
   slippageBps?: number;
   proxy?: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 export function jupiterOrderUrl(input: JupiterOrderInput): string {
@@ -235,10 +244,18 @@ export async function fetchJupiterOrder(input: JupiterOrderInput): Promise<Jupit
     throw new Error('Enter an amount greater than zero.');
   }
   const run = input.fetcher ?? fetch;
+  const timeoutMs = input.timeoutMs ?? SWAP_QUOTE_TIMEOUT_MS;
   let response: Response;
   try {
-    response = await run(jupiterOrderUrl(input), { headers: { Accept: 'application/json' } });
-  } catch {
+    // 429/5xx only, and only for /order: 1–2 retries with 500ms then 1500ms. Timeouts and execute are never retried.
+    response = await retryBusyResponse(
+      () => fetchWithTimeout(run, jupiterOrderUrl(input), { headers: { Accept: 'application/json' } }, timeoutMs),
+      { sleep: input.sleep },
+    );
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error('The network took too long while getting a Solana swap quote from Jupiter. Try again.');
+    }
     throw new Error('Network problem while getting a Solana swap quote from Jupiter. Try again.');
   }
   const payload = (await response.json().catch(() => ({}))) as JupiterOrderPayload;
@@ -306,19 +323,26 @@ export async function executeJupiterOrder(input: {
   signedTransaction: string;
   proxy?: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<JupiterExecuteResult> {
   const run = input.fetcher ?? fetch;
   let response: Response;
   try {
-    response = await run(`${input.proxy ?? SOLANA_SWAP_PROXY}/api/jupiter/execute`, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        signedTransaction: input.signedTransaction,
-        requestId: input.order.requestId,
-        lastValidBlockHeight: input.order.lastValidBlockHeight ?? undefined,
-      }),
-    });
+    // One shot only: never retry execute. A timeout uses the same "may still go through" wording as a drop.
+    response = await fetchWithTimeout(
+      run,
+      `${input.proxy ?? SOLANA_SWAP_PROXY}/api/jupiter/execute`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedTransaction: input.signedTransaction,
+          requestId: input.order.requestId,
+          lastValidBlockHeight: input.order.lastValidBlockHeight ?? undefined,
+        }),
+      },
+      input.timeoutMs ?? SWAP_EXECUTE_TIMEOUT_MS,
+    );
   } catch {
     // The signed transaction may already be on its way; never say "nothing happened" here.
     throw new Error('Network problem while sending the swap. It may still go through: check Activity before you try again.');
