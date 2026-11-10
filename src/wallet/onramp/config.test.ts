@@ -30,6 +30,9 @@ test('the flag and endpoint are read with literal process.env so Expo can inline
   assert.match(src, /=\s*process\.env\.EXPO_PUBLIC_ONRAMP_TOKEN;/);
   assert.match(src, /=\s*process\.env\.EXPO_PUBLIC_VERCEL_BYPASS;/);
   assert.doesNotMatch(src, /STRIPE_SECRET|sk_live_|sk_test_/);
+  const transakSrc = readFileSync(new URL('./transak.ts', import.meta.url), 'utf8');
+  assert.match(transakSrc, /=\s*process\.env\.EXPO_PUBLIC_TRANSAK_API_KEY;/);
+  assert.match(transakSrc, /=\s*process\.env\.EXPO_PUBLIC_TRANSAK_ENVIRONMENT;/);
 });
 
 test('production turns Buy on against the live pay.boredefi.com endpoint', () => {
@@ -40,6 +43,8 @@ test('production turns Buy on against the live pay.boredefi.com endpoint', () =>
   assert.equal(production.EXPO_PUBLIC_BUY_CRYPTO, '1');
   assert.equal(production.EXPO_PUBLIC_ONRAMP_URL, 'https://pay.boredefi.com/api/onramp-session');
   assert.equal(production.EXPO_PUBLIC_VERCEL_BYPASS, undefined);
+  assert.equal(production.EXPO_PUBLIC_TRANSAK_API_KEY, undefined);
+  assert.equal(production.EXPO_PUBLIC_TRANSAK_ENVIRONMENT, undefined);
   assert.equal(buyCryptoVisible('1', false, production.EXPO_PUBLIC_ONRAMP_URL), true);
   assert.equal(buyCryptoVisible('1', false, 'https://REPLACE_ME/api/onramp-session'), false);
   assert.equal(buyCryptoVisible('1', false, undefined), false);
@@ -49,6 +54,14 @@ test('production turns Buy on against the live pay.boredefi.com endpoint', () =>
   assert.equal(vercelBypassToken(undefined), null);
   assert.equal(vercelBypassToken('   '), null);
   assert.equal(vercelBypassToken(' bypass-token '), 'bypass-token');
+});
+
+test('Buy is visible when Transak is ready even if the Stripe URL is missing', () => {
+  assert.equal(buyCryptoVisible('1', false, undefined, false), false);
+  assert.equal(buyCryptoVisible('1', false, undefined, true), true);
+  assert.equal(buyCryptoVisible('1', false, 'https://REPLACE_ME/api/onramp-session', true), true);
+  assert.equal(buyCryptoVisible('1', false, 'https://onramp.example', false), true);
+  assert.equal(buyCryptoVisible('0', true, undefined, true), false);
 });
 
 test('endpoint base URL must be https, or loopback, and always targets the session path', () => {
