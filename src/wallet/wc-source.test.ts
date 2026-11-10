@@ -120,3 +120,18 @@ test('one WalletConnect link goes to exactly one wallet', () => {
   assert.equal(claimHandoff(other, WC, 'boredefi'), false, 'never also paired by BoreDefi');
   assert.equal(claimHandoff(new Map(), 'https://x', 'boredefi'), false);
 });
+
+test('boredefi://wc deep links from Safari/other browsers (cold and warm start) yield a pairable wc: URI', async () => {
+  const { extractWalletConnectUri } = await import('./wc');
+  const app = readFileSync(join(__dirname, '../../App.tsx'), 'utf8');
+  const config = JSON.parse(readFileSync(join(__dirname, '../../app.json'), 'utf8')).expo;
+  assert.equal(config.scheme, 'boredefi');
+  // Warm start (url event) and cold start (getInitialURL) both run the same extractor.
+  assert.match(app, /Linking\.addEventListener\('url', \(\{ url \}\) => open\(url\)\)/);
+  assert.match(app, /Linking\.getInitialURL\(\)/);
+  assert.equal(extractWalletConnectUri(`boredefi://wc?uri=${ENC}`), WC);
+  // Sign-request redirects: with a uri it still pairs; without one the app just comes to the front.
+  assert.match(extractWalletConnectUri(`boredefi://wc?uri=${ENC}&requestId=123`) ?? '', new RegExp(`^${WC.replace(/[?.*+^$()[\]{}|\\]/g, '\\$&')}`));
+  assert.equal(extractWalletConnectUri('boredefi://wc?requestId=123&sessionTopic=abc'), null);
+  assert.equal(extractWalletConnectUri('boredefi://'), null);
+});
