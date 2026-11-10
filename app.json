@@ -21,7 +21,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.boredefi.wallet",
-      "buildNumber": "22",
+      "buildNumber": "23",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
         "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID.",
