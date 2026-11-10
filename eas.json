@@ -16,7 +16,11 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_BUY_CRYPTO": "1",
-        "EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT": "https://boredefi-transak-api.vercel.app/api/widget-url"
+        "EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT": "https://boredefi-transak-api.vercel.app/api/widget-url",
+        "EXPO_PUBLIC_SOLANA": "1"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {
@@ -33,10 +37,29 @@
         "EXPO_PUBLIC_BUY_CRYPTO": "1",
         "EXPO_PUBLIC_ONRAMP_URL": "https://pay.boredefi.com/api/onramp-session"
       }
+    },
+    "testflight-transak": {
+      "autoIncrement": true,
+      "ios": {
+        "distribution": "store",
+        "resourceClass": "default"
+      },
+      "env": {
+        "EXPO_PUBLIC_SOLANA": "1",
+        "EXPO_PUBLIC_BUY_CRYPTO": "1",
+        "EXPO_PUBLIC_ONRAMP_URL": "https://pay.boredefi.com/api/onramp-session",
+        "EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT": "https://boredefi-transak-api.vercel.app/api/widget-url"
+      }
     }
   },
   "submit": {
     "production": {
+      "ios": {
+        "ascAppId": "6829342714",
+        "appleTeamId": "VSZFP52B3Q"
+      }
+    },
+    "testflight-transak": {
       "ios": {
         "ascAppId": "6829342714",
         "appleTeamId": "VSZFP52B3Q"

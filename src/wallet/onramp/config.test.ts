@@ -39,6 +39,7 @@ test('production turns Buy on against the live pay.boredefi.com endpoint', () =>
     build: {
       development?: { env?: Record<string, string> };
       preview?: { env?: Record<string, string> };
+      'testflight-transak'?: { env?: Record<string, string>; ios?: { distribution?: string } };
       production: { env?: Record<string, string> };
     };
   };
@@ -47,6 +48,9 @@ test('production turns Buy on against the live pay.boredefi.com endpoint', () =>
   const preview = eas.build.preview?.env ?? {};
   assert.equal(development.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, 'https://boredefi-transak-api.vercel.app/api/widget-url');
   assert.equal(preview.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, 'https://boredefi-transak-api.vercel.app/api/widget-url');
+  const testflight = eas.build['testflight-transak']?.env ?? {};
+  assert.equal(testflight.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, 'https://boredefi-transak-api.vercel.app/api/widget-url');
+  assert.equal(eas.build['testflight-transak']?.ios?.distribution, 'store');
   assert.equal(production.EXPO_PUBLIC_BUY_CRYPTO, '1');
   assert.equal(production.EXPO_PUBLIC_ONRAMP_URL, 'https://pay.boredefi.com/api/onramp-session');
   assert.equal(production.EXPO_PUBLIC_VERCEL_BYPASS, undefined);
