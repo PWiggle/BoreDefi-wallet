@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 
 import { Screen } from '../components/Screen';
 import { SettingsRow } from '../components/SettingsRow';
+import { LEDGER_BLE_ENABLED } from '../wallet/ledger-ble';
 import { APPEARANCE_OPTIONS, useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { useWalletConnect } from '../context/WalletConnectContext';
@@ -177,8 +178,8 @@ export function SettingsScreen() {
         }
         onPress={() => navigation.navigate('WalletConnect', {})}
       />
-      {/* No native Ledger transport on iOS yet, so the row would only show an unavailable notice. */}
-      {Platform.OS === 'ios' ? null : (
+      {/* iOS has no Ledger transport unless the Bluetooth (Nano X) test flag is on. */}
+      {Platform.OS === 'ios' && !LEDGER_BLE_ENABLED ? null : (
         <SettingsRow label="Ledger" detail="Hardware signing" onPress={() => navigation.navigate('Ledger')} />
       )}
       <SettingsRow label="Gas tracker" detail="Live gwei, costs in $, 24h chart" onPress={() => navigation.navigate('Gas')} />

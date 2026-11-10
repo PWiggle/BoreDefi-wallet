@@ -114,6 +114,15 @@
             "deploymentTarget": "16.4"
           }
         }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "modes": [],
+          "bluetoothAlwaysPermission": "Connect your Ledger hardware wallet over Bluetooth to sign transactions."
+        }
       ]
     ],
     "owner": "peplabs",
