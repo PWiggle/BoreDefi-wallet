@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { describeRequest, useWalletConnect } from '../context/WalletConnectContext';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
@@ -14,6 +14,7 @@ import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
 import { neutralizeUrls } from '../wallet/security/text-safety';
 import { hexToUtf8, pickSignMessage } from '../wallet/wc';
+import { resolveConnectAccount, sourceWalletNotice } from '../wallet/wc-source';
 import { formatNetworkFee } from '../wallet/network-fee';
 import { reviewDappRequest } from '../wallet/request-review';
 import type { TxPreview } from '../wallet/tx-simulate';
@@ -41,11 +42,17 @@ export function WalletConnectOverlay() {
     queuedRequests,
     notice,
     clearNotice,
+    accounts,
     approveProposal,
     rejectProposal,
     approveRequest,
     rejectRequest,
   } = useWalletConnect();
+  // Account picked on the Connect sheet; null = the active wallet.
+  const [pickedAccount, setPickedAccount] = useState<string | null>(null);
+  useEffect(() => {
+    setPickedAccount(null);
+  }, [pendingProposal?.id]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [verdict, setVerdict] = useState<ProtectedVerdict | null>(null);
@@ -145,13 +152,16 @@ export function WalletConnectOverlay() {
 
   if (pendingProposal) {
     const mismatch = pendingProposal.verify === 'mismatch';
+    const account = resolveConnectAccount(accounts, pickedAccount);
+    const wantsSolana = pendingProposal.chains.some((name) => name.startsWith('Solana'));
     return (
       <ConfirmSheet
         visible
         title={`Connect to ${pendingProposal.name}`}
         icon={pendingProposal.icon}
         network={pendingProposal.chains.length ? pendingProposal.chains.join(', ') : selectedChain.name}
-        from={session?.address}
+        from={account?.address}
+        notice={pendingProposal.sourceWallet ? sourceWalletNotice(pendingProposal.sourceWallet) : null}
         extra={[
           { label: 'dApp', value: pendingProposal.url || 'No website given' },
           { label: 'Verify', value: verifyLabel(pendingProposal.verify) },
@@ -161,8 +171,8 @@ export function WalletConnectOverlay() {
           ...(pendingProposal.unsupportedChains.length
             ? [{ label: 'Not supported (skipped)', value: pendingProposal.unsupportedChains.join(', ') }]
             : []),
-          ...(solanaAddress && pendingProposal.chains.some((name) => name.startsWith('Solana'))
-            ? [{ label: 'Solana account', value: solanaAddress }]
+          ...(account?.solanaAddress && wantsSolana
+            ? [{ label: 'Solana account', value: account.solanaAddress }]
             : []),
           { label: 'Access', value: 'Shares your public address. Keys stay on this device. Every signature asks you first.' },
         ]}
@@ -172,9 +182,37 @@ export function WalletConnectOverlay() {
         confirmLabel={mismatch ? 'Connect anyway' : 'Connect'}
         cancelLabel="Reject"
         loading={busy}
-        onConfirm={() => run(approveProposal)}
+        onConfirm={() => run(() => approveProposal(account?.address ?? null))}
         onCancel={() => run(rejectProposal)}
-      />
+      >
+        <View style={styles.accounts} accessibilityRole="radiogroup" accessibilityLabel="BoreDefi account to connect">
+          <Text style={styles.accountsLabel}>Connect as</Text>
+          {accounts.map((item) => {
+            const selected = account?.address === item.address;
+            return (
+              <Pressable
+                key={item.address}
+                onPress={() => setPickedAccount(item.address)}
+                style={[styles.accountRow, selected && styles.accountRowSelected]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+              >
+                <Text style={styles.accountName}>
+                  {selected ? '● ' : '○ '}
+                  {item.label}
+                  {item.active ? ' (active)' : ''}
+                </Text>
+                <Text selectable style={styles.accountAddress}>
+                  {item.address}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {accounts.length === 1 ? (
+            <Text style={styles.accountsHint}>This is the only wallet in BoreDefi. To connect a different address, import that wallet in BoreDefi first.</Text>
+          ) : null}
+        </View>
+      </ConfirmSheet>
     );
   }
 
@@ -345,6 +383,19 @@ function safePreview(params: unknown[]): string {
 function overlayStyles({ colors, radius, spacing, type }: Theme) {
   return {
     backdrop: { backgroundColor: colors.overlay, flex: 1, justifyContent: 'center' as const },
+    accounts: { gap: spacing.xs },
+    accountsLabel: type.label,
+    accountRow: {
+      borderColor: colors.border,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      gap: 2,
+      padding: spacing.sm,
+    },
+    accountRowSelected: { borderColor: colors.accent },
+    accountName: { ...type.body, fontSize: 14, fontWeight: '700' as const },
+    accountAddress: { ...type.body, fontSize: 12 },
+    accountsHint: { ...type.meta, fontSize: 12 },
     scroll: { flexGrow: 1, justifyContent: 'center' as const, padding: spacing.lg },
     card: {
       backgroundColor: colors.surface,

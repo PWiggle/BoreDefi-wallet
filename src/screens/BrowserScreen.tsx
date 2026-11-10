@@ -32,6 +32,7 @@ import {
   urlBarAfterNavigation,
 } from '../wallet/dapps';
 import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
+import { walletLinkSource } from '../wallet/wc-source';
 import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
@@ -189,7 +190,7 @@ export function BrowserScreen() {
         return;
       }
       if (next.startsWith('wc:')) {
-        pair(next).catch((err) =>
+        pair(next, { sourceWallet: walletLinkSource(raw) }).catch((err) =>
           setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
         );
         return;
@@ -439,7 +440,7 @@ export function BrowserScreen() {
     }
   };
 
-  const pairFromPage = (wcUri: string) => {
+  const pairFromPage = (wcUri: string, sourceWallet: string | null) => {
     // A page can fire the same link twice (window.open plus a redirect); pair it once.
     const now = Date.now();
     const last = lastPairRef.current;
@@ -447,8 +448,12 @@ export function BrowserScreen() {
       return;
     }
     lastPairRef.current = { uri: wcUri, at: now };
-    setNotice('Opening WalletConnect in BoreDefi. Review the request before you approve it.');
-    pair(wcUri).catch((err) =>
+    setNotice(
+      sourceWallet
+        ? `You picked ${sourceWallet} on this site. BoreDefi will connect your BoreDefi wallet instead. Review it before you approve.`
+        : 'Opening WalletConnect in BoreDefi. Review the request before you approve it.',
+    );
+    pair(wcUri, { sourceWallet }).catch((err) =>
       setError(err instanceof Error ? err.message : 'WalletConnect pair failed.'),
     );
   };
@@ -470,7 +475,7 @@ export function BrowserScreen() {
       return false;
     }
     if (decision.kind === 'walletconnect') {
-      pairFromPage(decision.uri);
+      pairFromPage(decision.uri, walletLinkSource(target));
       return true;
     }
     if (decision.kind === 'redirect') {

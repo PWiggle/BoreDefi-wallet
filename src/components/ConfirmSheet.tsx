@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
@@ -26,6 +26,10 @@ type Props = {
   /** Small grey line under the fee (e.g. the gas limit). */
   feeDetail?: string;
   extra?: ConfirmRow[];
+  /** Highlighted note shown under the title (e.g. "You picked MetaMask on this site..."). */
+  notice?: string | null;
+  /** Extra controls rendered after the rows (e.g. the account picker). */
+  children?: ReactNode;
   /** Transaction preview ("What will happen"). */
   preview?: TxPreview | null;
   previewLoading?: boolean;
@@ -71,6 +75,18 @@ function confirmStyles({ colors, radius, spacing, type }: Theme) {
     },
     row: {
       gap: 4,
+    },
+    notice: {
+      backgroundColor: colors.warningSurface,
+      borderColor: colors.warning,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      padding: spacing.sm,
+    },
+    noticeText: {
+      ...type.body,
+      fontSize: 14,
+      fontWeight: '600' as const,
     },
     label: type.label,
     value: {
@@ -148,6 +164,8 @@ export function ConfirmSheet({
   fee,
   feeDetail,
   extra = [],
+  notice,
+  children,
   preview,
   previewLoading,
   warnings = [],
@@ -226,7 +244,13 @@ export function ConfirmSheet({
           ) : (
             <Text style={[styles.title, danger && styles.titleDanger]}>{title}</Text>
           )}
+          {notice ? (
+            <View style={styles.notice} accessibilityRole="alert">
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          ) : null}
           {rows.map(renderRow)}
+          {children}
           {fee ? (
             <View style={styles.row}>
               <Text style={styles.label}>Estimated network fee</Text>

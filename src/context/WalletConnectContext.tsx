@@ -21,6 +21,7 @@ import {
   supportedCaipChains,
 } from '../wallet/wc';
 import { installRelayOriginWebSocket } from '../wallet/wc-origin';
+import { connectableAccounts, pairingTopic, resolveConnectAccount, type ConnectAccount } from '../wallet/wc-source';
 import { loadWalletConnectUtils, loadWalletKitSdk } from '../wallet/wc-sdk';
 import { ETH_SIGN_BLOCKED, handleWalletConnectRequest } from '../wallet/wc-sign';
 import {
@@ -53,6 +54,8 @@ export type SessionInfo = {
 export type ProposalInfo = ProposalSummary & {
   id: number;
   raw: unknown;
+  /** Another wallet the page meant to open (e.g. "MetaMask" for metamask://wc?uri=...), if any. */
+  sourceWallet: string | null;
 };
 
 export type RequestInfo = {
@@ -97,8 +100,11 @@ type WalletConnectContextValue = {
   pendingProposal: ProposalInfo | null;
   pendingRequest: RequestInfo | null;
   queuedRequests: number;
-  pair: (uri: string) => Promise<void>;
-  approveProposal: () => Promise<void>;
+  pair: (uri: string, options?: { sourceWallet?: string | null }) => Promise<void>;
+  /** BoreDefi accounts the user can connect (the active wallet first). */
+  accounts: ConnectAccount[];
+  /** Approve with the picked account (defaults to the active wallet; anything not in accounts is ignored). */
+  approveProposal: (account?: string | null) => Promise<void>;
   rejectProposal: () => Promise<void>;
   approveRequest: (clearance?: string) => Promise<void>;
   rejectRequest: () => Promise<void>;
@@ -159,6 +165,12 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
   fallbackChainId.current = selectedChain.id;
   const solanaRef = useRef<string | null>(null);
   solanaRef.current = SOLANA_ENABLED ? solanaAddress : null;
+  // Pairing topic -> wallet the page meant to open, so the proposal sheet can say so.
+  const sourceByTopicRef = useRef(new Map<string, string>());
+  const accounts = useMemo(
+    () => connectableAccounts({ address, solanaAddress: SOLANA_ENABLED ? solanaAddress : null }),
+    [address, solanaAddress],
+  );
 
   const refreshSessions = useCallback(() => {
     setSessions(readSessions(clientRef.current));
@@ -206,7 +218,10 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
             setError(`Blocked: ${summary.blockedReason} Your wallet was not connected.`);
             return;
           }
-          setPendingProposal({ ...summary, id: proposal.id, raw: proposal });
+          const topic = (proposal.params as { pairingTopic?: string }).pairingTopic ?? '';
+          const sourceWallet = sourceByTopicRef.current.get(topic) ?? null;
+          sourceByTopicRef.current.delete(topic);
+          setPendingProposal({ ...summary, id: proposal.id, raw: proposal, sourceWallet });
         }) as (payload: never) => void);
 
         kit.on('session_request', ((event: {
@@ -306,7 +321,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     };
   }, [projectId, refreshSessions]);
 
-  const pair = useCallback(async (uri: string) => {
+  const pair = useCallback(async (uri: string, options?: { sourceWallet?: string | null }) => {
     const client = clientRef.current;
     if (!client) {
       throw new Error('WalletConnect is still starting. Try again in a moment.');
@@ -319,6 +334,14 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
       throw new Error("That isn't a WalletConnect link. Copy the wc: link from the dApp, or tap Scan QR.");
     }
     setError(null);
+    const topic = pairingTopic(extracted);
+    if (topic) {
+      if (options?.sourceWallet) {
+        sourceByTopicRef.current.set(topic, options.sourceWallet);
+      } else {
+        sourceByTopicRef.current.delete(topic);
+      }
+    }
     try {
       await client.pair({ uri: extracted });
     } catch (err) {
@@ -333,14 +356,17 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const approveProposal = useCallback(async () => {
+  const approveProposal = useCallback(async (picked?: string | null) => {
     const client = clientRef.current;
-    if (!client || !pendingProposal || !address) {
+    // Always the user's own BoreDefi account (never a page-supplied or fixture address).
+    const account = resolveConnectAccount(accounts, picked);
+    if (!client || !pendingProposal || !account) {
       throw new Error('Unlock the wallet before approving a connection.');
     }
+    const address = account.address;
     const { buildApprovedNamespaces, getSdkError } = loadWalletConnectUtils();
     const proposal = pendingProposal.raw as { id: number; params: unknown };
-    const solana = solanaRef.current;
+    const solana = account.solanaAddress;
     try {
       const namespaces = buildApprovedNamespaces({
         proposal: proposal.params as Parameters<typeof buildApprovedNamespaces>[0]['proposal'],
@@ -381,7 +407,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
           : 'Could not approve that connection.',
       );
     }
-  }, [address, pendingProposal, refreshSessions]);
+  }, [accounts, pendingProposal, refreshSessions]);
 
   const rejectProposal = useCallback(async () => {
     const client = clientRef.current;
@@ -505,6 +531,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
       pendingRequest,
       queuedRequests: Math.max(0, requests.length - 1),
       pair,
+      accounts,
       approveProposal,
       rejectProposal,
       approveRequest,
@@ -512,6 +539,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
       disconnect,
     }),
     [
+      accounts,
       approveProposal,
       approveRequest,
       clearNotice,
