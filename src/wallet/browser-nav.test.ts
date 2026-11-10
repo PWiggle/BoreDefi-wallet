@@ -229,8 +229,10 @@ test('Browser screen routes every app link through the classifier and never show
   assert.match(screen, /parseOpenMessage\(event\.nativeEvent\.data\)/);
   assert.match(screen, /onError=\{onLoadError\}/);
   assert.match(screen, /isUnknownSchemeError\(err\)/);
-  // App links never go to Linking/openURL (untrusted pages must not launch other apps).
-  assert.doesNotMatch(screen, /Linking/);
+  // Other apps open only from the user's "Open <wallet>" choice, for a known wallet, after the
+  // one-link-one-wallet claim (untrusted pages can't launch apps by themselves).
+  assert.equal(screen.match(/Linking\.openURL\(/g)?.length, 1);
+  assert.match(screen, /claimHandoff\(handoffsRef\.current, choice\.wcUri, 'external'\)[\s\S]*Linking\.openURL\(choice\.link\)/);
   assert.match(view, /renderError=/);
   assert.match(view, /setSupportMultipleWindows=\{false\}/);
   assert.match(view, /originWhitelist=\{\['\*'\]\}/);

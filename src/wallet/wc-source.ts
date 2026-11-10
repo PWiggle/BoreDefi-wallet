@@ -99,3 +99,37 @@ export function resolveConnectAccount(accounts: ConnectAccount[], picked: string
   }
   return accounts.find((item) => item.active) ?? accounts[0] ?? null;
 }
+
+/**
+ * Name of a known wallet whose link the user may choose to open (custom scheme or universal-link
+ * host from the list above). Null for unknown apps, intent:// links and BoreDefi's own links, so
+ * an untrusted page can never get an arbitrary app launched through the "Open <wallet>" choice.
+ */
+export function openableWalletLink(raw: string | null | undefined): string | null {
+  const url = (raw ?? '').trim();
+  if (/^intent:/i.test(url)) {
+    return null;
+  }
+  const name = walletLinkSource(url);
+  return name && WALLET_LINKS.some((item) => item.name === name) ? name : null;
+}
+
+export type HandoffTarget = 'boredefi' | 'external';
+
+/**
+ * One pairing link goes to exactly one wallet. Records the first choice for a pairing topic and
+ * refuses the other target afterwards, so the same wc: URI can never be paired by BoreDefi and
+ * also handed to another wallet. Returns true when the caller may proceed.
+ */
+export function claimHandoff(claims: Map<string, HandoffTarget>, wcUri: string, target: HandoffTarget): boolean {
+  const topic = pairingTopic(wcUri);
+  if (!topic) {
+    return false;
+  }
+  const existing = claims.get(topic);
+  if (existing && existing !== target) {
+    return false;
+  }
+  claims.set(topic, target);
+  return true;
+}

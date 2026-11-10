@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  claimHandoff,
   connectableAccounts,
+  openableWalletLink,
   pairingTopic,
   resolveConnectAccount,
   sourceWalletNotice,
@@ -91,5 +93,33 @@ test('the WalletConnect sheet approves the picked BoreDefi account and shows the
   assert.match(overlay, /approveProposal\(account\?\.address \?\? null\)/);
   assert.match(overlay, /sourceWalletNotice\(pendingProposal\.sourceWallet\)/);
   assert.match(overlay, /Connect as/);
-  assert.match(browser, /pairFromPage\(decision\.uri, walletLinkSource\(target\)\)/);
+  // Other wallets' links never auto-pair: they open the BoreDefi-or-<wallet> choice.
+  assert.match(browser, /const source = walletLinkSource\(target\);\s*if \(!source\) \{\s*\/\/[^\n]*\n\s*pairFromPage\(decision\.uri, null\);/);
+  assert.match(browser, /setWalletChoice\(/);
+  assert.match(browser, /confirmLabel="Connect with BoreDefi instead"/);
+  assert.match(browser, /label=\{`Open \$\{walletChoice\.openable\}`\}/);
+  assert.match(browser, /claimHandoff\(handoffsRef\.current, wcUri, 'boredefi'\)/);
+});
+
+test('"Open <wallet>" is offered only for known wallet links, never intent:// or unknown apps', () => {
+  assert.equal(openableWalletLink(`trust://wc?uri=${ENC}`), 'Trust Wallet');
+  assert.equal(openableWalletLink(`https://link.trustwallet.com/wc?uri=${ENC}`), 'Trust Wallet');
+  assert.equal(openableWalletLink(`metamask://wc?uri=${ENC}`), 'MetaMask');
+  assert.equal(openableWalletLink(`rainbow://wc?uri=${ENC}`), 'Rainbow');
+  assert.equal(openableWalletLink(`someotherwallet://wc?uri=${ENC}`), null);
+  assert.equal(openableWalletLink(`tel://wc?uri=${ENC}`), null);
+  assert.equal(openableWalletLink(`intent://wc?uri=${ENC}#Intent;scheme=trust;end`), null);
+  assert.equal(openableWalletLink(`boredefi://wc?uri=${ENC}`), null);
+  assert.equal(openableWalletLink(WC), null);
+});
+
+test('one WalletConnect link goes to exactly one wallet', () => {
+  const claims = new Map();
+  assert.equal(claimHandoff(claims, WC, 'boredefi'), true);
+  assert.equal(claimHandoff(claims, WC, 'boredefi'), true, 'repeat for the same wallet is fine');
+  assert.equal(claimHandoff(claims, WC, 'external'), false, 'never also handed to another wallet');
+  const other = new Map();
+  assert.equal(claimHandoff(other, WC, 'external'), true);
+  assert.equal(claimHandoff(other, WC, 'boredefi'), false, 'never also paired by BoreDefi');
+  assert.equal(claimHandoff(new Map(), 'https://x', 'boredefi'), false);
 });
