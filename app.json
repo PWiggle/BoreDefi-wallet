@@ -34,7 +34,7 @@
     },
     "android": {
       "package": "com.boredefi.wallet",
-      "versionCode": 36,
+      "versionCode": 37,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",

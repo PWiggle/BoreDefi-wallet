@@ -37,7 +37,7 @@ test('1.0.6 release builds turn Solana on (EAS production env); the code default
   assert.equal(eas.build.production.env.EXPO_PUBLIC_SOLANA, '1');
   const app = JSON.parse(read('../../../app.json')).expo;
   assert.equal(app.version, '1.0.10');
-  assert.equal(app.android.versionCode, 36);
+  assert.equal(app.android.versionCode, 37);
   assert.equal(app.ios.buildNumber, '24');
 });
 

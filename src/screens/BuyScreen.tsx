@@ -184,27 +184,32 @@ export function BuyScreen() {
             : 'Stripe is the merchant of record and handles the card payment and identity checks. BoreDefi does not charge a fee. Any Stripe fee is shown before you pay.'}
         </Text>
       </View>
-      <Text style={styles.label}>Pay with</Text>
-      <View style={styles.row}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected: provider === 'stripe', disabled: !STRIPE_BUY_AVAILABLE }}
-          disabled={busy || !STRIPE_BUY_AVAILABLE}
-          onPress={() => selectProvider('stripe')}
-          style={[styles.chip, provider === 'stripe' && styles.chipOn, !STRIPE_BUY_AVAILABLE && styles.chipOff]}
-        >
-          <Text style={styles.chipText}>Stripe</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected: provider === 'transak', disabled: !TRANSAK_BUY_AVAILABLE }}
-          disabled={busy || !TRANSAK_BUY_AVAILABLE}
-          onPress={() => selectProvider('transak')}
-          style={[styles.chip, provider === 'transak' && styles.chipOn, !TRANSAK_BUY_AVAILABLE && styles.chipOff]}
-        >
-          <Text style={styles.chipText}>Transak</Text>
-        </Pressable>
-      </View>
+      {/* Transak stays hidden (no picker, no notice) until a build sets EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT. */}
+      {TRANSAK_BUY_AVAILABLE ? (
+        <>
+          <Text style={styles.label}>Pay with</Text>
+          <View style={styles.row}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: provider === 'stripe', disabled: !STRIPE_BUY_AVAILABLE }}
+              disabled={busy || !STRIPE_BUY_AVAILABLE}
+              onPress={() => selectProvider('stripe')}
+              style={[styles.chip, provider === 'stripe' && styles.chipOn, !STRIPE_BUY_AVAILABLE && styles.chipOff]}
+            >
+              <Text style={styles.chipText}>Stripe</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: provider === 'transak', disabled: !TRANSAK_BUY_AVAILABLE }}
+              disabled={busy || !TRANSAK_BUY_AVAILABLE}
+              onPress={() => selectProvider('transak')}
+              style={[styles.chip, provider === 'transak' && styles.chipOn, !TRANSAK_BUY_AVAILABLE && styles.chipOff]}
+            >
+              <Text style={styles.chipText}>Transak</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : null}
       <Text style={styles.label}>Asset</Text>
       <View style={styles.row}>
         {assets.map((asset) => {
@@ -270,11 +275,6 @@ export function BuyScreen() {
       </Text>
       {!STRIPE_BUY_AVAILABLE && !usingTransak ? (
         <Text style={styles.meta}>This build has no onramp endpoint yet. Set EXPO_PUBLIC_ONRAMP_URL to the test server and rebuild.</Text>
-      ) : null}
-      {!TRANSAK_BUY_AVAILABLE ? (
-        <Text style={styles.meta}>
-          Transak is not in this build yet. Set EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT to the widget server and rebuild.
-        </Text>
       ) : null}
       <ErrorBanner message={error ?? (built.ok ? null : built.error)} />
     </Screen>

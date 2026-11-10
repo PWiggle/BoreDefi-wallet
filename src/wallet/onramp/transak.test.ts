@@ -193,3 +193,15 @@ test('the Transak module and Buy screen never read a seed or private key, and ch
   assert.match(docs, /EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT/);
   assert.doesNotMatch(docs, /640ebc069e89e5691aad/i);
 });
+
+test('production hides Transak: no endpoint in eas.json, and the Buy screen renders no Transak picker or setup notice without it', () => {
+  const eas = JSON.parse(readFileSync(new URL('../../../eas.json', import.meta.url), 'utf8')) as {
+    build: { production: { env?: Record<string, string> } };
+  };
+  assert.equal(eas.build.production.env?.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, undefined);
+  assert.equal(transakWidgetEndpointUrl(undefined), null);
+  assert.equal(transakWidgetEndpointUrl(''), null);
+  const screen = readFileSync(new URL('../../screens/BuyScreen.tsx', import.meta.url), 'utf8');
+  assert.match(screen, /\{TRANSAK_BUY_AVAILABLE \? \(\s*<>\s*<Text style=\{styles\.label\}>Pay with<\/Text>/);
+  assert.doesNotMatch(screen, /Transak is not in this build yet/);
+});
