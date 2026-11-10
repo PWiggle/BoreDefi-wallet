@@ -33,18 +33,20 @@ import {
   urlBarAfterNavigation,
 } from '../wallet/dapps';
 import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
-import { claimHandoff, walletLinkSource, type HandoffTarget } from '../wallet/wc-source';
+import { claimHandoff, walletLinkSource, walletStoreUrl, type HandoffTarget } from '../wallet/wc-source';
 import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
 import {
   blockedSchemeMessage,
   type BrowserNavDecision,
   classifyBrowserNavigation,
+  coinbaseDappLink,
   isUnknownSchemeError,
 } from '../wallet/browser-nav';
 import {
   chainIdHex,
-  INJECTED_PROVIDER_SOURCE,
+  injectedProviderSource,
+  isGestureMessage,
   isOriginConnected,
   parseOpenMessage,
   providerEmitScript,
@@ -61,8 +63,26 @@ import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
 import { reviewDappRequest } from '../wallet/request-review';
 import type { TxPreview } from '../wallet/tx-simulate';
 
-/** A page may open another wallet's app only this soon after the user touched it. */
-const TAP_WINDOW_MS = 10_000;
+/**
+ * A page may open another wallet's app (or a store page) only this soon after the user touched it.
+ * 30s, not 10s: WalletConnect builds the pairing link over the network after the tap, and the
+ * WalletConnect wallet list fires the link when the URI arrives, which can take a while on mobile data.
+ */
+const TAP_WINDOW_MS = 30_000;
+
+/** Per-WebView secret for the injected script's real-tap reports (see injectedProviderSource). */
+function newGestureKey(): string {
+  const bytes = new Uint8Array(16);
+  const cryptoApi = (globalThis as { crypto?: { getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto;
+  if (cryptoApi?.getRandomValues) {
+    cryptoApi.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 type BrowserConfirm = {
   title: string;
@@ -171,6 +191,14 @@ export function BrowserScreen() {
   // Last time the user touched the page (native touch, the page can't fake it). Other wallets'
   // links only go to the OS shortly after a real tap, like Safari, so pages can't drive-by launch apps.
   const lastTouchRef = useRef(0);
+  const gestureKeyRef = useRef<string>('');
+  if (!gestureKeyRef.current) {
+    gestureKeyRef.current = newGestureKey();
+  }
+  const injectedSourceRef = useRef<string>('');
+  if (!injectedSourceRef.current) {
+    injectedSourceRef.current = injectedProviderSource(gestureKeyRef.current);
+  }
   const [pendingConfirm, setPendingConfirm] = useState<BrowserConfirm | null>(null);
 
   const [pendingProtected, setPendingProtected] = useState<{
@@ -252,6 +280,11 @@ export function BrowserScreen() {
 
   const onMessage = async (event: WebViewMessageEvent) => {
     let id = 0;
+    if (isGestureMessage(event.nativeEvent.data, gestureKeyRef.current)) {
+      // A real tap inside the page (the native onTouchStart below doesn't always fire over WKWebView).
+      lastTouchRef.current = Date.now();
+      return;
+    }
     const openUrl = parseOpenMessage(event.nativeEvent.data);
     if (openUrl !== null) {
       // window.open / link click to an app scheme, caught by the injected script.
@@ -499,6 +532,14 @@ export function BrowserScreen() {
       openOtherWallet(decision);
       return true;
     }
+    if (decision.kind === 'store') {
+      openStore(decision.url);
+      return true;
+    }
+    if (decision.kind === 'coinbase-popup') {
+      offerCoinbaseApp();
+      return true;
+    }
     if (decision.kind === 'redirect') {
       const verdict = checkPhishing(decision.url);
       if (verdict.blocked) {
@@ -548,15 +589,76 @@ export function BrowserScreen() {
     }
     lastExternalRef.current = { url: decision.url, at: now };
     Linking.openURL(decision.url).catch(() => {
+      // Not installed (iOS rejects an app scheme nobody handles; Android has no activity for it).
+      // Like Safari plus the wallet's own "Get" button: send the user to the store, never do nothing.
       if (decision.fallbackUrl) {
         handleAppLink(decision.fallbackUrl) || open(decision.fallbackUrl);
         return;
       }
-      if (decision.packageName) {
-        Linking.openURL(`https://play.google.com/store/apps/details?id=${decision.packageName}`).catch(() => undefined);
+      const store = decision.packageName
+        ? `https://play.google.com/store/apps/details?id=${decision.packageName}`
+        : walletStoreUrl(decision.wallet, Platform.OS);
+      if (store) {
+        setNotice(`${decision.wallet} isn't installed. Opening the ${Platform.OS === 'ios' ? 'App Store' : 'Play Store'} so you can get it.`);
+        Linking.openURL(store).catch(() => setNotice(`${decision.wallet} didn't open. It may not be installed on this device.`));
         return;
       }
-      setNotice(`${decision.wallet} didn't open. It may not be installed on this device.`);
+      setNotice(`${decision.wallet} didn't open. It may not be installed. Use the page's "Get" button to install it.`);
+    });
+  };
+
+  /** A wallet's "Get" button (App Store / Play Store page): open the store app, like Safari. */
+  const openStore = (storeUrl: string) => {
+    if (Date.now() - lastTouchRef.current > TAP_WINDOW_MS) {
+      setNotice('This page tried to open the app store without a tap. Tap the button on the page again.');
+      return;
+    }
+    const last = lastExternalRef.current;
+    const now = Date.now();
+    if (last && last.url === storeUrl && now - last.at < 3000) {
+      return;
+    }
+    lastExternalRef.current = { url: storeUrl, at: now };
+    Linking.openURL(storeUrl).catch(() => setNotice("The app store didn't open."));
+  };
+
+  /**
+   * Coinbase's SDK wants a keys.coinbase.com popup that talks back to the page through
+   * window.opener. No in-app browser can host that (Coinbase shows "This app doesn't support
+   * Coinbase Wallet"), so the popup is never loaded here. Offer the Coinbase Wallet app instead:
+   * it opens this page in Coinbase Wallet's own browser, where Coinbase connects directly.
+   */
+  const offerCoinbaseApp = () => {
+    if (Date.now() - lastTouchRef.current > TAP_WINDOW_MS) {
+      setNotice('This page tried to open Coinbase without a tap. Tap Coinbase Wallet on the page again.');
+      return;
+    }
+    if (pendingConfirm) {
+      return;
+    }
+    const site = pageUrl;
+    const host = dappHost(site) ?? 'this site';
+    requestConfirm({
+      title: 'Open in Coinbase Wallet?',
+      network: selectedChain.name,
+      mode: 'buttons',
+      confirmLabel: 'Open Coinbase Wallet',
+      cancelLabel: 'Not now',
+      extra: [{ label: 'Site', value: host }],
+      warnings: [
+        "Coinbase's sign-in window can't run inside an in-app browser. Coinbase Wallet will open " +
+          `${host} in its own browser, and you connect there. To stay in BoreDefi, pick WalletConnect or BoreDefi on the site.`,
+      ],
+    }).then((ok) => {
+      if (!ok) {
+        return;
+      }
+      Linking.openURL(coinbaseDappLink(site)).catch(() => {
+        const store = walletStoreUrl('Coinbase Wallet', Platform.OS);
+        if (store) {
+          Linking.openURL(store).catch(() => undefined);
+        }
+      });
     });
   };
 
@@ -634,7 +736,7 @@ export function BrowserScreen() {
           ref={webRef}
           uri={url}
           style={styles.web}
-          injectedJavaScriptBeforeContentLoaded={INJECTED_PROVIDER_SOURCE}
+          injectedJavaScriptBeforeContentLoaded={injectedSourceRef.current}
           onLoadEnd={() => {
             webRef.current?.injectJavaScript(providerSyncScript(session.address, selectedChain.id));
           }}

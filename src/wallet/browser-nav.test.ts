@@ -89,15 +89,17 @@ test('Android intent:// for another wallet becomes its app link, with package an
 });
 
 test('regular wallet websites still load in-app (no wc: link, not a pure app-link host)', () => {
-  for (const url of ['https://phantom.app/', 'https://app.uniswap.org/swap', 'https://keys.coinbase.com/connect', 'https://rainbow.me/']) {
+  for (const url of ['https://phantom.app/', 'https://app.uniswap.org/swap', 'https://rainbow.me/']) {
     assert.deepEqual(classifyBrowserNavigation(url), { kind: 'load' }, url);
   }
+  // Build 24: keys.coinbase.com is Coinbase's popup, which can't work in a WebView (it replaced the
+  // dApp page with "This app doesn't support Coinbase Wallet"), so it's never loaded.
+  assert.equal(classifyBrowserNavigation('https://keys.coinbase.com/connect').kind, 'coinbase-popup');
 });
 
 test('non-wallet app schemes stay blocked', () => {
   for (const [url, scheme] of [
     ['tel:+15555550100', 'tel'],
-    ['market://details?id=io.metamask', 'market'],
     ['sms:123', 'sms'],
     ['intent://scan/#Intent;scheme=zxing;package=com.google.zxing.client.android;end', 'intent'],
     ['wc:', 'wc'],
@@ -106,6 +108,8 @@ test('non-wallet app schemes stay blocked', () => {
     assert.deepEqual(classifyBrowserNavigation(url), { kind: 'blocked', scheme }, url);
   }
   assert.match(blockedSchemeMessage('tel'), /tel:/);
+  // Build 24: store links (a wallet's "Get" button) open the store, like Safari.
+  assert.equal(classifyBrowserNavigation('market://details?id=io.metamask').kind, 'store');
 });
 
 test('intent:// links fall back to their http(s) browser_fallback_url only', () => {

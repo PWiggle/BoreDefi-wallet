@@ -3,26 +3,81 @@
  * Pure helpers so the proposal sheet logic can be unit tested.
  */
 
-/** Known wallet link prefixes (custom schemes and universal-link hosts) -> display name. */
-const WALLET_LINKS: { name: string; schemes: string[]; hosts: string[] }[] = [
-  { name: 'MetaMask', schemes: ['metamask'], hosts: ['metamask.app.link'] },
-  { name: 'Trust Wallet', schemes: ['trust'], hosts: ['link.trustwallet.com'] },
-  { name: 'Rainbow', schemes: ['rainbow'], hosts: ['rnbwapp.com', 'rainbow.me'] },
-  { name: 'Coinbase Wallet', schemes: ['cbwallet'], hosts: ['go.cb-w.com', 'keys.coinbase.com'] },
-  { name: 'Phantom', schemes: ['phantom'], hosts: ['phantom.app'] },
-  { name: 'Zerion', schemes: ['zerion'], hosts: ['app.zerion.io', 'wallet.zerion.io'] },
-  { name: 'OKX Wallet', schemes: ['okex', 'okx'], hosts: ['www.okx.com'] },
-  { name: 'Uniswap Wallet', schemes: ['uniswap'], hosts: ['uniswap.org'] },
-  { name: 'Ledger Live', schemes: ['ledgerlive'], hosts: [] },
-  { name: 'Exodus', schemes: ['exodus'], hosts: [] },
-  { name: 'Safe', schemes: ['safe'], hosts: [] },
+/**
+ * Known wallets: link schemes, universal-link hosts, and store listings (used when the app isn't
+ * installed, so a tap never just does nothing). App Store ids checked against itunes lookup.
+ */
+const WALLET_LINKS: { name: string; schemes: string[]; hosts: string[]; appStoreId?: string; androidPackage?: string }[] = [
+  { name: 'MetaMask', schemes: ['metamask'], hosts: ['metamask.app.link'], appStoreId: '1438144202', androidPackage: 'io.metamask' },
+  { name: 'Trust Wallet', schemes: ['trust'], hosts: ['link.trustwallet.com'], appStoreId: '1288339409', androidPackage: 'com.wallet.crypto.trustapp' },
+  { name: 'Rainbow', schemes: ['rainbow'], hosts: ['rnbwapp.com', 'rainbow.me'], appStoreId: '1457119021', androidPackage: 'me.rainbow' },
+  { name: 'Coinbase Wallet', schemes: ['cbwallet'], hosts: ['go.cb-w.com', 'keys.coinbase.com'], appStoreId: '1278383455', androidPackage: 'org.toshi' },
+  { name: 'Phantom', schemes: ['phantom'], hosts: ['phantom.app'], appStoreId: '1598432977', androidPackage: 'app.phantom' },
+  { name: 'Zerion', schemes: ['zerion'], hosts: ['app.zerion.io', 'wallet.zerion.io'], appStoreId: '1456732565', androidPackage: 'io.zerion.android' },
+  { name: 'OKX Wallet', schemes: ['okex', 'okx'], hosts: ['www.okx.com'], appStoreId: '1327268470', androidPackage: 'com.okinc.okex.gp' },
+  { name: 'Uniswap Wallet', schemes: ['uniswap'], hosts: ['uniswap.org'], appStoreId: '6443944476', androidPackage: 'com.uniswap.mobile' },
+  { name: 'Ledger Live', schemes: ['ledgerlive'], hosts: [], appStoreId: '1361671700', androidPackage: 'com.ledger.live' },
+  { name: 'Exodus', schemes: ['exodus'], hosts: [], appStoreId: '1414384820', androidPackage: 'exodusmovement.exodus' },
+  { name: 'Safe', schemes: ['safe'], hosts: [], androidPackage: 'io.gnosis.safe' },
 ];
+
+/**
+ * Where to send the user when a known wallet's app isn't installed: its App Store page on iOS,
+ * its Play Store page on Android. Null for unknown wallets (the page's own "Get" button still works).
+ */
+export function walletStoreUrl(walletName: string | null | undefined, platform: 'ios' | 'android' | string): string | null {
+  const wallet = WALLET_LINKS.find((item) => item.name === walletName);
+  if (!wallet) {
+    return null;
+  }
+  if (platform === 'ios') {
+    return wallet.appStoreId ? `https://apps.apple.com/app/id${wallet.appStoreId}` : null;
+  }
+  if (platform === 'android') {
+    return wallet.androidPackage ? `https://play.google.com/store/apps/details?id=${wallet.androidPackage}` : null;
+  }
+  return null;
+}
 
 /** https link on a known wallet's universal-link host (opens that wallet like Safari would). */
 export function isKnownWalletUniversalLink(raw: string): boolean {
-  const host = /^https?:\/\/([^/?#:]+)/i.exec(raw.trim())?.[1]?.toLowerCase() ?? '';
-  return Boolean(host) && UNIVERSAL_LINK_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  const match = /^https?:\/\/([^/?#:]+)(?::\d+)?([^?#]*)/i.exec(raw.trim());
+  const host = match?.[1]?.toLowerCase() ?? '';
+  const path = match?.[2] ?? '';
+  if (!host) {
+    return false;
+  }
+  if (UNIVERSAL_LINK_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
+    return true;
+  }
+  // Wallet sites whose app links live under one path (the rest of the site browses in-app).
+  return UNIVERSAL_LINK_PATHS.some((rule) => host === rule.host && path.toLowerCase().startsWith(rule.path));
 }
+
+/**
+ * Web links the injected script hands to the wallet instead of opening a popup/new window:
+ * wallet universal links, store pages, and Coinbase's popup. Kept in sync with the classifier
+ * (browser-nav.ts decides what actually happens; this only stops the WebView from swallowing them).
+ */
+export const HANDOFF_WEB_HOSTS = [
+  ...['metamask.app.link', 'link.trustwallet.com', 'rnbwapp.com', 'go.cb-w.com'],
+  'keys.coinbase.com',
+  'apps.apple.com',
+  'itunes.apple.com',
+  'play.google.com',
+];
+
+export const HANDOFF_WEB_PATHS: { host: string; path: string }[] = [
+  { host: 'phantom.app', path: '/ul/' },
+  { host: 'rainbow.me', path: '/wc' },
+  { host: 'uniswap.org', path: '/app/wc' },
+];
+
+const UNIVERSAL_LINK_PATHS = [
+  { host: 'phantom.app', path: '/ul/' },
+  { host: 'rainbow.me', path: '/wc' },
+  { host: 'uniswap.org', path: '/app/wc' },
+];
 
 /**
  * Hosts that exist only to open a wallet app (not websites people browse). Other wallet hosts

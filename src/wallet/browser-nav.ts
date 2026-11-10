@@ -10,6 +10,8 @@ import { isKnownWalletUniversalLink, walletLinkSource } from './wc-source';
  * - external:      another wallet's link; handed to the OS like Safari does, never paired here.
  * - redirect:      an Android intent:// link with an http(s) browser_fallback_url; load the
  *                  fallback in-app instead (after the phishing check), never launch the intent.
+ * - store:         App Store / Play Store pages and itms-apps:/market: links; handed to the OS.
+ * - coinbase-popup: keys.coinbase.com (Coinbase SDK popup); never loaded in the WebView.
  * - blocked:       any other app scheme (metamask:, trust:, intent:, tel:, market:, ...). The
  *                  WebView must not try to load it (that is what shows "Error loading page /
  *                  net::ERR_UNKNOWN_URL_SCHEME"), and pages never get to launch other apps.
@@ -30,6 +32,14 @@ export type BrowserNavDecision =
       packageName: string | null;
     }
   | { kind: 'redirect'; url: string }
+  /** App Store / Play Store link (a wallet's "Get" button): opens the store app like Safari. */
+  | { kind: 'store'; url: string }
+  /**
+   * Coinbase's keys.coinbase.com sign-in popup. It only works as a real popup that can talk back to
+   * the page (window.opener); an in-app WebView can't give it one, so loading it would replace the
+   * dApp with "This app doesn't support Coinbase Wallet". Never load it; offer Coinbase Wallet instead.
+   */
+  | { kind: 'coinbase-popup'; url: string }
   | { kind: 'blocked'; scheme: string };
 
 /** Schemes the WebView can render itself. Everything else is an app hand-off. */
@@ -48,6 +58,44 @@ function safeDecode(value: string): string {
   } catch {
     return value;
   }
+}
+
+function hostOf(url: string): string {
+  return /^https?:\/\/([^/?#:]+)/i.exec(url)?.[1]?.toLowerCase() ?? '';
+}
+
+const STORE_SCHEMES = new Set(['itms-apps', 'itms-appss', 'market']);
+
+/** App Store or Play Store app page (what a wallet's "Get" / "Install" button opens). */
+export function isAppStoreLink(raw: string | null | undefined): boolean {
+  const url = (raw ?? '').trim();
+  const scheme = urlScheme(url);
+  if (scheme && STORE_SCHEMES.has(scheme)) {
+    return true;
+  }
+  if (scheme !== 'http' && scheme !== 'https') {
+    return false;
+  }
+  const host = hostOf(url);
+  const path = /^https?:\/\/[^/?#]+([^?#]*)/i.exec(url)?.[1] ?? '';
+  if (host === 'apps.apple.com' || host === 'itunes.apple.com') {
+    return /\/app\//i.test(path) || /\/id\d+/i.test(path);
+  }
+  if (host === 'play.google.com') {
+    return /^\/store\/apps\/details/i.test(path);
+  }
+  return false;
+}
+
+/** Coinbase Wallet SDK popup host (keys.coinbase.com/connect, /sign, ...). */
+export function isCoinbasePopupLink(raw: string | null | undefined): boolean {
+  const host = hostOf((raw ?? '').trim());
+  return host === 'keys.coinbase.com';
+}
+
+/** Opens a dApp page inside the Coinbase Wallet app's own browser (Coinbase's documented link). */
+export function coinbaseDappLink(pageUrl: string): string {
+  return `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(pageUrl)}`;
 }
 
 function isBoreDefiHost(url: string): boolean {
@@ -100,6 +148,12 @@ export function classifyBrowserNavigation(raw: string | null | undefined): Brows
     return { kind: 'load' };
   }
   const scheme = urlScheme(url);
+  if (isAppStoreLink(url)) {
+    return { kind: 'store', url };
+  }
+  if (isCoinbasePopupLink(url)) {
+    return { kind: 'coinbase-popup', url };
+  }
   if (scheme === 'http' || scheme === 'https') {
     const wc = /[?&]uri=/i.test(url) ? extractWalletConnectUri(url) : null;
     if (wc) {
