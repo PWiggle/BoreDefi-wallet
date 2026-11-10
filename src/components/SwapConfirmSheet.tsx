@@ -2,7 +2,7 @@ import { formatTokenAmount } from '../wallet/format';
 import type { SwapQuote } from '../wallet/swap';
 import { gasLimitDetail } from '../wallet/swap-preview';
 import type { TxPreview } from '../wallet/tx-simulate';
-import { ConfirmSheet } from './ConfirmSheet';
+import { ConfirmSheet, type ConfirmRow } from './ConfirmSheet';
 
 /**
  * Confirm swap: amounts, the estimated network fee in the native token and dollars (gas x eth_feeHistory fee x price),
@@ -18,6 +18,7 @@ export function SwapConfirmSheet({
   previewLoading,
   loading,
   confirmLabel,
+  extraRows,
   onConfirm,
   onCancel,
 }: {
@@ -30,6 +31,8 @@ export function SwapConfirmSheet({
   previewLoading: boolean;
   loading: boolean;
   confirmLabel?: string;
+  /** Extra rows (price impact, BoreDefi fee, minimum) for the native 0x swap. */
+  extraRows?: ConfirmRow[];
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -47,7 +50,7 @@ export function SwapConfirmSheet({
       }
       fee={fee}
       feeDetail={gasLimitDetail(quote?.transactionRequest.gasLimit)}
-      extra={quote ? [{ label: 'Route', value: quote.toolName }] : []}
+      extra={quote ? [{ label: 'Route', value: quote.toolName }, ...(extraRows ?? [])] : []}
       preview={preview}
       previewLoading={previewLoading}
       warnings={preview?.willFail ? ['The simulation says this swap would fail. Get a new quote before you confirm.'] : []}

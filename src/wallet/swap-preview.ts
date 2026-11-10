@@ -3,7 +3,7 @@ import { Contract, Interface } from 'ethers';
 import { type ChainId } from './chains';
 import { GAS_UNITS } from './preflight';
 import { readWithFallback } from './rpc';
-import type { SwapQuote } from './swap';
+import { approvalAmounts, type SwapQuote } from './swap';
 import { isNativeTokenAddress, type TokenConfig } from './tokens';
 import { protectedForEffect, simulationEffects, type SimCall, type Simulation } from './tx-simulate';
 import { previewInAppCalls } from './tx-preview-runtime';
@@ -17,10 +17,18 @@ const ERC20 = new Interface([
 ]);
 
 /** The calls a swap would send, in order (approve first when needed), for the transaction preview. */
-export function swapSimCalls(owner: string, token: Pick<TokenConfig, 'address' | 'native'>, quote: SwapQuote, needsApproval: boolean): SimCall[] {
+export function swapSimCalls(
+  owner: string,
+  token: Pick<TokenConfig, 'address' | 'native'>,
+  quote: SwapQuote,
+  needsApproval: boolean,
+  approveAmounts: bigint[] = [quote.fromAmount],
+): SimCall[] {
   const calls: SimCall[] = [];
   if (needsApproval && quote.approvalAddress && !token.native && !isNativeTokenAddress(token.address)) {
-    calls.push({ from: owner, to: token.address, value: 0n, data: ERC20.encodeFunctionData('approve', [quote.approvalAddress, quote.fromAmount]) });
+    for (const amount of approveAmounts) {
+      calls.push({ from: owner, to: token.address, value: 0n, data: ERC20.encodeFunctionData('approve', [quote.approvalAddress, amount]) });
+    }
   }
   calls.push({
     from: owner,
@@ -97,11 +105,17 @@ export async function prepareSwapReview(input: {
   quote: SwapQuote;
 }): Promise<SwapReview> {
   const { chainId, owner, fromToken, quote } = input;
-  const needsApproval =
+  const current =
     !fromToken.native && quote.approvalAddress
-      ? (await readAllowance(chainId, fromToken.address, owner, quote.approvalAddress).catch(() => 0n)) < quote.fromAmount
-      : false;
-  const { preview, simulation } = await previewInAppCalls(chainId, owner, swapSimCalls(owner, fromToken, quote, needsApproval));
+      ? await readAllowance(chainId, fromToken.address, owner, quote.approvalAddress).catch(() => 0n)
+      : null;
+  const amounts = current === null ? [] : approvalAmounts(chainId, fromToken.address, current, quote.fromAmount);
+  const needsApproval = amounts.length > 0;
+  const { preview, simulation } = await previewInAppCalls(
+    chainId,
+    owner,
+    swapSimCalls(owner, fromToken, quote, needsApproval, amounts.length ? amounts : undefined),
+  );
   const spent = protectedTokenAsset(fromToken);
   const unexpected = unexpectedProtectedMoves(chainId, simulation, owner, new Set(spent ? [spent.key] : []));
   if (unexpected.length) {
