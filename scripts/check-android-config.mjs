@@ -19,13 +19,13 @@ if (plugin?.[1]?.android?.compileSdkVersion !== 36) {
 if (plugin?.[1]?.android?.targetSdkVersion !== 36) {
   errors.push('targetSdkVersion is not 36');
 }
-if (app.expo.version !== '1.0.9') {
+if (app.expo.version !== '1.0.10') {
   errors.push(`version (versionName) is ${app.expo.version}`);
 }
-if (android.versionCode !== 36) {
+if (android.versionCode !== 37) {
   errors.push(`android.versionCode is ${android.versionCode}`);
 }
-if (app.expo.ios.buildNumber !== '20') {
+if (app.expo.ios.buildNumber !== '24') {
   errors.push(`ios.buildNumber is ${app.expo.ios.buildNumber}`);
 }
 if (plugin?.[1]?.android?.useLegacyPackaging !== false) {
@@ -40,4 +40,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('Android package com.boredefi.wallet; versionName 1.0.9; versionCode 36; iOS buildNumber 20; compileSdk/targetSdk 36');
+console.log('Android package com.boredefi.wallet; versionName 1.0.10; versionCode 37; iOS buildNumber 24; compileSdk/targetSdk 36');
