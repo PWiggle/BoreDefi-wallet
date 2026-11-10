@@ -20,6 +20,21 @@ export type QuoteToken = { address: string; decimals: number; symbol: string };
 
 export const NO_ROUTE_MESSAGE = 'No route available';
 
+/** Fee and price details shown on the native (0x) swap screen. LI.FI quotes leave this unset. */
+export type SwapQuoteFees = {
+  provider: '0x';
+  /** BoreDefi's fee in basis points, as the quote charged it (30 = 0.30%). */
+  feeBps: number;
+  /** Fee amount in feeToken base units. */
+  feeAmount: bigint;
+  feeToken: QuoteToken;
+  /** Price impact in percent (0.05 = 0.05%), or null when the route did not report one. */
+  priceImpactPct: number | null;
+  /** Network fee the route estimated, in the chain's native token (wei). */
+  networkFeeWei: bigint | null;
+  slippageBps: number;
+};
+
 export type SwapQuote = {
   tool: string;
   toolName: string;
@@ -38,6 +53,7 @@ export type SwapQuote = {
     value: bigint;
     gasLimit?: bigint;
   };
+  fees?: SwapQuoteFees;
 };
 
 type LiFiQuote = {
@@ -248,7 +264,8 @@ export async function fetchQuoteResponse<R extends { status: number }>(
       }
       return response;
     } catch (error) {
-      if (last) {
+      // UserFacingError is a final mapped answer (including a quote timeout). Do not retry it.
+      if (last || error instanceof UserFacingError) {
         throw error;
       }
       await sleep(delayMs * (attempt + 1));
@@ -331,6 +348,26 @@ export type ExternalTxSender = (tx: {
   chainId: ChainId;
 }) => Promise<string>;
 
+/**
+ * Tokens whose approve() reverts unless the allowance is 0 first (Tether USDT on Ethereum is the well-known one).
+ * Same list idea as BoredSwap's RESET_ALLOWANCE_ADDRESSES.
+ */
+export const RESET_ALLOWANCE_TOKENS: Partial<Record<ChainId, readonly string[]>> = {
+  1: ['0xdac17f958d2ee523a2206206994597c13d831ec7'],
+};
+
+/**
+ * The approve() amounts to send, in order: none when the allowance already covers the swap, otherwise the exact
+ * swap amount (never unlimited), with a reset to 0 first for tokens that need it.
+ */
+export function approvalAmounts(chainId: ChainId, tokenAddress: string, current: bigint, amount: bigint): bigint[] {
+  if (current >= amount) {
+    return [];
+  }
+  const needsReset = current > 0n && (RESET_ALLOWANCE_TOKENS[chainId] ?? []).includes(tokenAddress.toLowerCase());
+  return needsReset ? [0n, amount] : [amount];
+}
+
 export async function ensureSpendAllowance(input: {
   mnemonic: string;
   token: TokenConfig;
@@ -346,34 +383,41 @@ export async function ensureSpendAllowance(input: {
   try {
     const reader = new Contract(input.token.address, ERC20_ABI, getProvider(input.chainId));
     const allowance = (await reader.allowance(input.owner, input.spender)) as bigint;
-    if (allowance >= input.amount) {
+    const amounts = approvalAmounts(input.chainId, input.token.address, allowance, input.amount);
+    if (!amounts.length) {
       return null;
     }
-    logger.info('Submitting token approval', { chainId: input.chainId, spender: input.spender });
+    logger.info('Submitting token approval', { chainId: input.chainId, spender: input.spender, steps: amounts.length });
     if (input.sendTx) {
-      const data = new Interface(ERC20_ABI).encodeFunctionData('approve', [input.spender, input.amount]);
-      const hash = await input.sendTx({
-        to: input.token.address,
-        data,
-        value: 0n,
-        chainId: input.chainId,
-      });
-      const receipt = await getProvider(input.chainId).waitForTransaction(hash);
-      if (receipt && receipt.status === 0) {
-        throw new Error('Token approval reverted on-chain.');
+      for (const amount of amounts) {
+        const data = new Interface(ERC20_ABI).encodeFunctionData('approve', [input.spender, amount]);
+        const hash = await input.sendTx({
+          to: input.token.address,
+          data,
+          value: 0n,
+          chainId: input.chainId,
+        });
+        const receipt = await getProvider(input.chainId).waitForTransaction(hash);
+        if (receipt && receipt.status === 0) {
+          throw new Error('Token approval reverted on-chain.');
+        }
       }
       return null;
     }
     const wallet = await connectedWallet(input.mnemonic, input.chainId);
     const contract = new Contract(input.token.address, ERC20_ABI, wallet);
-    const tx = await sendContractMethod(contract, 'approve', [input.spender, input.amount], {
-      fallback: GAS_UNITS.erc20Approve,
-    });
-    const receipt = await tx.wait();
-    if (receipt && receipt.status === 0) {
-      throw new Error('Token approval reverted on-chain.');
+    let last: TransactionResponse | null = null;
+    for (const amount of amounts) {
+      const tx = await sendContractMethod(contract, 'approve', [input.spender, amount], {
+        fallback: GAS_UNITS.erc20Approve,
+      });
+      const receipt = await tx.wait();
+      if (receipt && receipt.status === 0) {
+        throw new Error('Token approval reverted on-chain.');
+      }
+      last = tx;
     }
-    return tx;
+    return last;
   } catch (error) {
     throw toUserError('Token approval failed', error, {
       chainId: input.chainId,

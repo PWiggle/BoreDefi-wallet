@@ -120,6 +120,9 @@ export function SolanaHomeSection() {
           <Pressable style={styles.action} onPress={() => navigation.navigate('SolanaReceive')}>
             <Text style={styles.actionText}>Receive</Text>
           </Pressable>
+          <Pressable style={styles.action} onPress={() => navigation.navigate('SolanaSwap', {})}>
+            <Text style={styles.actionText}>Swap</Text>
+          </Pressable>
           <Pressable style={styles.action} onPress={() => navigation.navigate('SolanaActivity')}>
             <Text style={styles.actionText}>Activity</Text>
           </Pressable>
