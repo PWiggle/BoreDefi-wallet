@@ -36,9 +36,17 @@ test('the flag and endpoint are read with literal process.env so Expo can inline
 
 test('production turns Buy on against the live pay.boredefi.com endpoint', () => {
   const eas = JSON.parse(readFileSync(new URL('../../../eas.json', import.meta.url), 'utf8')) as {
-    build: { production: { env?: Record<string, string> } };
+    build: {
+      development?: { env?: Record<string, string> };
+      preview?: { env?: Record<string, string> };
+      production: { env?: Record<string, string> };
+    };
   };
   const production = eas.build.production.env ?? {};
+  const development = eas.build.development?.env ?? {};
+  const preview = eas.build.preview?.env ?? {};
+  assert.equal(development.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, 'https://boredefi-transak-api.vercel.app/api/widget-url');
+  assert.equal(preview.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, 'https://boredefi-transak-api.vercel.app/api/widget-url');
   assert.equal(production.EXPO_PUBLIC_BUY_CRYPTO, '1');
   assert.equal(production.EXPO_PUBLIC_ONRAMP_URL, 'https://pay.boredefi.com/api/onramp-session');
   assert.equal(production.EXPO_PUBLIC_VERCEL_BYPASS, undefined);
