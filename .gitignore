@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native build artifacts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS
+.DS_Store
+*.pem
+
+# local env files — never commit secrets or personal RPC keys
+.env
+.env.*
+!.env.example
+
+# Vercel local link (the onramp preview). Do not commit project settings that can hold env.
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders (recreate with `npx expo prebuild`)
+/ios
+/android
