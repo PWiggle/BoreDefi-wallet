@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { Linking } from 'react-native';
 
+import { isTransakHostedWidgetUrl } from './transak';
 import { isStripeHostedOnrampUrl } from './url';
 
 /**
@@ -14,6 +15,39 @@ import { isStripeHostedOnrampUrl } from './url';
 export async function openStripeHostedOnramp(url: string): Promise<void> {
   if (!isStripeHostedOnrampUrl(url)) {
     throw new Error('Refusing to open a link that is not the Stripe-hosted onramp.');
+  }
+  try {
+    await WebBrowser.openBrowserAsync(url, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+      toolbarColor: '#0B0F14',
+      controlsColor: '#2EE59D',
+      showTitle: true,
+      enableBarCollapsing: false,
+    });
+    return;
+  } catch {
+    // Fall through to the system browser.
+  }
+  try {
+    await Linking.openURL(url);
+  } catch {
+    throw new Error('Could not open the browser.');
+  }
+}
+
+/**
+ * Opens Transak's hosted widget in the same in-app browser tab as Stripe
+ * (SFSafariViewController / Chrome Custom Tab). The dApp browser is not used:
+ * it injects a wallet provider and is the wrong place for a card payment.
+ *
+ * An embedded in-app checkout view would need camera and microphone permissions
+ * for Transak KYC that Play already rejected on this app. The system browser tab
+ * already has those, and matches how Stripe checkout is opened. Do not open the
+ * widget with rel=noreferrer; Transak uses the referrer for referrerDomain.
+ */
+export async function openTransakHostedWidget(url: string): Promise<void> {
+  if (!isTransakHostedWidgetUrl(url)) {
+    throw new Error('Refusing to open a link that is not the Transak-hosted widget.');
   }
   try {
     await WebBrowser.openBrowserAsync(url, {
