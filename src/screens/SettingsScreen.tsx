@@ -5,6 +5,7 @@ import { Screen } from '../components/Screen';
 import { SettingsRow } from '../components/SettingsRow';
 import { APPEARANCE_OPTIONS, useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
+import { useWalletConnect } from '../context/WalletConnectContext';
 import type { MainNavigation } from '../navigation';
 import { BOREDEFI_SUPPORT_URL, CONNECT_DEMO_URL } from '../wallet/dapps';
 import { AUTO_LOCK_OPTIONS } from '../wallet/auto-lock';
@@ -76,6 +77,7 @@ export function SettingsScreen() {
     setAutoLock,
     setHideBalances,
   } = useWallet();
+  const { sessions: wcSessions } = useWalletConnect();
 
   return (
     <Screen inset="tab" title="Settings" subtitle={session ? shortenAddress(session.address) : undefined}>
@@ -168,7 +170,11 @@ export function SettingsScreen() {
       <SettingsRow label="Activity" detail="Recent transactions" onPress={() => navigation.navigate('Activity')} />
       <SettingsRow
         label="WalletConnect"
-        detail="Sessions and pairing"
+        detail={
+          wcSessions.length
+            ? `${wcSessions.length} connected app${wcSessions.length === 1 ? '' : 's'} · scan or paste to add`
+            : 'Connect dApps by QR or link'
+        }
         onPress={() => navigation.navigate('WalletConnect', {})}
       />
       {/* No native Ledger transport on iOS yet, so the row would only show an unavailable notice. */}

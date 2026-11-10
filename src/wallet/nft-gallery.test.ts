@@ -7,10 +7,10 @@ import { nftImageCandidates, protectedNftImageUrl } from './nft-media';
 import { nftStorageKey } from './nft-spam';
 import { fetchNfts, parseBlockscoutNfts, type NftItem } from './nfts';
 
-const OWNER = '0x640Ebc069e89e5691AaD192420D22a4B92443387';
+const OWNER = '0x000000000000000000000000000000000000dEaD';
 const LIL_MUTANTS = '0x3B45542f6C97FE7f7aA3BB055c95e93B2c0437ED';
 
-// Exact eth.blockscout.com /addresses/0x640E…3387/nft item for Lil Mutants #4632 (read Nov 4 2026).
+// Exact eth.blockscout.com Lil Mutants #4632 fixture shape (read Nov 4 2026).
 const BLOCKSCOUT_4632 = {
   id: '4632',
   image_url: 'https://gateway.pinata.cloud/ipfs/QmShzmT9H3mnWxKoy3ib5aUCb2hjTUamrPPNsoFUEXPZ28/4632.png',

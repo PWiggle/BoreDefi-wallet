@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { checksumAddress } from '../wallet/address-safety';
@@ -16,6 +16,8 @@ export type ConfirmRow = {
 type Props = {
   visible: boolean;
   title: string;
+  /** Optional https icon shown next to the title (WalletConnect dApp logo). */
+  icon?: string | null;
   network: string;
   from?: string;
   to?: string;
@@ -24,6 +26,10 @@ type Props = {
   /** Small grey line under the fee (e.g. the gas limit). */
   feeDetail?: string;
   extra?: ConfirmRow[];
+  /** Highlighted note shown under the title (e.g. "You picked MetaMask on this site..."). */
+  notice?: string | null;
+  /** Extra controls rendered after the rows (e.g. the account picker). */
+  children?: ReactNode;
   /** Transaction preview ("What will happen"). */
   preview?: TxPreview | null;
   previewLoading?: boolean;
@@ -70,6 +76,18 @@ function confirmStyles({ colors, radius, spacing, type }: Theme) {
     row: {
       gap: 4,
     },
+    notice: {
+      backgroundColor: colors.warningSurface,
+      borderColor: colors.warning,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      padding: spacing.sm,
+    },
+    noticeText: {
+      ...type.body,
+      fontSize: 14,
+      fontWeight: '600' as const,
+    },
     label: type.label,
     value: {
       ...type.body,
@@ -105,6 +123,17 @@ function confirmStyles({ colors, radius, spacing, type }: Theme) {
     titleDanger: {
       color: colors.danger,
     },
+    titleRow: {
+      alignItems: 'center' as const,
+      flexDirection: 'row' as const,
+      gap: spacing.sm,
+    },
+    icon: {
+      backgroundColor: colors.bg,
+      borderRadius: 10,
+      height: 40,
+      width: 40,
+    },
     holdDanger: {
       backgroundColor: colors.dangerHold,
     },
@@ -127,6 +156,7 @@ function displayAddress(value?: string): string | undefined {
 export function ConfirmSheet({
   visible,
   title,
+  icon,
   network,
   from,
   to,
@@ -134,6 +164,8 @@ export function ConfirmSheet({
   fee,
   feeDetail,
   extra = [],
+  notice,
+  children,
   preview,
   previewLoading,
   warnings = [],
@@ -204,8 +236,21 @@ export function ConfirmSheet({
       <View style={styles.backdrop}>
         <ScrollView contentContainerStyle={styles.scroll}>
         <View style={[styles.card, danger && styles.cardDanger]}>
-          <Text style={[styles.title, danger && styles.titleDanger]}>{title}</Text>
+          {icon && /^https:\/\//i.test(icon) ? (
+            <View style={styles.titleRow}>
+              <Image source={{ uri: icon }} style={styles.icon} accessibilityIgnoresInvertColors />
+              <Text style={[styles.title, danger && styles.titleDanger, { flex: 1 }]}>{title}</Text>
+            </View>
+          ) : (
+            <Text style={[styles.title, danger && styles.titleDanger]}>{title}</Text>
+          )}
+          {notice ? (
+            <View style={styles.notice} accessibilityRole="alert">
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          ) : null}
           {rows.map(renderRow)}
+          {children}
           {fee ? (
             <View style={styles.row}>
               <Text style={styles.label}>Estimated network fee</Text>

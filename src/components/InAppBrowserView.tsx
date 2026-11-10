@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { Platform, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 
@@ -13,7 +13,8 @@ type Props = {
   onMessage?: (event: WebViewMessageEvent) => void;
   onShouldStartLoadWithRequest?: (request: WebViewNavigation) => boolean;
   onNavigationStateChange?: (navState: WebViewNavigation) => void;
-  onError?: (description: string) => void;
+  /** url is the URL that failed (Android: the failing URL; iOS: the page URL). */
+  onError?: (error: { description: string; code?: number; url?: string }) => void;
 };
 
 export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowserView(
@@ -66,7 +67,20 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
       onMessage={onMessage}
       onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
       onNavigationStateChange={onNavigationStateChange}
-      onError={(event) => onError?.(event.nativeEvent.description || 'Page failed to load.')}
+      onError={(event) =>
+        onError?.({
+          description: event.nativeEvent.description || 'Page failed to load.',
+          code: event.nativeEvent.code,
+          url: event.nativeEvent.url,
+        })
+      }
+      // Replaces the library's "Error loading page / Domain: undefined / Error Code" screen.
+      // The Browser screen shows the reason in its own banner and recovers the page.
+      renderError={() => (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, padding: 16 }}>
+          <Text style={{ color: colors.muted, textAlign: 'center' }}>This page couldn't load. Tap Go to try again.</Text>
+        </View>
+      )}
     />
   );
 });

@@ -9,7 +9,7 @@ type SocketCtor = {
 
 /**
  * React Native's WebSocket sends `https://<relay-host>` unless headers.Origin
- * is set. The live project accepts `https://boredefi.money`. WalletConnect
+ * is set. The live project accepts `https://www.boredefi.com`. WalletConnect
  * captures `global.WebSocket` when its module loads, so this runs first.
  */
 export function installRelayOriginWebSocket(): void {

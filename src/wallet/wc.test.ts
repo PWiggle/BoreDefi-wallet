@@ -49,12 +49,18 @@ test('builds CAIP identifiers and decodes hex messages', () => {
   assert.ok(supportedCaipAccounts('0xabc').includes('eip155:33139:0xabc'));
 });
 
-test('defaults to the live public WalletConnect project ID', () => {
+test('defaults to the BoreDefi Wallet WalletKit project ID, never the dApp AppKit ID', () => {
   assert.equal(getWalletConnectProjectId(), PUBLIC_WALLETCONNECT_PROJECT_ID);
-  assert.equal(PUBLIC_WALLETCONNECT_PROJECT_ID, 'c884e13aaa967e608946ee76f636f27b');
-  assert.equal(WALLETCONNECT_RELAY_ORIGIN, 'https://boredefi.money');
+  assert.equal(PUBLIC_WALLETCONNECT_PROJECT_ID, '5c2313b9c1b69242e695208c052e18a9');
+  assert.notEqual(PUBLIC_WALLETCONNECT_PROJECT_ID, 'bbd12489086c59bfdb9e0a49fc05c22f');
+  const previous = process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID;
+  process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID = 'bbd12489086c59bfdb9e0a49fc05c22f';
+  assert.equal(getWalletConnectProjectId(), PUBLIC_WALLETCONNECT_PROJECT_ID);
+  if (previous === undefined) delete process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID;
+  else process.env.EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID = previous;
+  assert.equal(WALLETCONNECT_RELAY_ORIGIN, 'https://www.boredefi.com');
   assert.deepEqual(relayWebSocketOptions('wss://relay.walletconnect.org/?projectId=abc'), {
-    headers: { Origin: 'https://boredefi.money' },
+    headers: { Origin: 'https://www.boredefi.com' },
   });
   assert.equal(relayWebSocketOptions('https://example.com'), undefined);
 });
