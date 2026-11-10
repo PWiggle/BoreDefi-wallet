@@ -11,7 +11,7 @@ import { ONRAMP_APP_TOKEN, ONRAMP_ENDPOINT, ONRAMP_VERCEL_BYPASS, STRIPE_BUY_AVA
 import { openStripeHostedOnramp, openTransakHostedWidget } from '../wallet/onramp/open';
 import { assetChoices, offersForAsset, offersForWallet, initialOffer, type OnrampOffer } from '../wallet/onramp/offers';
 import { buildOnrampSessionRequest, postOnrampSession } from '../wallet/onramp/request';
-import { TRANSAK_API_KEY, TRANSAK_BUY_AVAILABLE, TRANSAK_ENVIRONMENT, buildTransakWidgetUrl } from '../wallet/onramp/transak';
+import { TRANSAK_BUY_AVAILABLE, TRANSAK_WIDGET_ENDPOINT, buildTransakWidgetRequest, postTransakWidgetUrl } from '../wallet/onramp/transak';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
 
 type BuyProvider = 'stripe' | 'transak';
@@ -115,22 +115,28 @@ export function BuyScreen() {
   };
 
   const startTransak = async () => {
-    if (!built.ok) {
-      setError(built.error);
+    if (!TRANSAK_WIDGET_ENDPOINT) {
+      setError('Set EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT to the Transak widget server and rebuild.');
       return;
     }
-    const widget = buildTransakWidgetUrl({
-      apiKey: TRANSAK_API_KEY,
-      environment: TRANSAK_ENVIRONMENT,
+    const request = buildTransakWidgetRequest({
       offerId: offer.id,
       evmAddress: session?.address,
       solanaAddress,
+    });
+    if (!request.ok) {
+      setError(request.error);
+      return;
+    }
+    const widget = await postTransakWidgetUrl({
+      endpoint: TRANSAK_WIDGET_ENDPOINT,
+      body: request.body,
     });
     if (!widget.ok) {
       setError(widget.error);
       return;
     }
-    await openTransakHostedWidget(widget.url);
+    await openTransakHostedWidget(widget.widgetUrl);
   };
 
   const start = async () => {
@@ -267,7 +273,7 @@ export function BuyScreen() {
       ) : null}
       {!TRANSAK_BUY_AVAILABLE ? (
         <Text style={styles.meta}>
-          Transak is not in this build yet. Set EXPO_PUBLIC_TRANSAK_API_KEY to the staging key from the Transak Partner Dashboard and rebuild.
+          Transak is not in this build yet. Set EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT to the widget server and rebuild.
         </Text>
       ) : null}
       <ErrorBanner message={error ?? (built.ok ? null : built.error)} />

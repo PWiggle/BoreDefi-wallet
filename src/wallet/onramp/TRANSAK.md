@@ -5,28 +5,29 @@ BoreDefi Wallet can offer Transak as a second card-to-crypto option next to Stri
 ## What the app does
 
 - The Buy screen lets the user pick **Stripe** or **Transak** after choosing an asset and network this wallet can receive (ETH, USDC, POL, SOL on Ethereum, Base, Polygon, and Solana).
-- Transak opens its hosted widget in the same in-app browser tab Stripe uses (SFSafariViewController on iOS, a Chrome Custom Tab on Android; the system browser if that tab is unavailable). The in-app dApp browser is not used, and no extra camera or microphone permission is added (Play already rejected several of those).
-- The widget is prefilled with the user's own public address and network. `disableWalletAddressForm=true` locks the address so the purchase cannot be redirected.
-- The partner API key comes from `EXPO_PUBLIC_TRANSAK_API_KEY` at build time. It is not hardcoded. A missing value or a `REPLACE_ME`-style placeholder hides the Transak option.
-- Staging is the default: `EXPO_PUBLIC_TRANSAK_ENVIRONMENT=STAGING` opens `https://global-stg.transak.com`. Set `PRODUCTION` only after KYB is approved; that opens `https://global.transak.com`.
+- Transak opens its hosted widget in the same in-app browser tab Stripe uses (SFSafariViewController on iOS, a Chrome Custom Tab on Android; the system browser if that tab is unavailable). The in-app dApp browser is not used, and no extra camera or microphone permission is added (Play already rejected several of those). The tab must not use `rel=noreferrer`.
+- The app POSTs the user's public address, network, and asset to `EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT` (`/api/widget-url`). That server calls Transak's Create Widget URL API and returns a short-lived `widgetUrl` (about five minutes, single-use `sessionId`). The widget is prefilled with the address and network, and `disableWalletAddressForm=true` locks the address so the purchase cannot be redirected.
+- A missing, placeholder, or non-https endpoint hides the Transak option. The Transak API key and API secret never ship in the app; they stay on the server as `TRANSAK_API_KEY`, `TRANSAK_API_SECRET`, and `TRANSAK_ENV`.
+- Staging is the server default (`TRANSAK_ENV=STAGING`) and opens `https://global-stg.transak.com`. Set `PRODUCTION` on the server only after KYB is approved; that opens `https://global.transak.com`.
 - Partner fee is not a widget parameter. It is set in the Transak Partner Dashboard and must stay at **0%** in both Staging and Production.
 
-This integration does not call Transak's Create Widget URL API. That endpoint is backend-only and needs an API secret plus an IP allowlist. If Transak later requires a session URL, add a server path like the Stripe onramp (secret stays on the server; never in the app).
+The server lives in a separate project (`boredefi-transak-api`), not in this wallet repo. It has not been deployed. Do not add it to pay.boredefi.com, boredefi.com, boredswap.app, or mevvy.app.
 
-## What Patrick needs to do to get keys
+## Account and keys
 
-No Transak account was created for this work. To go from the placeholder to a working staging key, then to production:
+A PepLabs LLC / BoreDefi Wallet partner account exists at [dashboard.transak.com](https://dashboard.transak.com). The Buy partner fee is already **0%**. Staging and production API keys, plus the staging API secret, are stored privately on the build machine, not in this repository.
 
-1. Sign up at [dashboard.transak.com](https://dashboard.transak.com) with a **PepLabs LLC corporate email** (not a personal address).
-2. In the dashboard, open the **Staging** environment and copy the staging API key (the public partner key, not the API secret).
-3. In the dashboard **Products** tab, with Staging selected, set the partner fee to **0%** and save.
-4. If the dashboard asks for an app referrer or domain, use the package name `com.boredefi.wallet` (Android and iOS) and, if a website origin is required, `www.boredefi.com`.
-5. Put the staging key in the app build config as `EXPO_PUBLIC_TRANSAK_API_KEY` (EAS environment or a local `.env` that is not committed). Leave `EXPO_PUBLIC_TRANSAK_ENVIRONMENT=STAGING`. Rebuild the app. Do not commit the key and do not put the API secret in the app or in `.env.example`.
-6. Before taking real payments, complete business verification (KYB) at [forms.transak.com/kyb](https://forms.transak.com/kyb) as PepLabs LLC.
-7. After KYB is approved, copy the **Production** API key, set partner fee to **0%** again on the Production Products tab, then set `EXPO_PUBLIC_TRANSAK_API_KEY` to the production key and `EXPO_PUBLIC_TRANSAK_ENVIRONMENT=PRODUCTION` on the store build. Switch environments only at build time.
-8. Update [boredefi.com/privacy](https://boredefi.com/privacy) and the Play / App Store data-safety forms with the draft wording below **before** a store release that includes Transak. Do not publish those changes until you are ready to ship this feature.
+To go from this draft to a testable app build, then to production:
 
-Test keys are enough to exercise the widget in staging. Going live needs the KYB approval in step 6.
+1. Host `boredefi-transak-api` as a new private Vercel project on team `boredefi-7457` (Hobby / free). Set `TRANSAK_API_KEY`, `TRANSAK_API_SECRET`, and `TRANSAK_ENV=STAGING` as project env vars. Do not deploy until Patrick says yes.
+2. If Transak requires a partner IP allowlist for Create Widget URL, add Vercel's outbound IPs (or a static egress) in the dashboard.
+3. If the dashboard asks for an app referrer or domain, use the package name `com.boredefi.wallet` (Android and iOS) and, if a website origin is required, `www.boredefi.com`.
+4. Put the hosted origin in the app build config as `EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT` (EAS environment or a local `.env` that is not committed). For local testing, `http://127.0.0.1:8788` is enough. Rebuild the app. Do not commit the endpoint if it is still a preview URL with a bypass, and never put the API secret in the app or in `.env.example`.
+5. Before taking real payments, complete business verification (KYB) at [forms.transak.com/kyb](https://forms.transak.com/kyb) as PepLabs LLC.
+6. After KYB is approved, set the production API key and secret on the server, set `TRANSAK_ENV=PRODUCTION`, confirm partner fee is still **0%** on the Production Products tab, then point store builds at the same endpoint. Switch environments only on the server.
+7. Update [boredefi.com/privacy](https://boredefi.com/privacy) and the Play / App Store data-safety forms with the draft wording below **before** a store release that includes Transak. Do not publish those changes until you are ready to ship this feature.
+
+Staging keys are enough to exercise the widget in test mode. Going live needs the KYB approval in step 5.
 
 ## Draft disclosure wording
 

@@ -42,7 +42,8 @@ export async function openStripeHostedOnramp(url: string): Promise<void> {
  *
  * An embedded in-app checkout view would need camera and microphone permissions
  * for Transak KYC that Play already rejected on this app. The system browser tab
- * already has those, and matches how Stripe checkout is opened.
+ * already has those, and matches how Stripe checkout is opened. Do not open the
+ * widget with rel=noreferrer; Transak uses the referrer for referrerDomain.
  */
 export async function openTransakHostedWidget(url: string): Promise<void> {
   if (!isTransakHostedWidgetUrl(url)) {

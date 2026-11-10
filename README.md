@@ -22,11 +22,11 @@ Buy crypto with card or bank via Stripe — no BoreDefi fee.
 
 ## Buy crypto
 
-Home shows **Buy** next to Send and Receive only when `EXPO_PUBLIC_BUY_CRYPTO` is on **and** at least one provider is configured: a real `EXPO_PUBLIC_ONRAMP_URL` (Stripe) and/or a real `EXPO_PUBLIC_TRANSAK_API_KEY` (Transak). `0` forces Buy off. The screen asks for an asset and network this wallet can receive, then the user picks Stripe or Transak.
+Home shows **Buy** next to Send and Receive only when `EXPO_PUBLIC_BUY_CRYPTO` is on **and** at least one provider is configured: a real `EXPO_PUBLIC_ONRAMP_URL` (Stripe) and/or a real `EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT` (Transak). `0` forces Buy off. The screen asks for an asset and network this wallet can receive, then the user picks Stripe or Transak.
 
 Stripe still sends only that account's public address to `POST /api/onramp-session`. The server creates a Stripe Crypto Onramp session and the app opens the returned `https://crypto.link.com` link in an in-app browser tab. The Stripe secret key never ships in the app. Deploy notes: [`server/onramp/README.md`](server/onramp/README.md).
 
-Transak opens the hosted widget (`https://global-stg.transak.com` in staging, `https://global.transak.com` after KYB) in the same kind of in-app browser tab, prefilled with the user's address and network and with the address locked. The public API key comes from `EXPO_PUBLIC_TRANSAK_API_KEY` at build time and is never hardcoded. Partner fee stays 0% in the Transak dashboard. Signup and disclosure drafts: [`src/wallet/onramp/TRANSAK.md`](src/wallet/onramp/TRANSAK.md).
+Transak opens the hosted widget (`https://global-stg.transak.com` in staging, `https://global.transak.com` after KYB) in the same kind of in-app browser tab. The app asks a backend (`EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT`) for a short-lived Secure Widget URL, prefilled with the user's address and network and with the address locked. The Transak API key and secret stay on that server, never in the app. Partner fee stays 0% in the Transak dashboard. Signup and disclosure drafts: [`src/wallet/onramp/TRANSAK.md`](src/wallet/onramp/TRANSAK.md).
 
 ## Security model
 

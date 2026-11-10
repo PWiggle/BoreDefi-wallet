@@ -31,8 +31,7 @@ test('the flag and endpoint are read with literal process.env so Expo can inline
   assert.match(src, /=\s*process\.env\.EXPO_PUBLIC_VERCEL_BYPASS;/);
   assert.doesNotMatch(src, /STRIPE_SECRET|sk_live_|sk_test_/);
   const transakSrc = readFileSync(new URL('./transak.ts', import.meta.url), 'utf8');
-  assert.match(transakSrc, /=\s*process\.env\.EXPO_PUBLIC_TRANSAK_API_KEY;/);
-  assert.match(transakSrc, /=\s*process\.env\.EXPO_PUBLIC_TRANSAK_ENVIRONMENT;/);
+  assert.match(transakSrc, /=\s*process\.env\.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT;/);
 });
 
 test('production turns Buy on against the live pay.boredefi.com endpoint', () => {
@@ -45,6 +44,7 @@ test('production turns Buy on against the live pay.boredefi.com endpoint', () =>
   assert.equal(production.EXPO_PUBLIC_VERCEL_BYPASS, undefined);
   assert.equal(production.EXPO_PUBLIC_TRANSAK_API_KEY, undefined);
   assert.equal(production.EXPO_PUBLIC_TRANSAK_ENVIRONMENT, undefined);
+  assert.equal(production.EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT, undefined);
   assert.equal(buyCryptoVisible('1', false, production.EXPO_PUBLIC_ONRAMP_URL), true);
   assert.equal(buyCryptoVisible('1', false, 'https://REPLACE_ME/api/onramp-session'), false);
   assert.equal(buyCryptoVisible('1', false, undefined), false);

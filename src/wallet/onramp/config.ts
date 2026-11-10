@@ -7,8 +7,8 @@
  *
  * The endpoint base URL is EXPO_PUBLIC_ONRAMP_URL (https, or http://localhost for a local server).
  * A missing URL, or the eas.json placeholder https://REPLACE_ME/api/onramp-session, hides the
- * Stripe option. EXPO_PUBLIC_TRANSAK_API_KEY turns on Transak as a second provider (staging
- * by default; see transak.ts). Buy is shown when the flag is on and at least one provider is
+ * Stripe option. EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT turns on Transak as a second provider
+ * (see transak.ts). Buy is shown when the flag is on and at least one provider is
  * configured. EXPO_PUBLIC_ONRAMP_TOKEN is optional and not a secret: it is bundled into the app.
  * EXPO_PUBLIC_VERCEL_BYPASS is optional and must stay unset on store builds. When set, it is sent
  * only as the Vercel Deployment Protection header. The Stripe secret key is never read here.
@@ -46,7 +46,7 @@ export function isOnrampPlaceholder(value: string | undefined): boolean {
 
 /**
  * Buy is shown when the flag is on and at least one provider is ready:
- * a real Stripe endpoint and/or a real Transak API key.
+ * a real Stripe endpoint and/or a real Transak widget endpoint.
  */
 export function buyCryptoVisible(
   flag: string | undefined,
