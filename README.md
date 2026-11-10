@@ -12,7 +12,7 @@ Non-custodial React Native wallet. Android is the first target; the same codebas
 
 ## What is not included
 
-There is no backend that holds keys, and no BoreDefi fee on a card purchase. Card-to-crypto uses Stripe as merchant of record (see below).
+There is no backend that holds keys, and no BoreDefi fee on a card purchase. Card-to-crypto uses Stripe and, when configured, Transak as merchants of record (see below).
 
 ## Release notes
 
@@ -22,7 +22,11 @@ Buy crypto with card or bank via Stripe — no BoreDefi fee.
 
 ## Buy crypto
 
-Home shows **Buy** next to Send and Receive only when `EXPO_PUBLIC_BUY_CRYPTO` is on **and** `EXPO_PUBLIC_ONRAMP_URL` is a real endpoint. The production profile sets the flag to `1` and leaves the URL as `https://REPLACE_ME/api/onramp-session`, which hides the button until that placeholder is replaced at build time. `0` forces Buy off. The screen asks for an asset and network this wallet can receive, then sends only that account's public address to `POST /api/onramp-session`. The server creates a Stripe Crypto Onramp session and the app opens the returned `https://crypto.link.com` link in an in-app browser tab (system browser if that tab is unavailable). Stripe is the merchant of record. The secret key never ships in the app. Deploy notes: [`server/onramp/README.md`](server/onramp/README.md).
+Home shows **Buy** next to Send and Receive only when `EXPO_PUBLIC_BUY_CRYPTO` is on **and** at least one provider is configured: a real `EXPO_PUBLIC_ONRAMP_URL` (Stripe) and/or a real `EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT` (Transak). `0` forces Buy off. The screen asks for an asset and network this wallet can receive, then the user picks Stripe or Transak.
+
+Stripe still sends only that account's public address to `POST /api/onramp-session`. The server creates a Stripe Crypto Onramp session and the app opens the returned `https://crypto.link.com` link in an in-app browser tab. The Stripe secret key never ships in the app. Deploy notes: [`server/onramp/README.md`](server/onramp/README.md).
+
+Transak opens the hosted widget (`https://global-stg.transak.com` in staging, `https://global.transak.com` after KYB) in the same kind of in-app browser tab. The app asks a backend (`EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT`) for a short-lived Secure Widget URL, prefilled with the user's address and network and with the address locked. The Transak API key and secret stay on that server, never in the app. Partner fee stays 0% in the Transak dashboard. Signup and disclosure drafts: [`src/wallet/onramp/TRANSAK.md`](src/wallet/onramp/TRANSAK.md).
 
 ## Security model
 

@@ -150,8 +150,11 @@ test('the Buy screen never reads a seed or private key', () => {
   assert.match(screen, /session\?\.address/);
   assert.match(screen, /solanaAddress/);
   assert.match(screen, /Powered by Stripe/);
+  assert.match(screen, /Powered by Transak/);
+  assert.match(screen, /Continue with Transak/);
   assert.match(screen, /does not charge a fee/);
   assert.match(opener, /openBrowserAsync/);
+  assert.match(opener, /openTransakHostedWidget/);
   assert.doesNotMatch(opener, /webview/i);
   assert.doesNotMatch(screen, /webview/i);
 });

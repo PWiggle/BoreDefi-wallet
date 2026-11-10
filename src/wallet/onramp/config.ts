@@ -6,13 +6,17 @@
  *  - unset                   on only in __DEV__, off in every release/store build.
  *
  * The endpoint base URL is EXPO_PUBLIC_ONRAMP_URL (https, or http://localhost for a local server).
- * A missing URL, or the eas.json placeholder https://REPLACE_ME/api/onramp-session, hides Buy.
- * EXPO_PUBLIC_ONRAMP_TOKEN is optional and not a secret: it is bundled into the app.
+ * A missing URL, or the eas.json placeholder https://REPLACE_ME/api/onramp-session, hides the
+ * Stripe option. EXPO_PUBLIC_TRANSAK_WIDGET_ENDPOINT turns on Transak as a second provider
+ * (see transak.ts). Buy is shown when the flag is on and at least one provider is
+ * configured. EXPO_PUBLIC_ONRAMP_TOKEN is optional and not a secret: it is bundled into the app.
  * EXPO_PUBLIC_VERCEL_BYPASS is optional and must stay unset on store builds. When set, it is sent
  * only as the Vercel Deployment Protection header. The Stripe secret key is never read here.
  *
  * Expo only inlines literal `process.env.EXPO_PUBLIC_*` reads, so each one below is read literally.
  */
+import { TRANSAK_BUY_AVAILABLE } from './transak';
+
 const BUILD_BUY_FLAG: string | undefined = process.env.EXPO_PUBLIC_BUY_CRYPTO;
 const BUILD_ONRAMP_URL: string | undefined = process.env.EXPO_PUBLIC_ONRAMP_URL;
 const BUILD_ONRAMP_TOKEN: string | undefined = process.env.EXPO_PUBLIC_ONRAMP_TOKEN;
@@ -40,12 +44,21 @@ export function isOnrampPlaceholder(value: string | undefined): boolean {
   return /replace_me/i.test(value ?? '');
 }
 
-/** Buy is shown only when the flag is on and the endpoint is a real URL. */
-export function buyCryptoVisible(flag: string | undefined, dev: boolean, endpointBase: string | undefined): boolean {
-  if (!buyCryptoEnabled(flag, dev) || isOnrampPlaceholder(endpointBase)) {
+/**
+ * Buy is shown when the flag is on and at least one provider is ready:
+ * a real Stripe endpoint and/or a real Transak widget endpoint.
+ */
+export function buyCryptoVisible(
+  flag: string | undefined,
+  dev: boolean,
+  endpointBase: string | undefined,
+  transakReady = false,
+): boolean {
+  if (!buyCryptoEnabled(flag, dev)) {
     return false;
   }
-  return onrampEndpointUrl(endpointBase) !== null;
+  const stripeReady = !isOnrampPlaceholder(endpointBase) && onrampEndpointUrl(endpointBase) !== null;
+  return stripeReady || transakReady;
 }
 
 /** True for the onramp endpoint the app is allowed to call. */
@@ -110,5 +123,6 @@ export function vercelBypassToken(value: string | undefined): string | null {
 export const ONRAMP_ENDPOINT = onrampEndpointUrl(BUILD_ONRAMP_URL);
 export const ONRAMP_APP_TOKEN = onrampAppToken(BUILD_ONRAMP_TOKEN);
 export const ONRAMP_VERCEL_BYPASS = vercelBypassToken(BUILD_VERCEL_BYPASS);
-/** Home and the Buy route. Hidden when the flag is off or the URL is missing or a placeholder. */
-export const BUY_CRYPTO_VISIBLE = buyCryptoVisible(BUILD_BUY_FLAG, IS_DEV, BUILD_ONRAMP_URL);
+/** Home and the Buy route. Hidden when the flag is off and neither Stripe nor Transak is ready. */
+export const BUY_CRYPTO_VISIBLE = buyCryptoVisible(BUILD_BUY_FLAG, IS_DEV, BUILD_ONRAMP_URL, TRANSAK_BUY_AVAILABLE);
+export const STRIPE_BUY_AVAILABLE = ONRAMP_ENDPOINT !== null;
