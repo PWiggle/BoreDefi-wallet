@@ -9,7 +9,8 @@ import { SecuringWallet } from '../components/SecuringWallet';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { isValidPin } from '../wallet/pin';
+import { formatLockWait, isValidPin } from '../wallet/pin';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 type Stage = 'old' | 'next' | 'confirm';
 
@@ -20,6 +21,7 @@ function changePinStyles({ type }: Theme) {
 }
 
 export function ChangePinScreen() {
+  useNoScreenCapture('change-pin');
   const styles = useThemedStyles(changePinStyles);
   const navigation = useNavigation();
   const { changePin, pinBackoffMs } = useWallet();
@@ -82,7 +84,7 @@ export function ChangePinScreen() {
       scroll={false}
     >
       {pinBackoffMs > 0 ? (
-        <Text style={styles.wait}>Wait {Math.ceil(pinBackoffMs / 1000)}s before trying again.</Text>
+        <Text style={styles.wait}>Wait {formatLockWait(pinBackoffMs)} before trying again.</Text>
       ) : null}
       <ErrorBanner message={error} />
       {busy ? <SecuringWallet /> : null}

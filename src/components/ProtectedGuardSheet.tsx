@@ -8,6 +8,7 @@ import { Button } from './Button';
 import { ProtectedReauth } from './ProtectedReauth';
 import { TxPreviewCard } from './TxPreviewCard';
 import { previewWithoutGuardRepeats, type TxPreview } from '../wallet/tx-simulate';
+import { useNoScreenCapture } from './useNoScreenCapture';
 
 function guardStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -59,6 +60,7 @@ export function ProtectedGuardSheet({
   onApprove: (clearance: string) => void;
   onReject: () => void;
 }) {
+  useNoScreenCapture('protected-guard');
   const styles = useThemedStyles(guardStyles);
   const [typed, setTyped] = useState('');
 

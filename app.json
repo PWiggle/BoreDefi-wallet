@@ -26,7 +26,13 @@
         "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
         "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID.",
         "UIStatusBarHidden": true,
-        "UIViewControllerBasedStatusBarAppearance": false
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsArbitraryLoadsInWebContent": false,
+          "NSAllowsArbitraryLoadsForMedia": false,
+          "NSAllowsLocalNetworking": true
+        }
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -35,6 +41,7 @@
     "android": {
       "package": "com.boredefi.wallet",
       "versionCode": 37,
+      "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -73,7 +80,14 @@
         }
       ],
       "./plugins/withUnsignedRelease",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false,
+          "faceIDPermission": "Unlock BoreDefi Wallet with Face ID."
+        }
+      ],
+      "./plugins/withAndroidHardening",
       [
         "expo-local-authentication",
         {

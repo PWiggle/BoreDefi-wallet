@@ -7,7 +7,8 @@ import { PinPad } from '../components/PinPad';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { isValidPin } from '../wallet/pin';
+import { formatLockWait, isValidPin } from '../wallet/pin';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function resetStyles({ colors, spacing }: Theme) {
   return {
@@ -20,6 +21,7 @@ function resetStyles({ colors, spacing }: Theme) {
 }
 
 export function ResetWalletScreen() {
+  useNoScreenCapture('reset-wallet');
   const styles = useThemedStyles(resetStyles);
   const { resetWallet, pinBackoffMs } = useWallet();
   const [pin, setPin] = useState('');
@@ -49,7 +51,7 @@ export function ResetWalletScreen() {
         If you have not backed up the recovery phrase, funds on this wallet will be unrecoverable.
       </Text>
       {pinBackoffMs > 0 ? (
-        <Text style={styles.warn}>Wait {Math.ceil(pinBackoffMs / 1000)}s before trying again.</Text>
+        <Text style={styles.warn}>Wait {formatLockWait(pinBackoffMs)} before trying again.</Text>
       ) : null}
       <ErrorBanner message={error} />
       <PinPad value={pin} onChange={setPin} />

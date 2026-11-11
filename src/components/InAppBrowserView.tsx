@@ -55,7 +55,14 @@ export const InAppBrowserView = forwardRef<WebView, Props>(function InAppBrowser
       source={{ uri }}
       style={style}
       javaScriptEnabled
+      // Kept as '*' on purpose: a narrower list makes react-native-webview hand every other scheme straight
+      // to the OS (Linking.openURL), skipping the Browser screen's tap check for app links. Scheme rules
+      // live in onShouldStartLoadWithRequest (webViewSchemePolicy): https only, http upgraded.
       originWhitelist={['*']}
+      mixedContentMode="never"
+      allowFileAccess={false}
+      allowFileAccessFromFileURLs={false}
+      allowUniversalAccessFromFileURLs={false}
       setSupportMultipleWindows={false}
       injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
       // Same script again after load as a safety net (it is idempotent: it returns early when

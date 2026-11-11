@@ -9,7 +9,8 @@ import { SecuringWallet } from '../components/SecuringWallet';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { isValidPin } from '../wallet/pin';
+import { formatLockWait, isValidPin } from '../wallet/pin';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function unlockStyles({ type }: Theme) {
   return {
@@ -25,6 +26,7 @@ function unlockStyles({ type }: Theme) {
 }
 
 export function UnlockScreen() {
+  useNoScreenCapture('unlock');
   const styles = useThemedStyles(unlockStyles);
   const { unlockWithPin, unlockWithBiometrics, settings, pinBackoffMs } = useWallet();
   const [stage, setStage] = useState<'cover' | 'pin'>('cover');
@@ -35,9 +37,14 @@ export function UnlockScreen() {
 
   const tryBiometrics = async () => {
     setError(null);
-    const ok = await unlockWithBiometrics();
-    if (!ok) {
+    const result = await unlockWithBiometrics();
+    if (result === 'cancelled') {
       setError('Biometric unlock was cancelled or failed. Use your PIN to decrypt the vault.');
+    } else if (result === 'unavailable') {
+      setError(
+        'Biometric unlock is off because your fingerprints or face settings changed, or it is unavailable. ' +
+          'Unlock with your PIN, then turn biometrics back on in Settings.',
+      );
     }
   };
 
@@ -88,7 +95,9 @@ export function UnlockScreen() {
     >
       <Text style={styles.hint}>Enter your PIN to decrypt keys into memory on this device.</Text>
       {pinBackoffMs > 0 ? (
-        <Text style={styles.wait}>Too many attempts. Wait {Math.ceil(pinBackoffMs / 1000)}s.</Text>
+        <Text style={styles.wait}>
+          Too many wrong PINs. Try again in {formatLockWait(pinBackoffMs)}. Each wrong PIN makes the wait longer.
+        </Text>
       ) : null}
       <ErrorBanner message={error} />
       {busy ? <SecuringWallet /> : null}

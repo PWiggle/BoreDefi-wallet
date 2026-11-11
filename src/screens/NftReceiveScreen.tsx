@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 
 import { Button } from '../components/Button';
@@ -10,6 +9,7 @@ import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { checksumAddress } from '../wallet/address-safety';
 import { buildReceiveUri } from '../wallet/qr';
+import { copyWithAutoClear } from '../wallet/clipboard';
 
 function nftReceiveStyles({ colors, type, card, radius, spacing }: Theme) {
   return {
@@ -49,7 +49,7 @@ export function NftReceiveScreen() {
   const uri = buildReceiveUri(checksum, selectedChain.id);
 
   const copy = async () => {
-    await Clipboard.setStringAsync(checksum);
+    await copyWithAutoClear(checksum);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

@@ -13,7 +13,7 @@ import { inspectDappApproval } from '../wallet/approval-risk';
 import { CHAINS } from '../wallet/chains';
 import { formatNative } from '../wallet/format';
 import { neutralizeUrls } from '../wallet/security/text-safety';
-import { hexToUtf8, pickSignMessage } from '../wallet/wc';
+import { describeSignRequest } from '../wallet/sign-preview';
 import { resolveConnectAccount, sourceWalletNotice } from '../wallet/wc-source';
 import { formatNetworkFee } from '../wallet/network-fee';
 import { reviewDappRequest } from '../wallet/request-review';
@@ -333,10 +333,10 @@ export function WalletConnectOverlay() {
   const tx = pendingRequest.params[0] as { from?: string; to?: string; value?: string; data?: string } | undefined;
   const isSend = pendingRequest.method === 'eth_sendTransaction' || pendingRequest.method === 'eth_signTransaction';
   const risk = inspectDappApproval(pendingRequest.method, pendingRequest.params);
-  const requestText =
-    pendingRequest.method === 'personal_sign' || pendingRequest.method === 'eth_sign'
-      ? safePreview(pendingRequest.params)
-      : describeRequest(pendingRequest);
+  // Decoded message / typed-data fields / call data. Same helper as the in-app browser sheet.
+  const signPreview = describeSignRequest(pendingRequest.method, pendingRequest.params, pendingRequest.chainId);
+  const requestText = describeRequest(pendingRequest);
+  const signDanger = Boolean(signPreview?.danger);
 
   return (
     <ConfirmSheet
@@ -350,34 +350,27 @@ export function WalletConnectOverlay() {
           ? risk.summary
           : isSend
             ? txValue(tx?.value, selectedChain.symbol) ?? pendingRequest.method
-            : pendingRequest.method
+            : signPreview?.summary || pendingRequest.method
       }
       fee={isSend ? (checking ? 'Estimating…' : networkFeeLabel(fee, 'Network gas (quoted at sign)', formatNetworkFee)) : 'None (signature only)'}
       preview={preview}
       previewLoading={checking}
       extra={[
         { label: 'Request', value: requestText },
+        ...(signPreview?.rows ?? []),
         ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
         ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
         { label: 'dApp', value: neutralizeUrls(pendingRequest.peerName) },
       ]}
-      warnings={[...(risk?.warnings ?? []), ...verifyWarning, ...queued, ...(error ? [error] : [])]}
-      variant={risk?.danger || pendingRequest.verify === 'mismatch' ? 'danger' : 'default'}
+      warnings={[...(risk?.warnings ?? []), ...(signPreview?.warnings ?? []), ...verifyWarning, ...queued, ...(error ? [error] : [])]}
+      variant={risk?.danger || signDanger || pendingRequest.verify === 'mismatch' ? 'danger' : 'default'}
       loading={busy || checking}
-      confirmLabel={risk?.danger ? 'Hold to approve anyway' : 'Hold to approve'}
+      confirmLabel={risk?.danger || signDanger ? 'Hold to approve anyway' : 'Hold to approve'}
       cancelLabel="Reject"
       onConfirm={approve}
       onCancel={() => run(rejectRequest)}
     />
   );
-}
-
-function safePreview(params: unknown[]): string {
-  try {
-    return neutralizeUrls(hexToUtf8(pickSignMessage(params))).slice(0, 400);
-  } catch {
-    return 'Message preview unavailable.';
-  }
 }
 
 function overlayStyles({ colors, radius, spacing, type }: Theme) {

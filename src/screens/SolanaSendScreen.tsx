@@ -33,6 +33,7 @@ import {
 import { SOL_DECIMALS, SOL_GECKO_ID } from '../wallet/solana/tokens';
 import { addressPoisoningCheck } from '../wallet/security/address-poisoning';
 import { loadKnownAddresses, rememberKnownAddresses } from '../wallet/storage';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function sendStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -59,6 +60,7 @@ function sendStyles({ colors, field, radius, spacing, type }: Theme) {
 type Choice = { key: string; symbol: string; decimals: number; balance: bigint; asset: SolanaSendAsset };
 
 export function SolanaSendScreen() {
+  useNoScreenCapture('solana-send');
   const { colors } = useTheme();
   const styles = useThemedStyles(sendStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
