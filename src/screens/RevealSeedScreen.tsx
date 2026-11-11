@@ -9,7 +9,7 @@ import { Screen } from '../components/Screen';
 import { SeedGrid } from '../components/SeedGrid';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { isValidPin } from '../wallet/pin';
+import { formatLockWait, isValidPin } from '../wallet/pin';
 
 function revealStyles({ colors, type, spacing }: Theme) {
   return {
@@ -75,7 +75,7 @@ export function RevealSeedScreen() {
     >
       <ErrorBanner message={error} />
       {pinBackoffMs > 0 && !phrase ? (
-        <Text style={styles.wait}>Wait {Math.ceil(pinBackoffMs / 1000)}s before another PIN try.</Text>
+        <Text style={styles.wait}>Wait {formatLockWait(pinBackoffMs)} before another PIN try.</Text>
       ) : null}
       {phrase ? (
         <>

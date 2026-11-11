@@ -42,6 +42,7 @@ import { BOREDEFI_SWAP_FEE_BPS, bpsLabel, zeroExSupported } from '../wallet/swap
 import { checkPriceImpact, requoteStillFair, swapSummaryRows } from '../wallet/swap-summary';
 import { holdingsFirst } from '../wallet/swap-holdings';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function swapStyles({ colors, card, chip, field, spacing }: Theme) {
   return {
@@ -89,6 +90,7 @@ function swapStyles({ colors, card, chip, field, spacing }: Theme) {
 }
 
 export function SwapScreen() {
+  useNoScreenCapture('swap');
   const { colors } = useTheme();
   const styles = useThemedStyles(swapStyles);
   const route = useRoute<RouteProp<MainStackParamList, 'Swap'>>();

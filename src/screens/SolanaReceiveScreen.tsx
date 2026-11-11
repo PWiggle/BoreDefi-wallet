@@ -1,5 +1,4 @@
 import { Text, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 
 import { Button } from '../components/Button';
@@ -8,6 +7,7 @@ import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { SOLANA_CLUSTER } from '../wallet/solana/config';
 import { buildSolanaReceiveUri } from '../wallet/solana/qr';
+import { copyWithAutoClear } from '../wallet/clipboard';
 
 function receiveStyles({ colors, type, card, radius, spacing }: Theme) {
   return {
@@ -52,7 +52,7 @@ export function SolanaReceiveScreen() {
         0x address, and sending from Ethereum or another network can lose funds. It is the same address Phantom
         shows for your recovery phrase.
       </Text>
-      <Button label="Copy Solana address" onPress={() => Clipboard.setStringAsync(solanaAddress)} />
+      <Button label="Copy Solana address" onPress={() => copyWithAutoClear(solanaAddress)} />
     </Screen>
   );
 }

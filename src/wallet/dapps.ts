@@ -32,10 +32,58 @@ export function normalizeDappUrl(raw: string): string {
   if (trimmed.startsWith('wc:')) {
     return trimmed;
   }
-  if (/^https?:\/\//i.test(trimmed)) {
+  if (/^https:\/\//i.test(trimmed)) {
     return trimmed;
   }
+  if (/^http:\/\//i.test(trimmed)) {
+    // Plain http can be changed by anyone on the network. Always use the secure version.
+    return `https://${trimmed.slice('http://'.length)}`;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^[^/:]+:\d+/.test(trimmed)) {
+    throw new Error('Only https:// web pages can be opened in the browser.');
+  }
   return `https://${trimmed}`;
+}
+
+export type WebViewSchemeDecision =
+  | { action: 'allow' }
+  /** Plain http page: load the https:// version instead. */
+  | { action: 'upgrade'; url: string }
+  | { action: 'block'; reason: string };
+
+export const INSECURE_HTTP_NOTICE =
+  'This page asked for an insecure http:// link. BoreDefi opened the secure https:// version instead. ' +
+  'If it does not load, the site has no secure version and is not safe to use with your wallet.';
+
+/**
+ * Which URLs the dApp WebView may load (checked after app links are handled):
+ * https everywhere; http is upgraded to https at the top level and blocked in frames;
+ * about:blank / about:srcdoc, blob: and data: only inside frames; javascript: and other schemes never.
+ */
+export function webViewSchemePolicy(raw: string | null | undefined, isTopFrame = true): WebViewSchemeDecision {
+  const url = (raw ?? '').trim();
+  if (!url) {
+    return { action: 'allow' };
+  }
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(url);
+  const scheme = match?.[1]?.toLowerCase() ?? '';
+  if (scheme === 'https') {
+    return { action: 'allow' };
+  }
+  if (scheme === 'http') {
+    return isTopFrame
+      ? { action: 'upgrade', url: `https://${url.slice(url.indexOf('//') + 2)}` }
+      : { action: 'block', reason: 'Insecure http:// frame blocked.' };
+  }
+  if (scheme === 'about') {
+    return /^about:(blank|srcdoc)$/i.test(url) ? { action: 'allow' } : { action: 'block', reason: 'Blocked page.' };
+  }
+  if (scheme === 'blob' || scheme === 'data') {
+    return isTopFrame
+      ? { action: 'block', reason: 'Pages cannot open raw data: or blob: links as a whole page.' }
+      : { action: 'allow' };
+  }
+  return { action: 'block', reason: `Blocked a ${scheme || 'non-web'} link.` };
 }
 
 export const READ_RPC_METHODS = new Set([

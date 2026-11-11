@@ -15,21 +15,31 @@ import type { AppearanceMode } from '../theme';
 import { autoLockMs, type AutoLockMode } from '../wallet/auto-lock';
 import { authenticateBiometrics, biometricAvailability } from '../wallet/biometrics';
 import { CHAINS, DEFAULT_CHAIN_ID, type ChainConfig, type ChainId } from '../wallet/chains';
-import { deriveAddress, generateMnemonic, isValidMnemonic, normalizeMnemonic, walletFromMnemonic } from '../wallet/mnemonic';
+import {
+  clearWalletCache,
+  deriveAddress,
+  generateMnemonic,
+  isValidMnemonic,
+  normalizeMnemonic,
+  walletFromMnemonic,
+} from '../wallet/mnemonic';
 import {
   clearedPinLockState,
   isValidPin,
   nextPinLockState,
   remainingLockMs,
   setPin,
-  verifyPin,
+  verifyPinAndOpen,
 } from '../wallet/pin';
 import {
+  canUseGatedBiometricStore,
   clearAllWalletData,
   clearBiometricDek,
+  clearLegacyBiometricDek,
   defaultSettings,
   hasPersistedWallet,
   loadBiometricDek,
+  loadLegacyBiometricDek,
   loadSettings,
   loadStoredVault,
   saveBiometricDek,
@@ -39,14 +49,7 @@ import {
 } from '../wallet/storage';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
 import { clearSolanaKeyCache, deriveSolanaAddress } from '../wallet/solana/derive';
-import {
-  encryptVault,
-  isVaultV1,
-  migrateVaultV1,
-  rewrapVault,
-  tryDecryptVault,
-  tryOpenVaultWithDek,
-} from '../wallet/vault-crypto';
+import { encryptVault, isVaultV1, migrateVaultV1, tryOpenVaultWithDek } from '../wallet/vault-crypto';
 
 export type Phase =
   | 'booting'
@@ -70,6 +73,9 @@ type Session = {
   dek: Uint8Array | null;
 };
 
+/** ok = unlocked; cancelled = user backed out; unavailable = biometrics changed/off, use the PIN. */
+export type BiometricUnlockResult = 'ok' | 'cancelled' | 'unavailable';
+
 type WalletContextValue = {
   phase: Phase;
   pending: PendingWallet | null;
@@ -89,7 +95,7 @@ type WalletContextValue = {
   importMnemonic: (phrase: string) => Promise<void>;
   finalizeSetup: (pin: string, enableBiometrics: boolean) => Promise<void>;
   unlockWithPin: (pin: string) => Promise<boolean>;
-  unlockWithBiometrics: () => Promise<boolean>;
+  unlockWithBiometrics: () => Promise<BiometricUnlockResult>;
   lock: () => void;
   setSelectedChain: (chainId: ChainId) => Promise<void>;
   setBiometricsEnabled: (enabled: boolean) => Promise<void>;
@@ -151,7 +157,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setSettings(storedSettings);
         settingsRef.current = storedSettings;
         setPinBackoffMs(remainingLockMs(storedSettings.pinLockUntil));
-        setBiometricsReady(bio.hardware && bio.enrolled);
+        setBiometricsReady(bio.hardware && bio.enrolled && canUseGatedBiometricStore());
         setPhase(exists ? 'locked' : 'welcome');
       } catch (error) {
         logger.error('Wallet boot failed', {
@@ -197,6 +203,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const lock = useCallback(() => {
     clearSolanaKeyCache();
+    clearWalletCache();
     setSession(null);
     setPhase((current) => (current === 'unlocked' ? 'locked' : current));
   }, []);
@@ -335,13 +342,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
-  const persistDekIfNeeded = useCallback(async (dek: Uint8Array | null, bioEnabled: boolean) => {
-    if (bioEnabled && dek) {
-      await saveBiometricDek(dek);
-      return;
-    }
+  /** Biometrics stop working (OS key invalidated, removed, or unavailable): turn them off and use the PIN. */
+  const disableBiometrics = useCallback(async () => {
     await clearBiometricDek();
+    if (settingsRef.current.biometricsEnabled) {
+      await patchSettings({ biometricsEnabled: false });
+    }
+  }, [patchSettings]);
+
+  /**
+   * Store the vault data key behind OS biometrics. Returns false (and leaves biometrics off) when the
+   * user cancels or the device cannot hold a gated key. Never blocks the PIN path.
+   */
+  const storeGatedDek = useCallback(async (dek: Uint8Array | null, prompt?: string): Promise<boolean> => {
+    if (!dek || !canUseGatedBiometricStore()) {
+      return false;
+    }
+    try {
+      await saveBiometricDek(dek, prompt);
+      return true;
+    } catch (error) {
+      logger.warn('Biometric key was not saved', { message: error instanceof Error ? error.message : 'unknown' });
+      return false;
+    }
   }, []);
+
+  /**
+   * After a PIN unlock: an install from before the OS-gated key still has the old readable copy.
+   * Move it behind OS biometrics once (Android shows one prompt), then delete the old copy.
+   */
+  const migrateLegacyDekAfterPin = useCallback(
+    async (dek: Uint8Array | null) => {
+      const legacy = await loadLegacyBiometricDek();
+      if (!legacy) {
+        return;
+      }
+      await clearLegacyBiometricDek();
+      if (!settingsRef.current.biometricsEnabled) {
+        return;
+      }
+      const saved = await storeGatedDek(dek ?? legacy, 'Keep biometric unlock on');
+      if (!saved) {
+        await disableBiometrics();
+      }
+    },
+    [disableBiometrics, storeGatedDek],
+  );
 
   const finalizeSetup = useCallback(
     async (pin: string, enableBiometrics: boolean) => {
@@ -352,10 +398,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('PIN must be 6 digits');
       }
       const sealed = await encryptVault(pending.mnemonic, pending.address, pin);
-      await setPin(pin);
       await saveEncryptedVault(sealed.vault);
-      const bio = enableBiometrics && biometricsReady;
-      await persistDekIfNeeded(sealed.dek, bio);
+      await setPin(pin);
+      await clearBiometricDek();
+      const bio = enableBiometrics && biometricsReady
+        ? await storeGatedDek(sealed.dek, 'Turn on biometric unlock')
+        : false;
       const nextSettings: SettingsRecord = {
         ...settingsRef.current,
         biometricsEnabled: bio,
@@ -370,7 +418,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         dek: sealed.dek,
       });
     },
-    [biometricsReady, pending, persistDekIfNeeded, persistSession, persistSettings],
+    [biometricsReady, pending, persistSession, persistSettings, storeGatedDek],
+  );
+
+  /**
+   * The only PIN check: unwrap the vault with the slow KDF (no fast PIN hash is stored). Old v1
+   * (plaintext) vaults are re-encrypted here and the old hash is replaced, without losing access.
+   */
+  const checkPinAndMigrate = useCallback(
+    async (pin: string): Promise<{ mnemonic: string; address: string; dek: Uint8Array } | null> => {
+      const check = await verifyPinAndOpen(pin);
+      if (!check.ok) {
+        return null;
+      }
+      if (check.kind === 'v2') {
+        return check.opened;
+      }
+      const sealed = await migrateVaultV1(check.vault, pin);
+      await saveEncryptedVault(sealed.vault);
+      await setPin(pin);
+      if (settingsRef.current.biometricsEnabled) {
+        // New data key: the old biometric copy no longer opens the vault.
+        await clearBiometricDek();
+        if (!(await storeGatedDek(sealed.dek, 'Keep biometric unlock on'))) {
+          await disableBiometrics();
+        }
+      }
+      return { mnemonic: check.vault.mnemonic, address: check.vault.address, dek: sealed.dek };
+    },
+    [disableBiometrics, storeGatedDek],
   );
 
   const unlockWithPin = useCallback(
@@ -378,68 +454,67 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!assertPinAvailable()) {
         return false;
       }
-      const ok = await verifyPin(pin);
-      if (!ok) {
-        await notePinFailure();
-        return false;
-      }
-      const vault = await loadStoredVault();
-      if (!vault) {
-        await notePinFailure();
-        return false;
-      }
-      if (isVaultV1(vault)) {
-        const sealed = await migrateVaultV1(vault, pin);
-        await saveEncryptedVault(sealed.vault);
-        await persistDekIfNeeded(sealed.dek, settingsRef.current.biometricsEnabled);
-        await notePinSuccess();
-        await persistSession({
-          mnemonic: vault.mnemonic,
-          address: vault.address,
-          dek: sealed.dek,
-        });
-        return true;
-      }
-      const opened = await tryDecryptVault(vault, pin);
+      const opened = await checkPinAndMigrate(pin);
       if (!opened) {
         await notePinFailure();
         return false;
       }
-      await persistDekIfNeeded(opened.dek, settingsRef.current.biometricsEnabled);
       await notePinSuccess();
+      await migrateLegacyDekAfterPin(opened.dek);
       await persistSession(opened);
       return true;
     },
-    [assertPinAvailable, notePinFailure, notePinSuccess, persistDekIfNeeded, persistSession],
+    [assertPinAvailable, checkPinAndMigrate, migrateLegacyDekAfterPin, notePinFailure, notePinSuccess, persistSession],
   );
 
-  const unlockWithBiometrics = useCallback(async () => {
+  const unlockWithBiometrics = useCallback(async (): Promise<BiometricUnlockResult> => {
     if (!settingsRef.current.biometricsEnabled) {
-      return false;
-    }
-    const ok = await authenticateBiometrics();
-    if (!ok) {
-      return false;
+      return 'unavailable';
     }
     const vault = await loadStoredVault();
     if (!vault) {
-      return false;
+      return 'unavailable';
     }
     if (isVaultV1(vault)) {
-      await persistSession({ mnemonic: vault.mnemonic, address: vault.address, dek: null });
-      return true;
+      // Pre-encryption installs: no data key exists yet. The PIN unlock re-encrypts the vault.
+      return 'unavailable';
     }
-    const dek = await loadBiometricDek();
-    if (!dek) {
-      return false;
+    const read = await loadBiometricDek('Unlock BoreDefi Wallet');
+    if (read.status === 'cancelled') {
+      return 'cancelled';
     }
-    const opened = tryOpenVaultWithDek(vault, dek);
-    if (!opened) {
-      return false;
+    if (read.status === 'ok') {
+      const opened = tryOpenVaultWithDek(vault, read.dek);
+      if (!opened) {
+        await disableBiometrics();
+        return 'unavailable';
+      }
+      await persistSession(opened);
+      return 'ok';
     }
-    await persistSession(opened);
-    return true;
-  }, [persistSession]);
+    // Nothing gated yet: an install from before this release may still hold the old readable key.
+    const legacy = await loadLegacyBiometricDek();
+    if (legacy) {
+      const ok = await authenticateBiometrics();
+      if (!ok) {
+        return 'cancelled';
+      }
+      const opened = tryOpenVaultWithDek(vault, legacy);
+      await clearLegacyBiometricDek();
+      if (!opened) {
+        await disableBiometrics();
+        return 'unavailable';
+      }
+      if (!(await storeGatedDek(opened.dek, 'Keep biometric unlock on'))) {
+        await disableBiometrics();
+      }
+      await persistSession(opened);
+      return 'ok';
+    }
+    // Biometrics changed (OS invalidated the key) or it was never saved: fall back to the PIN.
+    await disableBiometrics();
+    return 'unavailable';
+  }, [disableBiometrics, persistSession, storeGatedDek]);
 
   const setSelectedChain = useCallback(
     async (chainId: ChainId) => {
@@ -450,16 +525,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const setBiometricsEnabled = useCallback(
     async (enabled: boolean) => {
-      if (enabled) {
+      if (!enabled) {
+        await disableBiometrics();
+        return;
+      }
+      if (!session?.dek) {
+        // Locked, or an old v1 session with no data key yet: unlock with the PIN first.
+        return;
+      }
+      if (Platform.OS === 'ios') {
+        // iOS creates a gated item without a prompt; confirm the user is present before turning it on.
         const ok = await authenticateBiometrics('Enable biometric unlock');
         if (!ok) {
           return;
         }
       }
-      await patchSettings({ biometricsEnabled: enabled });
-      await persistDekIfNeeded(session?.dek ?? null, enabled);
+      const saved = await storeGatedDek(session.dek, 'Turn on biometric unlock');
+      if (!saved) {
+        await disableBiometrics();
+        return;
+      }
+      await patchSettings({ biometricsEnabled: true });
     },
-    [patchSettings, persistDekIfNeeded, session?.dek],
+    [disableBiometrics, patchSettings, session?.dek, storeGatedDek],
   );
 
   const setAutoLock = useCallback(
@@ -488,100 +576,79 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!isValidPin(newPin) || !assertPinAvailable()) {
         return false;
       }
-      const ok = await verifyPin(oldPin);
-      if (!ok) {
+      const opened = await checkPinAndMigrate(oldPin);
+      if (!opened) {
         await notePinFailure();
         return false;
       }
-      const vault = await loadStoredVault();
-      if (!vault) {
-        return false;
-      }
-      const sealed = isVaultV1(vault)
-        ? await migrateVaultV1(vault, newPin)
-        : await rewrapVault(vault, oldPin, newPin);
-      if (!sealed) {
-        await notePinFailure();
-        return false;
-      }
-      await setPin(newPin);
+      // Same data key, re-wrapped under the new PIN, so the biometric key keeps working.
+      const sealed = await encryptVault(opened.mnemonic, opened.address, newPin, undefined, opened.dek);
       await saveEncryptedVault(sealed.vault);
-      await persistDekIfNeeded(sealed.dek, settingsRef.current.biometricsEnabled);
+      await setPin(newPin);
       await notePinSuccess();
       if (session) {
         setSession({ ...session, dek: sealed.dek });
       }
       return true;
     },
-    [assertPinAvailable, notePinFailure, notePinSuccess, persistDekIfNeeded, session],
+    [assertPinAvailable, checkPinAndMigrate, notePinFailure, notePinSuccess, session],
   );
 
   const revealMnemonic = useCallback(async (pin: string) => {
     if (!assertPinAvailable()) {
       return null;
     }
-    const ok = await verifyPin(pin);
-    if (!ok) {
-      await notePinFailure();
-      return null;
-    }
-    if (session?.mnemonic) {
-      await notePinSuccess();
-      return session.mnemonic;
-    }
-    const vault = await loadStoredVault();
-    if (!vault) {
-      return null;
-    }
-    if (isVaultV1(vault)) {
-      await notePinSuccess();
-      return vault.mnemonic;
-    }
-    const opened = await tryDecryptVault(vault, pin);
+    const opened = await checkPinAndMigrate(pin);
     if (!opened) {
       await notePinFailure();
       return null;
     }
     await notePinSuccess();
     return opened.mnemonic;
-  }, [assertPinAvailable, notePinFailure, notePinSuccess, session?.mnemonic]);
+  }, [assertPinAvailable, checkPinAndMigrate, notePinFailure, notePinSuccess]);
+
+  /** OS-level biometric proof: reading the gated data key makes the system prompt; app code can't fake it. */
+  const gatedBiometricProof = useCallback(
+    async (reason: string): Promise<Uint8Array | null> => {
+      if (!settingsRef.current.biometricsEnabled) {
+        return null;
+      }
+      const read = await loadBiometricDek(reason);
+      if (read.status === 'ok') {
+        return read.dek;
+      }
+      if (read.status === 'missing') {
+        await disableBiometrics();
+      }
+      return null;
+    },
+    [disableBiometrics],
+  );
 
   const revealWithBiometrics = useCallback(async () => {
-    if (!settingsRef.current.biometricsEnabled) {
-      return null;
-    }
-    const ok = await authenticateBiometrics('Reveal recovery phrase');
-    if (!ok) {
-      return null;
-    }
-    if (session?.mnemonic) {
-      return session.mnemonic;
-    }
     const vault = await loadStoredVault();
-    if (!vault) {
+    if (!vault || isVaultV1(vault)) {
       return null;
     }
-    if (isVaultV1(vault)) {
-      return vault.mnemonic;
-    }
-    const dek = session?.dek ?? (await loadBiometricDek());
+    const dek = await gatedBiometricProof('Reveal recovery phrase');
     if (!dek) {
       return null;
     }
     return tryOpenVaultWithDek(vault, dek)?.mnemonic ?? null;
-  }, [session?.dek, session?.mnemonic]);
+  }, [gatedBiometricProof]);
 
   const resetWallet = useCallback(async (pin: string) => {
     if (!assertPinAvailable()) {
       return false;
     }
-    const ok = await verifyPin(pin);
-    if (!ok) {
+    const check = await verifyPinAndOpen(pin);
+    if (!check.ok) {
       await notePinFailure();
       return false;
     }
-    await clearAllWalletData();
+    await clearAllWalletData([session?.address, check.kind === 'v2' ? check.opened.address : check.vault.address]);
     clearSolanaKeyCache();
+    clearWalletCache();
     setSession(null);
     setPending(null);
     await persistSettings({
@@ -590,7 +657,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
     setPhase('welcome');
     return true;
-  }, [assertPinAvailable, notePinFailure, persistSettings]);
+  }, [assertPinAvailable, notePinFailure, persistSettings, session?.address]);
 
   const reauthenticate = useCallback(
     async ({ pin, reason }: { pin?: string; reason: string }) => {
@@ -601,20 +668,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (!assertPinAvailable()) {
           return false;
         }
-        const ok = await verifyPin(pin);
-        if (!ok) {
+        const check = await verifyPinAndOpen(pin);
+        if (!check.ok) {
           await notePinFailure();
           return false;
         }
         await notePinSuccess();
         return true;
       }
-      if (!settingsRef.current.biometricsEnabled) {
-        return false;
-      }
-      return authenticateBiometrics(reason);
+      return (await gatedBiometricProof(reason)) !== null;
     },
-    [assertPinAvailable, notePinFailure, notePinSuccess, session],
+    [assertPinAvailable, gatedBiometricProof, notePinFailure, notePinSuccess, session],
   );
 
   const value = useMemo<WalletContextValue>(

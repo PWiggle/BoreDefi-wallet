@@ -3,6 +3,7 @@ import type { SwapQuote } from '../wallet/swap';
 import { gasLimitDetail } from '../wallet/swap-preview';
 import type { TxPreview } from '../wallet/tx-simulate';
 import { ConfirmSheet, type ConfirmRow } from './ConfirmSheet';
+import { useNoScreenCapture } from './useNoScreenCapture';
 
 /**
  * Confirm swap: amounts, the estimated network fee in the native token and dollars (gas x eth_feeHistory fee x price),
@@ -36,6 +37,7 @@ export function SwapConfirmSheet({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  useNoScreenCapture('swap-confirm', visible);
   return (
     <ConfirmSheet
       visible={visible}

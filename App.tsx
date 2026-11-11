@@ -49,6 +49,7 @@ import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { phoneWidth } from './src/theme';
 import { extractWalletConnectUri } from './src/wallet/wc';
+import { enableAppSwitcherProtectionAsync } from 'expo-screen-capture';
 
 const OnboardingStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
@@ -283,6 +284,13 @@ function ThemedApp() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // iOS: blur the whole wallet in the app switcher, background snapshots, and interruptions.
+    // (Android gets the same from FLAG_SECURE on sensitive screens via useNoScreenCapture.)
+    if (Platform.OS === 'ios') {
+      enableAppSwitcherProtectionAsync(1).catch(() => undefined);
+    }
+  }, []);
   return (
     <WalletProvider>
       <ThemeProvider>
