@@ -169,7 +169,11 @@ test('WalletConnect wiring: eth_sign auto-rejected, scam/unsupported/off-session
   assert.match(ctx, /route === 'blocked'[\s\S]{0,120}ETH_SIGN_BLOCKED/);
   assert.match(ctx, /verify === 'scam'/);
   assert.match(ctx, /chainAllowedInSession\(caip, active\.namespaces\)/);
-  assert.match(ctx, /if \(summary\.blockedReason\)[\s\S]{0,200}rejectSession/);
+  // Code links are always rejected; other flagged sites get the scam warning sheet first ("Go back" rejects).
+  assert.match(ctx, /if \(summary\.blockedReason && !summary\.blockedCanContinue\)[\s\S]{0,300}rejectSession/);
+  const overlaySrc = readFileSync(join(__dirname, '..', 'components', 'WalletConnectOverlay.tsx'), 'utf8');
+  assert.match(overlaySrc, /flaggedSite && scamAck !== pendingProposal\.id[\s\S]{0,200}<ScamWarningSheet[\s\S]{0,200}onGoBack=\{\(\) => run\(rejectProposal\)\}/);
+  assert.match(overlaySrc, /scamWarning && scamAck !== pendingRequest\.id[\s\S]{0,200}<ScamWarningSheet[\s\S]{0,200}onGoBack=\{\(\) => run\(rejectRequest\)\}/);
   const overlay = readFileSync(join(__dirname, '..', 'components', 'WalletConnectOverlay.tsx'), 'utf8');
   assert.match(overlay, /requiresReauth\(pendingRequest\.method\)/);
   assert.match(overlay, /<ProtectedReauth/);

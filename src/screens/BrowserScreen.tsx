@@ -32,7 +32,18 @@ import {
   normalizeDappUrl,
   urlBarAfterNavigation,
 } from '../wallet/dapps';
-import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
+import {
+  allowSiteForSession,
+  checkSite,
+  hostOf,
+  isKnownGoodSite,
+  isSiteAllowedForSession,
+  type PhishingVerdict,
+} from '../wallet/security/phishing';
+import { goplus, goplusEnabled } from '../wallet/security/goplus';
+import { refreshScamLists } from '../wallet/security/runtime';
+import { remoteSiteWarning, signingWarning, siteWarning, type ScamWarning } from '../wallet/security/scam-warnings';
+import { ScamWarningSheet } from '../components/ScamWarningSheet';
 import { claimHandoff, walletLinkSource, walletStoreUrl, type HandoffTarget } from '../wallet/wc-source';
 import { CHAINS } from '../wallet/chains';
 import { isCoinGeckoUrl } from '../wallet/markets';
@@ -213,6 +224,60 @@ export function BrowserScreen() {
       setPendingProtected({ verdict, site, preview, resolve });
     });
 
+  // Scam warning sheet: resolves true for "Continue anyway", false for "Go back".
+  const [pendingScam, setPendingScam] = useState<{ warning: ScamWarning; site: string | null; resolve: (go: boolean) => void } | null>(null);
+  const requestScamWarning = (warning: ScamWarning, site: string | null): Promise<boolean> =>
+    new Promise((resolve) => {
+      setPendingScam((previous) => {
+        previous?.resolve(false); // never leave an earlier request hanging
+        return { warning, site, resolve };
+      });
+    });
+  const pageUrlRef = useRef(pageUrl);
+  pageUrlRef.current = pageUrl;
+  const remoteCheckedRef = useRef<string | null>(null);
+
+  /** Flagged site: warn first; "Continue anyway" allows the host for this session and runs proceed(). */
+  const warnSite = (verdict: PhishingVerdict, target: string, proceed: () => void) => {
+    if (verdict.canContinue === false) {
+      setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+      return;
+    }
+    void requestScamWarning(siteWarning(verdict, 'browser'), verdict.host ?? hostOf(target)).then((go) => {
+      if (go) {
+        allowSiteForSession(target);
+        proceed();
+      }
+    });
+  };
+
+  const leaveToHome = () => {
+    setConnectedOrigin(null);
+    setUrl(DEFAULT_BROWSER_URL);
+    setDraft(DEFAULT_BROWSER_URL);
+    setPageUrl(DEFAULT_BROWSER_URL);
+    setWebKey((key) => key + 1);
+  };
+
+  /** GoPlus phishing_site lookup for each new site the local lists don't know (cached, rate limited, fail open). */
+  const checkRemoteSite = (href: string) => {
+    const origin = dappOrigin(href);
+    if (!goplusEnabled() || !origin || origin === remoteCheckedRef.current) return;
+    remoteCheckedRef.current = origin;
+    if (isKnownGoodSite(href) || isSiteAllowedForSession(href)) return;
+    void goplus()
+      .siteRisk(href)
+      .then((risk) => {
+        if (risk?.level !== 'danger' || dappOrigin(pageUrlRef.current) !== origin) return;
+        const host = hostOf(href) ?? origin;
+        void requestScamWarning(remoteSiteWarning(host, risk.reasons, 'browser'), host).then((go) => {
+          if (go) allowSiteForSession(href);
+          else leaveToHome();
+        });
+      })
+      .catch(() => undefined);
+  };
+
   const requestConfirm = (spec: Omit<BrowserConfirm, 'resolve'>): Promise<boolean> =>
     new Promise((resolve) => {
       setPendingConfirm({ ...spec, resolve });
@@ -224,9 +289,13 @@ export function BrowserScreen() {
       // Pasted pairing links in any wrapper (WC:, wc%3A, boredefi://wc?uri=, metamask://wc?uri=).
       const pasted = /^\s*https?:/i.test(raw) ? null : extractWalletConnectUri(raw);
       const next = pasted ?? normalizeDappUrl(raw);
-      const verdict = next.startsWith('wc:') ? null : checkPhishing(next);
+      const verdict = next.startsWith('wc:') ? null : checkSite(next);
       if (verdict?.blocked) {
-        setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+        warnSite(verdict, next, () => {
+          setUrl(next);
+          setDraft(next);
+          setPageUrl(next);
+        });
         return;
       }
       if (next.startsWith('wc:')) {
@@ -251,7 +320,7 @@ export function BrowserScreen() {
   }, [selectedChain.id, session?.address]);
 
   useEffect(() => {
-    void refreshPhishingList();
+    void refreshScamLists();
   }, []);
 
   useEffect(() => {
@@ -288,7 +357,7 @@ export function BrowserScreen() {
     const openUrl = parseOpenMessage(event.nativeEvent.data);
     if (openUrl !== null) {
       // window.open / link click to an app scheme, caught by the injected script.
-      if (checkPhishing(event.nativeEvent.url || pageUrl).blocked) {
+      if (checkSite(event.nativeEvent.url || pageUrl).blocked) {
         return;
       }
       handleAppLink(openUrl);
@@ -308,7 +377,7 @@ export function BrowserScreen() {
       const params = parsed.payload?.params ?? [];
       const kind = classifyBrowserMethod(method);
       const hex = chainIdHex(selectedChain.id);
-      const phishing = checkPhishing(event.nativeEvent.url || pageUrl);
+      const phishing = checkSite(event.nativeEvent.url || pageUrl);
       if (phishing.blocked && kind !== 'local') {
         // Never connect to or sign for a blocked site, even if it loaded inside a frame.
         setError(`Blocked: ${phishing.reason} Your wallet was not connected.`);
@@ -430,6 +499,12 @@ export function BrowserScreen() {
             return;
           }
         }
+        // Scam warnings (unlimited approvals, flagged spender / recipient, blind eth_sign) come before the confirm sheet.
+        const scam = await signingWarning({ method, params, chainId: selectedChain.id, client: goplusEnabled() ? goplus() : null });
+        if (scam && !(await requestScamWarning(scam, site))) {
+          resolve(id, null, 'User rejected.');
+          return;
+        }
         const risk = inspectDappApproval(method, params);
         const networkFee = isSend && preview.gasUsed ? await estimateNetworkFee(selectedChain.id, preview.gasUsed) : null;
         const approved = clearance !== null || await requestConfirm({
@@ -541,9 +616,13 @@ export function BrowserScreen() {
       return true;
     }
     if (decision.kind === 'redirect') {
-      const verdict = checkPhishing(decision.url);
+      const verdict = checkSite(decision.url);
       if (verdict.blocked) {
-        setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+        warnSite(verdict, decision.url, () => {
+          setUrl(decision.url);
+          setDraft(decision.url);
+          setPageUrl(decision.url);
+        });
         return true;
       }
       setUrl(decision.url);
@@ -560,9 +639,16 @@ export function BrowserScreen() {
     if (handleAppLink(target)) {
       return false;
     }
-    const verdict = checkPhishing(target);
+    const verdict = checkSite(target);
     if (verdict.blocked) {
-      setError(`Blocked: ${verdict.reason} Your wallet was not connected.`);
+      if ((request as WebViewNavigation & { isTopFrame?: boolean }).isTopFrame === false) {
+        return false; // flagged frame inside a page: just don't load it
+      }
+      warnSite(verdict, target, () => {
+        setUrl(target);
+        setDraft(target);
+        setPageUrl(target);
+      });
       return false;
     }
     return true;
@@ -748,6 +834,7 @@ export function BrowserScreen() {
               return;
             }
             setPageUrl(nav.url);
+            checkRemoteSite(nav.url);
             setDraft((current) => urlBarAfterNavigation(current, nav.url, editingRef.current));
             // Leaving the connected site drops the connection, so a redirect cannot inherit it.
             const connectedOrigin = connectedOriginRef.current;
@@ -776,6 +863,18 @@ export function BrowserScreen() {
           }}
         />
       ) : null}
+      <ScamWarningSheet
+        warning={pendingScam?.warning ?? null}
+        site={pendingScam?.site}
+        onGoBack={() => {
+          pendingScam?.resolve(false);
+          setPendingScam(null);
+        }}
+        onContinue={() => {
+          pendingScam?.resolve(true);
+          setPendingScam(null);
+        }}
+      />
       <ConfirmSheet
         visible={Boolean(pendingConfirm)}
         title={pendingConfirm?.title ?? ''}

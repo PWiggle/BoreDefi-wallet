@@ -210,8 +210,9 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
           const summary = summarizeProposal(proposal.params, proposal.verifyContext, {
             solanaEnabled: Boolean(solanaRef.current),
           });
-          if (summary.blockedReason) {
-            // Never connect the wallet to a blocked or Reown-flagged scam site.
+          if (summary.blockedReason && !summary.blockedCanContinue) {
+            // Code links (javascript:, data:) are never connected. Other flagged sites get a scam warning sheet first
+            // (WalletConnectOverlay): "Go back" rejects, "Continue anyway" shows the normal connect sheet.
             void kit
               .rejectSession({ id: proposal.id, reason: { code: 5000, message: 'Blocked by BoreDefi phishing protection.' } })
               .catch(() => undefined);

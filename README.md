@@ -41,6 +41,16 @@ Transak opens the hosted widget (`https://global-stg.transak.com` in staging, `h
 - The Chrome extension encrypts the phrase with a PIN-derived AES-GCM key in `chrome.storage.local`. The mobile vault and the extension vault are separate — import the same phrase if you want the same address.
 - Ledger: the seed stays on the device. This app only receives an address and signatures.
 
+## Scam warnings (free)
+
+All free, no paid plans:
+
+- **Scam-site lists.** MetaMask `eth-phishing-detect` (DBAD license). A brand subset ships in the app. The full list refreshes in the background every 12 h, using ETag, and is cached on the device as compact hashes, so the app stays protected offline. Phantom's Solana `blocklist.yaml` is opt-in with `EXPO_PUBLIC_PHANTOM_BLOCKLIST=1`, because Phantom's README asks integrators to contact them first.
+- **GoPlus Security API.** Free tier, keyless. It checks token security (the EVM token list and hidden Solana tokens), malicious addresses (approval spenders and transaction recipients), the approval-spender contract, and phishing sites (Browser pages and WalletConnect proposals). Results are cached, de-duplicated and rate limited to 20 calls/min and 20k/day, below the free cap. Errors fail open. Set `EXPO_PUBLIC_GOPLUS=0` to turn it off. `EXPO_PUBLIC_GOPLUS_ACCESS_TOKEN` is optional (it is sent as a Bearer token, and EXPO_PUBLIC values ship in the app). GoPlus transaction simulation needs a token, so it isn't used.
+- **Local checks before signing.** These cover unlimited `approve`/`increaseAllowance`, `setApprovalForAll`, and EIP-2612/DAI/Permit2 typed data. BoreDefi never signs `eth_sign` requests for raw hashes.
+
+Flagged sites and requests show a warning sheet. **Go back** is the primary button, and **Continue anyway** lets the site through for the current app session only. `javascript:`/`data:` links can never be continued.
+
 ## Stack
 
 Expo SDK 57 + React Native 0.86, with **ethers v6** for BIP39 / BIP44 (`m/44'/60'/0'/0/0`) and EVM signing.

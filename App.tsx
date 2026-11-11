@@ -49,6 +49,7 @@ import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { phoneWidth } from './src/theme';
 import { extractWalletConnectUri } from './src/wallet/wc';
+import { useScamListRefresh } from './src/wallet/security/runtime';
 
 const OnboardingStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
@@ -218,6 +219,8 @@ function RootNavigator() {
 }
 
 function ThemedApp() {
+  // Scam-site lists: cached copy on launch, background refresh every 12h / on foreground.
+  useScamListRefresh();
   const { colors, scheme } = useTheme();
   const [launchVisible, setLaunchVisible] = useState(true);
   const dismissLaunch = useCallback(() => setLaunchVisible(false), []);
