@@ -21,6 +21,8 @@ import { BridgeScreen } from './src/screens/BridgeScreen';
 import { BuyScreen } from './src/screens/BuyScreen';
 import { ChangePinScreen } from './src/screens/ChangePinScreen';
 import { GasScreen } from './src/screens/GasScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
+import { ALERTS_ENABLED } from './src/wallet/alerts/config';
 import { ProofScreen } from './src/screens/ProofScreen';
 import { PROOF_MODE } from './src/proof-mode';
 import { ImportWalletScreen } from './src/screens/ImportWalletScreen';
@@ -146,6 +148,9 @@ function RootNavigator() {
         <MainStack.Screen name="Stake" component={StakeScreen} initialParams={{}} />
         <MainStack.Screen name="Bridge" component={BridgeScreen} />
         <MainStack.Screen name="Gas" component={GasScreen} options={{ title: 'Gas' }} />
+        {ALERTS_ENABLED ? (
+          <MainStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
+        ) : null}
         {PROOF_MODE ? <MainStack.Screen name="Proof" component={ProofScreen} options={{ title: 'Proof' }} /> : null}
         {SOLANA_ENABLED ? (
           <MainStack.Screen name="SolanaReceive" component={SolanaReceiveScreen} options={{ title: 'Receive SOL' }} />

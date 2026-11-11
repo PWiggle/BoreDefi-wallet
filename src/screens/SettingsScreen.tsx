@@ -11,6 +11,7 @@ import { BOREDEFI_SUPPORT_URL, CONNECT_DEMO_URL } from '../wallet/dapps';
 import { AUTO_LOCK_OPTIONS } from '../wallet/auto-lock';
 import { shortenAddress } from '../wallet/format';
 import { PROOF_MODE } from '../proof-mode';
+import { ALERTS_ENABLED } from '../wallet/alerts/config';
 
 function settingsStyles({ colors, type, card, spacing }: Theme) {
   return {
@@ -182,6 +183,13 @@ export function SettingsScreen() {
         <SettingsRow label="Ledger" detail="Hardware signing" onPress={() => navigation.navigate('Ledger')} />
       )}
       <SettingsRow label="Gas tracker" detail="Live gwei, costs in $, 24h chart" onPress={() => navigation.navigate('Gas')} />
+      {ALERTS_ENABLED ? (
+        <SettingsRow
+          label="Notifications"
+          detail="Incoming funds, finished swaps, price alerts"
+          onPress={() => navigation.navigate('Notifications')}
+        />
+      ) : null}
       <Text style={styles.section}>Support</Text>
       <SettingsRow
         label="Help & support"

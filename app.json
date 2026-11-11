@@ -59,7 +59,8 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
@@ -86,6 +87,12 @@
           "cameraPermission": "Scan a recipient address or WalletConnect QR code.",
           "recordAudioAndroid": false,
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#255470"
         }
       ],
       "./plugins/withHiddenSplashStatusBar",

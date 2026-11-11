@@ -27,6 +27,8 @@ export type MainStackParamList = {
   Stake: { marketId?: string };
   Bridge: undefined;
   Gas: undefined;
+  /** Push notifications + price alerts. Registered only when EXPO_PUBLIC_ALERTS_API_URL is set. */
+  Notifications: undefined;
   /** Screenshot-proof builds only (EXPO_PUBLIC_PROOF_MODE=1). */
   Proof: undefined;
   Ledger: undefined;
