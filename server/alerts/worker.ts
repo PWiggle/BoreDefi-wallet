@@ -1,5 +1,5 @@
 /**
- * BoreDefi push + price alerts Worker (Cloudflare Workers free plan + D1 free). NOT deployed.
+ * BoreDefi push + price alerts Worker (Cloudflare Workers free plan + D1 free).
  * See README.md for what is needed to go live.
  */
 import { runCron } from './cron';

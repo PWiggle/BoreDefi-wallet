@@ -1,6 +1,6 @@
 # BoreDefi alerts Worker (push notifications + price alerts)
 
-**Not deployed. No accounts made. Nothing costs money until someone signs up and deploys, which needs Patrick's OK.**
+**Live on Cloudflare's free plan** at `https://boredefi-alerts.boredefi.workers.dev`. Secrets are Wrangler secrets, not in git.
 
 It's a Cloudflare Worker with a free D1 database. It does three things:
 
