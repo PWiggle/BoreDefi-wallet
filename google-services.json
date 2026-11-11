@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "783271679613",
+    "project_id": "boredefi-ab9f0",
+    "storage_bucket": "boredefi-ab9f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:783271679613:android:a00c0198d28d47697f0314",
+        "android_client_info": {
+          "package_name": "com.boredefi.wallet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBgi1J91HvikLcC2_jw5LrUhvUTuB-meM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

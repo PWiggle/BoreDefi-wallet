@@ -1,0 +1,27 @@
+# BoreDefi alerts Worker (Cloudflare free plan). Nothing here is secret.
+# Secrets are set with `npx wrangler secret put NAME` (see README.md), never written in this file.
+name = "boredefi-alerts"
+main = "worker.ts"
+compatibility_date = "2026-11-01"
+# The Worker imports shared wallet modules that read process.env (empty here); nodejs_compat provides `process`.
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+# Every 5 minutes: EVM polling + address syncs. Price checks run every PRICE_CHECK_MINUTES (default 10).
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "boredefi-alerts"
+# Created with `npx wrangler d1 create boredefi-alerts` (free).
+database_id = "be0075fa-7593-4119-bc81-78e10315a098"
+
+[vars]
+PRICE_CHECK_MINUTES = "10"
+HELIUS_SYNC_MINUTES = "60"
+POLL_CHAIN_IDS = "10,56,43114"
+# NETWORK=webhookId pairs after the 5 free Alchemy webhooks are created, e.g.
+# "ETH_MAINNET=wh_...,BASE_MAINNET=wh_...,APECHAIN_MAINNET=wh_...,ARB_MAINNET=wh_...,MATIC_MAINNET=wh_..."
+ALCHEMY_WEBHOOKS = "ETH_MAINNET=wh_s0tzzhm7ugpspdof,BASE_MAINNET=wh_5q6imev5xbzrcwu5,APECHAIN_MAINNET=wh_rlbcvabxswsxp167,ARB_MAINNET=wh_cbrpxt9h9clylnm9,MATIC_MAINNET=wh_nbyv4zelfaciuglt"
+HELIUS_WEBHOOK_ID = "9fa03c7e-6924-45c6-842b-c27a178d24df"
+PUBLIC_BASE_URL = "https://boredefi-alerts.boredefi.workers.dev"
