@@ -37,8 +37,23 @@ function asChecksum(value: unknown): string | null {
   return getAddress(value);
 }
 
+/** "Max" sentinels dApps use for unlimited allowances that sit below 2^200 (uint96/112/128/160 max). */
+const MAX_SENTINELS = new Set([2n ** 96n - 1n, 2n ** 112n - 1n, 2n ** 128n - 1n, 2n ** 160n - 1n]);
+/** In signed permits the amount is never a token id, so anything this large is effectively unlimited. */
+const TYPED_UNLIMITED_FLOOR = 2n ** 96n - 1n;
+
 function isUnlimited(value: bigint): boolean {
-  return value >= UNLIMITED_FLOOR || value === MaxUint256;
+  return value >= UNLIMITED_FLOOR || value === MaxUint256 || MAX_SENTINELS.has(value);
+}
+
+function typedAmountUnlimited(value: unknown): boolean {
+  if (value === true) return true; // DAI-style permit: allowed = true is unlimited
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint') return false;
+  try {
+    return BigInt(value) >= TYPED_UNLIMITED_FLOOR;
+  } catch {
+    return false;
+  }
 }
 
 export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
@@ -147,16 +162,24 @@ export function decodeApprovalCalldata(to: string | undefined, data: string | un
   return null;
 }
 
-function readNestedSpender(value: unknown): { spender?: unknown; amount?: unknown; operator?: unknown } {
+function readNestedSpender(value: unknown): { spender?: unknown; amount?: unknown; operator?: unknown; anyUnlimited: boolean } {
   if (!value || typeof value !== 'object') {
-    return {};
+    return { anyUnlimited: false };
   }
   const record = value as Record<string, unknown>;
-  const details = record.details && typeof record.details === 'object' ? (record.details as Record<string, unknown>) : {};
+  // Permit2 PermitSingle has details {token, amount}; PermitBatch has details [{token, amount}, ...];
+  // PermitTransferFrom has permitted {token, amount} or permitted [...].
+  const list = (v: unknown): Record<string, unknown>[] =>
+    Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === 'object') : v && typeof v === 'object' ? [v as Record<string, unknown>] : [];
+  const details = list(record.details);
+  const permitted = list(record.permitted);
+  const nestedAmounts = [...details, ...permitted].map((d) => d.amount);
+  const amount = record.value ?? record.amount ?? record.allowed ?? nestedAmounts[0];
   return {
-    spender: record.spender ?? record.operator ?? details.spender,
-    amount: record.value ?? record.amount ?? record.allowed ?? details.amount,
+    spender: record.spender ?? record.operator ?? details[0]?.spender,
+    amount,
     operator: record.operator,
+    anyUnlimited: [amount, ...nestedAmounts].some(typedAmountUnlimited),
   };
 }
 
@@ -176,20 +199,13 @@ export function decodeTypedApproval(payload: unknown): ApprovalRisk | null {
     const nested = readNestedSpender(message);
     const operator = asChecksum(nested.spender ?? nested.operator);
     const token = asChecksum(data.domain?.verifyingContract);
-    const amountRaw = nested.amount;
-    let unlimited = false;
-    if (typeof amountRaw === 'string' || typeof amountRaw === 'number' || typeof amountRaw === 'bigint') {
-      try {
-        unlimited = isUnlimited(BigInt(amountRaw));
-      } catch {
-        unlimited = false;
-      }
-    }
+    const unlimited = nested.anyUnlimited;
     const looksPermit =
       primary.includes('permit') ||
       Boolean(message.spender) ||
       Boolean(message.operator) ||
-      Boolean((message.details as { spender?: unknown } | undefined)?.spender);
+      Boolean((message.details as { spender?: unknown } | undefined)?.spender) ||
+      Boolean(message.permitted);
     if (!looksPermit && !operator) {
       return null;
     }
@@ -202,7 +218,7 @@ export function decodeTypedApproval(payload: unknown): ApprovalRisk | null {
       danger: true,
       operator,
       token,
-      unlimited: unlimited || primary.includes('permit'),
+      unlimited,
       summary: permit2
         ? 'Permit2 signature: lets a contract move your tokens with no further approval. A common drainer trick.'
         : 'Typed-data approval. This can let a contract spend NFTs or tokens.',

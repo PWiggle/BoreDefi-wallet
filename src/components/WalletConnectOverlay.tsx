@@ -21,6 +21,10 @@ import type { TxPreview } from '../wallet/tx-simulate';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { ConfirmSheet } from './ConfirmSheet';
 import { ProtectedGuardSheet } from './ProtectedGuardSheet';
+import { ScamWarningSheet } from './ScamWarningSheet';
+import { goplus, goplusEnabled, type RiskReport } from '../wallet/security/goplus';
+import { isKnownGoodSite } from '../wallet/security/phishing';
+import { localSigningWarning, remoteSiteWarning, signingWarning, siteWarning, type ScamWarning } from '../wallet/security/scam-warnings';
 import { networkFeeLabel, useNetworkFee } from './useNetworkFee';
 
 function txValue(value: unknown, symbol: string): string | undefined {
@@ -60,7 +64,64 @@ export function WalletConnectOverlay() {
   const [preview, setPreview] = useState<TxPreview | null>(null);
   // Set after Hold to approve on a signing request: a fresh PIN / biometric check runs before the key is used.
   const [reauth, setReauth] = useState(false);
+  // Scam warnings: shown before the normal sheet until the user taps "Continue anyway" (ack = that proposal / request id).
+  const [scamWarning, setScamWarning] = useState<ScamWarning | null>(null);
+  const [scamAck, setScamAck] = useState<number | null>(null);
+  const [proposalSiteRisk, setProposalSiteRisk] = useState<RiskReport | null>(null);
+  const [proposalChecking, setProposalChecking] = useState(false);
+  const [scamChecking, setScamChecking] = useState(false);
   const styles = useThemedStyles(overlayStyles);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProposalSiteRisk(null);
+    setProposalChecking(false);
+    const url = pendingProposal?.url;
+    if (!pendingProposal || pendingProposal.blockedReason || !url || !goplusEnabled() || isKnownGoodSite(url)) {
+      return;
+    }
+    setProposalChecking(true);
+    goplus()
+      .siteRisk(url)
+      .then((risk) => {
+        if (!cancelled) setProposalSiteRisk(risk?.level === 'danger' ? risk : null);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setProposalChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingProposal]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setScamWarning(null);
+    setScamChecking(false);
+    if (!pendingRequest || routeWalletConnectRequest(pendingRequest.method) === 'solana') {
+      return;
+    }
+    // Local decode first (instant), then GoPlus spender / recipient checks; approving waits for both.
+    setScamWarning(localSigningWarning(pendingRequest.method, pendingRequest.params));
+    setScamChecking(true);
+    signingWarning({
+      method: pendingRequest.method,
+      params: pendingRequest.params,
+      chainId: pendingRequest.chainId,
+      client: goplusEnabled() ? goplus() : null,
+    })
+      .then((next) => {
+        if (!cancelled) setScamWarning(next);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setScamChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingRequest]);
   const fee = useNetworkFee(pendingRequest?.chainId ?? 1, preview?.gasUsed ?? null, Boolean(pendingRequest));
 
   useEffect(() => {
@@ -151,7 +212,30 @@ export function WalletConnectOverlay() {
   };
 
   if (pendingProposal) {
-    const mismatch = pendingProposal.verify === 'mismatch';
+    const flaggedSite = pendingProposal.blockedReason
+      ? siteWarning(
+          {
+            host: pendingProposal.blockedHost ?? pendingProposal.host,
+            reason: pendingProposal.blockedReason,
+            source: null,
+            canContinue: pendingProposal.blockedCanContinue,
+          },
+          'walletconnect',
+        )
+      : proposalSiteRisk
+        ? remoteSiteWarning(pendingProposal.host || pendingProposal.name, proposalSiteRisk.reasons, 'walletconnect')
+        : null;
+    if (flaggedSite && scamAck !== pendingProposal.id) {
+      return (
+        <ScamWarningSheet
+          warning={flaggedSite}
+          site={pendingProposal.url || pendingProposal.name}
+          onGoBack={() => run(rejectProposal)}
+          onContinue={() => setScamAck(pendingProposal.id)}
+        />
+      );
+    }
+    const mismatch = pendingProposal.verify === 'mismatch' || Boolean(flaggedSite);
     const account = resolveConnectAccount(accounts, pickedAccount);
     const wantsSolana = pendingProposal.chains.some((name) => name.startsWith('Solana'));
     return (
@@ -176,12 +260,12 @@ export function WalletConnectOverlay() {
             : []),
           { label: 'Access', value: 'Shares your public address. Keys stay on this device. Every signature asks you first.' },
         ]}
-        warnings={[...pendingProposal.warnings, ...(error ? [error] : [])]}
+        warnings={[...(flaggedSite ? [flaggedSite.summary, ...flaggedSite.reasons] : []), ...pendingProposal.warnings, ...(error ? [error] : [])]}
         variant={mismatch ? 'danger' : 'default'}
         mode="buttons"
         confirmLabel={mismatch ? 'Connect anyway' : 'Connect'}
         cancelLabel="Reject"
-        loading={busy}
+        loading={busy || proposalChecking}
         onConfirm={() => run(() => approveProposal(account?.address ?? null))}
         onCancel={() => run(rejectProposal)}
       >
@@ -315,6 +399,17 @@ export function WalletConnectOverlay() {
     );
   }
 
+  if (scamWarning && scamAck !== pendingRequest.id) {
+    return (
+      <ScamWarningSheet
+        warning={scamWarning}
+        site={neutralizeUrls(pendingRequest.peerName)}
+        onGoBack={() => run(rejectRequest)}
+        onContinue={() => setScamAck(pendingRequest.id)}
+      />
+    );
+  }
+
   if (verdict?.protected) {
     return (
       <ProtectedGuardSheet
@@ -322,7 +417,7 @@ export function WalletConnectOverlay() {
         network={CHAINS[pendingRequest.chainId].name}
         dapp={neutralizeUrls(pendingRequest.peerName)}
         preview={preview}
-        busy={busy}
+        busy={busy || scamChecking}
         error={error}
         onApprove={(clearance) => run(() => approveRequest(clearance))}
         onReject={() => run(rejectRequest)}
@@ -363,7 +458,7 @@ export function WalletConnectOverlay() {
       ]}
       warnings={[...(risk?.warnings ?? []), ...verifyWarning, ...queued, ...(error ? [error] : [])]}
       variant={risk?.danger || pendingRequest.verify === 'mismatch' ? 'danger' : 'default'}
-      loading={busy || checking}
+      loading={busy || checking || scamChecking}
       confirmLabel={risk?.danger ? 'Hold to approve anyway' : 'Hold to approve'}
       cancelLabel="Reject"
       onConfirm={approve}

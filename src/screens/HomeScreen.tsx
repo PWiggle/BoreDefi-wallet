@@ -32,6 +32,8 @@ import { BUY_CRYPTO_VISIBLE } from '../wallet/onramp/config';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
 import { fetchTokenBalance } from '../wallet/swap';
 import { type TokenConfig } from '../wallet/tokens';
+import { goplus, goplusEnabled, type RiskReport } from '../wallet/security/goplus';
+import { tokenRiskLabel } from '../wallet/security/scam-warnings';
 import { useGas } from '../components/useGas';
 import { GasSummary } from './GasScreen';
 
@@ -124,6 +126,8 @@ export function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [tokens, setTokens] = useState<TokenRow[]>([]);
+  // GoPlus token security per lowercase address (cached 24h, one batched call per chain).
+  const [tokenRisks, setTokenRisks] = useState<Map<string, RiskReport | null>>(new Map());
   const [portfolioTotal, setPortfolioTotal] = useState<number | null>(null);
   const [nativeMarket, setNativeMarket] = useState<MarketCoin | undefined>(undefined);
   const [strip, setStrip] = useState<MarketCoin[]>([]);
@@ -167,6 +171,12 @@ export function HomeScreen() {
       setBalance(nextBalance);
       setActivity(nextActivity);
       setTokens(nextTokens);
+      if (goplusEnabled() && erc20.length) {
+        goplus()
+          .tokenRisks(selectedChain.id, erc20.map((item) => item.address))
+          .then(setTokenRisks)
+          .catch(() => undefined);
+      }
       setPortfolioTotal(
         portfolioUsdTotal(nextTokens.map((row) => ({ token: row.token, amount: row.amount, priceUsd: row.market?.priceUsd }))),
       );
@@ -259,6 +269,7 @@ export function HomeScreen() {
               amount={row.amount}
               market={row.market}
               hideBalances={settings.hideBalances}
+              risk={row.token.native ? null : tokenRiskLabel(tokenRisks.get(row.token.address.toLowerCase()))}
               onPress={() =>
                 row.token.native
                   ? navigation.navigate('Send', {})

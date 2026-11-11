@@ -35,8 +35,12 @@ export type ProposalSummary = {
   description: string;
   verify: VerifyStatus;
   verifyLabel: string;
-  /** Set when BoreDefi's phishing list or Reown Verify says never connect. */
+  /** Set when BoreDefi's phishing list or Reown Verify flags the site. The user sees a scam warning first. */
   blockedReason: string | null;
+  /** Host that was flagged (claimed URL or the origin Reown saw). */
+  blockedHost: string | null;
+  /** False only for code links (javascript:, data:): those proposals are always rejected. */
+  blockedCanContinue: boolean;
   /** Chains the dApp asked for that BoreDefi can serve, as names. */
   chains: string[];
   /** Chains the dApp asked for that BoreDefi does not support. */
@@ -129,12 +133,19 @@ export function summarizeProposal(
   const claimed = checkPhishing(url);
   const seen = context?.verified?.origin ? checkPhishing(context.verified.origin) : { blocked: false, reason: null };
   let blockedReason: string | null = null;
+  let blockedHost: string | null = null;
+  let blockedCanContinue = true;
   if (claimed.blocked) {
     blockedReason = claimed.reason;
+    blockedHost = claimed.host ?? null;
+    blockedCanContinue = claimed.canContinue !== false;
   } else if (seen.blocked) {
     blockedReason = seen.reason;
+    blockedHost = seen.host ?? null;
+    blockedCanContinue = seen.canContinue !== false;
   } else if (verify === 'scam') {
     blockedReason = 'Reown Verify flagged this site as a scam.';
+    blockedHost = hostOf(context?.verified?.origin ?? url) || null;
   }
 
   const required = collect(params.requiredNamespaces);
@@ -179,6 +190,8 @@ export function summarizeProposal(
     verify,
     verifyLabel: verifyLabel(verify),
     blockedReason,
+    blockedHost,
+    blockedCanContinue,
     chains: unique(chains),
     unsupportedChains,
     missingRequiredChains,

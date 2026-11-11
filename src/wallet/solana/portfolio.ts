@@ -9,6 +9,8 @@ export type SolanaPortfolio = {
   tokens: SolanaTokenRow[];
   /** Non-allowlisted mints with a balance: hidden as possible spam. */
   hiddenCount: number;
+  /** The hidden mints themselves (for the "Show hidden" list with GoPlus scam checks). */
+  hidden: { mint: string; amount: bigint; decimals: number }[];
 };
 
 /**
@@ -17,12 +19,13 @@ export type SolanaPortfolio = {
  */
 export function buildSolanaPortfolio(sol: bigint, holdings: SplHolding[], cluster: SolanaCluster = SOLANA_CLUSTER): SolanaPortfolio {
   const byMint = new Map<string, SolanaTokenRow>();
-  const hidden = new Set<string>();
+  const hidden = new Map<string, { mint: string; amount: bigint; decimals: number }>();
   for (const holding of holdings) {
     const known = findKnownToken(holding.mint, cluster);
     if (!known || known.decimals !== holding.decimals || known.programId !== holding.programId) {
       if (holding.amount > 0n) {
-        hidden.add(holding.mint);
+        const prev = hidden.get(holding.mint);
+        hidden.set(holding.mint, { mint: holding.mint, amount: (prev?.amount ?? 0n) + holding.amount, decimals: holding.decimals });
       }
       continue;
     }
@@ -32,7 +35,7 @@ export function buildSolanaPortfolio(sol: bigint, holdings: SplHolding[], cluste
     }
   }
   const tokens = [...byMint.values()].filter((row) => row.amount > 0n).sort((a, b) => a.symbol.localeCompare(b.symbol));
-  return { sol, tokens, hiddenCount: hidden.size };
+  return { sol, tokens, hiddenCount: hidden.size, hidden: [...hidden.values()] };
 }
 
 export async function fetchSolanaPortfolio(owner: string, rpc = solanaRpc()): Promise<SolanaPortfolio> {

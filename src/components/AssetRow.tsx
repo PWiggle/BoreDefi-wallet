@@ -59,6 +59,8 @@ function assetStyles({ colors, radius, spacing }: Theme) {
       fontSize: 12,
       fontWeight: '600' as const,
     },
+    risk: { color: colors.warning, fontSize: 11, fontWeight: '700' as const },
+    riskDanger: { color: colors.danger },
     up: { color: colors.accent },
     down: { color: colors.danger },
   };
@@ -70,7 +72,10 @@ export function AssetRow({
   market,
   onPress,
   hideBalances,
+  risk,
 }: {
+  /** GoPlus token-security badge (null / undefined = nothing to show). */
+  risk?: { text: string; danger: boolean } | null;
   token: TokenConfig;
   amount: bigint;
   market?: MarketCoin;
@@ -99,6 +104,11 @@ export function AssetRow({
         <Text style={styles.meta} numberOfLines={1}>
           {amountLabel} · {formatMarketPrice(market?.priceUsd)}
         </Text>
+        {risk ? (
+          <Text style={[styles.risk, risk.danger && styles.riskDanger]} numberOfLines={2} accessibilityRole="alert">
+            ⚠ {risk.text}
+          </Text>
+        ) : null}
       </View>
       <Sparkline points={market?.sparkline ?? []} />
       <View style={styles.stats}>

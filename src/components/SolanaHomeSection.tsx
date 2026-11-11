@@ -12,6 +12,8 @@ import { fetchMarketDetails, indexMarketsById, usdValueFromUnits, type MarketCoi
 import { SOLANA_CLUSTER } from '../wallet/solana/config';
 import { fetchSolanaPortfolio, solanaGeckoIds, type SolanaPortfolio } from '../wallet/solana/portfolio';
 import { SOL_DECIMALS, SOL_GECKO_ID } from '../wallet/solana/tokens';
+import { goplus, goplusEnabled, type RiskReport } from '../wallet/security/goplus';
+import { tokenRiskLabel } from '../wallet/security/scam-warnings';
 
 function solStyles({ colors, card, radius, spacing, type }: Theme) {
   return {
@@ -27,6 +29,9 @@ function solStyles({ colors, card, radius, spacing, type }: Theme) {
     sym: { color: colors.text, fontWeight: '700' as const },
     amt: { color: colors.text },
     meta: type.meta,
+    hiddenRow: { gap: 2, paddingVertical: 4 },
+    risk: { color: colors.warning, fontSize: 12, fontWeight: '700' as const },
+    riskDanger: { color: colors.danger },
     actions: { flexDirection: 'row' as const, gap: spacing.sm, marginTop: spacing.xs },
     action: {
       backgroundColor: colors.accentDim,
@@ -47,6 +52,8 @@ export function SolanaHomeSection() {
   const [prices, setPrices] = useState<Map<string, MarketCoin>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
+  const [hiddenRisks, setHiddenRisks] = useState<Map<string, RiskReport | null>>(new Map());
 
   const load = useCallback(async () => {
     if (!solanaAddress) {
@@ -56,6 +63,13 @@ export function SolanaHomeSection() {
     try {
       const next = await fetchSolanaPortfolio(solanaAddress);
       setPortfolio(next);
+      if (goplusEnabled() && next.hidden.length) {
+        // Mark the hidden (non-allowlisted) tokens with GoPlus's Solana token check. Cached 24h; fails open.
+        goplus()
+          .solanaTokenRisks(next.hidden.map((row) => row.mint))
+          .then(setHiddenRisks)
+          .catch(() => undefined);
+      }
       const markets = await fetchMarketDetails(solanaGeckoIds(next)).catch(() => [] as MarketCoin[]);
       setPrices(indexMarketsById(markets));
     } catch {
@@ -108,10 +122,32 @@ export function SolanaHomeSection() {
           </Pressable>
         ))}
         {portfolio && portfolio.hiddenCount > 0 ? (
-          <Text style={styles.meta}>
-            {portfolio.hiddenCount} unknown token{portfolio.hiddenCount === 1 ? '' : 's'} hidden (possible spam).
-          </Text>
+          <Pressable onPress={() => setShowHidden((v) => !v)} accessibilityRole="button">
+            <Text style={styles.meta}>
+              {portfolio.hiddenCount} unknown token{portfolio.hiddenCount === 1 ? '' : 's'} hidden (possible spam).{' '}
+              <Text style={styles.link}>{showHidden ? 'Hide' : 'Show'}</Text>
+            </Text>
+          </Pressable>
         ) : null}
+        {showHidden
+          ? (portfolio?.hidden ?? []).map((row) => {
+              const label = tokenRiskLabel(hiddenRisks.get(row.mint));
+              return (
+                <View key={row.mint} style={styles.hiddenRow}>
+                  <Text style={styles.amt} selectable>
+                    {shortenAddress(row.mint)} · {hide ? '••••' : formatSolanaAmount(row.amount, row.decimals)}
+                  </Text>
+                  <Text style={[styles.risk, label?.danger && styles.riskDanger]}>
+                    {label
+                      ? `⚠ ${label.text}`
+                      : hiddenRisks.get(row.mint)?.level === 'trusted'
+                        ? 'Known token, not in BoreDefi’s list yet.'
+                        : 'Unverified token. Don’t open links or sites from its name.'}
+                  </Text>
+                </View>
+              );
+            })
+          : null}
         {error ? <Text style={styles.meta}>{error}</Text> : null}
         <View style={styles.actions}>
           <Pressable style={styles.action} onPress={() => navigation.navigate('SolanaSend', {})}>
