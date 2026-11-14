@@ -17,13 +17,18 @@
     "pages:prepare": "node scripts/prepare-pages.mjs",
     "export:pages": "npm run export:web && npm run pages:prepare",
     "check:android-config": "node scripts/check-android-config.mjs",
-    "extension:build": "node scripts/build-extension.mjs"
+    "extension:build": "node scripts/build-extension.mjs",
+    "test:ledger-speculos": "tsx scripts/ledger-speculos.ts"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
     "@expo/metro-runtime": "~57.0.12",
-    "@ledgerhq/hw-app-eth": "^7.8.15",
-    "@ledgerhq/hw-transport-webhid": "^6.36.0",
+    "@ledgerhq/context-module": "^2.8.0",
+    "@ledgerhq/device-management-kit": "^1.11.1",
+    "@ledgerhq/device-signer-kit-ethereum": "^1.18.2",
+    "@ledgerhq/device-signer-kit-solana": "^1.15.0",
+    "@ledgerhq/device-transport-kit-react-native-ble": "^1.3.2",
+    "@ledgerhq/device-transport-kit-web-hid": "^1.2.4",
     "@noble/ciphers": "^1.3.0",
     "@noble/curves": "~1.2.0",
     "@noble/hashes": "^1.3.2",
@@ -54,6 +59,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.2",
+    "react-native-ble-plx": "3.4.0",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-get-random-values": "^2.0.0",
     "react-native-nitro-modules": "^0.37.1",
@@ -64,12 +70,38 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
-    "react-native-webview": "13.16.1"
+    "react-native-webview": "13.16.1",
+    "rxjs": "7.8.2"
   },
   "devDependencies": {
+    "@babel/plugin-transform-parameters": "^7.29.7",
+    "@ledgerhq/device-transport-kit-speculos": "^1.3.0",
     "@types/react": "~19.2.2",
     "esbuild": "^0.28.2",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "@ledgerhq/context-module": {
+      "ethers": "$ethers"
+    },
+    "@ledgerhq/device-signer-kit-ethereum": {
+      "ethers": "$ethers"
+    },
+    "@ledgerhq/device-management-kit": {
+      "uuid": "^11.1.1"
+    },
+    "@ledgerhq/device-transport-kit-react-native-ble": {
+      "uuid": "^11.1.1"
+    },
+    "@ledgerhq/device-transport-kit-web-hid": {
+      "uuid": "^11.1.1"
+    },
+    "@expo/fingerprint": {
+      "minimatch": "^11.0.1"
+    },
+    "jayson": {
+      "uuid": "^11.1.1"
+    }
   }
 }

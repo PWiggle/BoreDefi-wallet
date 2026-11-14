@@ -6,6 +6,7 @@ import { DEFAULT_APPEARANCE, normalizeAppearance, type AppearanceMode } from '..
 import { DEFAULT_AUTO_LOCK, normalizeAutoLock, type AutoLockMode } from './auto-lock';
 import { DEFAULT_CHAIN_ID, parseChainId, type ChainId } from './chains';
 import { type NftItem } from './nfts';
+import { normalizeLedgerWatch, type LedgerWatchAccount } from './ledger-watch';
 import { normalizePolicy, pruneExpiredWindows, type ProtectedPolicy } from './protected-policy';
 import {
   dekToHex,
@@ -24,6 +25,8 @@ const NFT_HIDDEN_KEY = 'boredefi.nft.hidden.v1';
 const NFT_IMPORT_KEY = 'boredefi.nft.imported.v1';
 const NFT_LAST_GOOD_PREFIX = 'boredefi.nft.lastgood.v1.';
 const PROTECTED_POLICY_KEY = 'boredefi.protected.policy.v1';
+/** Watch-only Ledger: public addresses + Bluetooth device id only. */
+const LEDGER_WATCH_KEY = 'boredefi.ledger.watch.v1';
 
 const secureOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -213,6 +216,19 @@ export async function saveImportedNfts(items: NftItem[]): Promise<void> {
   await writeItem(NFT_IMPORT_KEY, JSON.stringify(items));
 }
 
+export async function loadLedgerWatch(): Promise<LedgerWatchAccount | null> {
+  return normalizeLedgerWatch(parseJson<unknown>(await readItem(LEDGER_WATCH_KEY)));
+}
+
+export async function saveLedgerWatch(account: LedgerWatchAccount): Promise<void> {
+  await writeItem(LEDGER_WATCH_KEY, JSON.stringify(account));
+}
+
+/** "Forget this Ledger" in the app: removes only the saved public addresses; the Ledger itself is untouched. */
+export async function clearLedgerWatch(): Promise<void> {
+  await removeItem(LEDGER_WATCH_KEY);
+}
+
 export async function loadProtectedPolicy(): Promise<ProtectedPolicy> {
   return pruneExpiredWindows(normalizePolicy(parseJson<unknown>(await readItem(PROTECTED_POLICY_KEY))));
 }
@@ -231,6 +247,7 @@ export async function clearAllWalletData(): Promise<void> {
     removeItem(NFT_HIDDEN_KEY),
     removeItem(NFT_IMPORT_KEY),
     removeItem(PROTECTED_POLICY_KEY),
+    removeItem(LEDGER_WATCH_KEY),
   ]);
   logger.info('Local wallet data cleared');
 }

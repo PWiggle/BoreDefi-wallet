@@ -341,6 +341,7 @@ export function SendScreen() {
       <ConfirmSheet
         visible={review}
         title="Confirm send"
+        notice={ledger.account ? ledger.prompt ?? 'Signs on your Ledger: confirm, then approve on the device.' : undefined}
         network={selectedChain.name}
         from={fromAddress}
         to={checksumAddress(to) ?? to}

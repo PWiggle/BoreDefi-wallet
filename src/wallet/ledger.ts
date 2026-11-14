@@ -9,15 +9,31 @@ import { getProvider } from './rpc';
 export const LEDGER_ETH_PATH = "44'/60'/0'/0/0";
 
 export const LEDGER_NATIVE_GAP =
-  'Expo SDK 57 + React Native New Architecture has no supported Ledger USB (HID) or BLE transport. @ledgerhq/react-native-hw-transport-ble needs react-native-ble-plx and a custom JSC; @ledgerhq/react-native-hid is unmaintained and is not wired for this Expo prebuild. Connect a Ledger over WebHID in the Chrome extension or in Expo web (chrome:// + USB).';
+  'Ledger over Bluetooth (Nano X) is only in BoreDefi test builds for now. In this build, connect a Ledger over USB (WebHID) in the Chrome extension or in the web version.';
 
-export type LedgerTransportKind = 'webhid' | 'unavailable';
+export type LedgerTransportKind = 'webhid' | 'ble' | 'unavailable';
 
 export type LedgerAccount = {
   address: string;
   path: string;
   transportKind: LedgerTransportKind;
+  /** Bluetooth only: the Ledger's Solana address (44'/501'/0'), when the Solana app answered. */
+  solanaAddress?: string | null;
+  deviceName?: string;
 };
+
+/** DMK signer for the connected Ledger: Bluetooth (Nano X, set in LedgerContext) or WebHID (connectLedger). */
+export type LedgerBleSigner = {
+  signEthTx: (unsignedHex: string, expectedAddress: string, onPrompt?: (message: string | null) => void) => Promise<string>;
+  disconnect: () => Promise<void>;
+};
+
+let activeBle: LedgerBleSigner | null = null;
+
+export function setBleLedger(account: LedgerAccount, signer: LedgerBleSigner): void {
+  activeBle = signer;
+  activeAccount = account;
+}
 
 export type LedgerUnsignedTx = {
   chainId: ChainId;
@@ -30,20 +46,6 @@ export type LedgerUnsignedTx = {
   maxPriorityFeePerGas?: bigint;
 };
 
-type LedgerTransport = {
-  close?: () => Promise<void>;
-};
-
-type LedgerEth = {
-  getAddress: (path: string) => Promise<{ address: string }>;
-  signTransaction: (
-    path: string,
-    rawTxHex: string,
-    resolution: null,
-  ) => Promise<{ r: string; s: string; v: string }>;
-};
-
-let activeTransport: LedgerTransport | null = null;
 let activeAccount: LedgerAccount | null = null;
 
 export function detectLedgerTransportKind(): LedgerTransportKind {
@@ -55,8 +57,8 @@ export function getConnectedLedger(): LedgerAccount | null {
   return activeAccount;
 }
 
-export function ledgerGapMessage(): string | null {
-  return detectLedgerTransportKind() === 'unavailable' ? LEDGER_NATIVE_GAP : null;
+export function ledgerGapMessage(bleEnabled = false): string | null {
+  return !bleEnabled && detectLedgerTransportKind() === 'unavailable' ? LEDGER_NATIVE_GAP : null;
 }
 
 export function hexNoPrefix(value: string): string {
@@ -112,39 +114,34 @@ export function applyLedgerSignature(
   return signed.serialized;
 }
 
-export async function connectLedger(): Promise<LedgerAccount> {
+export async function connectLedger(onPrompt?: (message: string | null) => void): Promise<LedgerAccount> {
   const kind = detectLedgerTransportKind();
   if (kind !== 'webhid') {
     throw new Error(LEDGER_NATIVE_GAP);
   }
-  const BufferImpl = (await import('buffer')).Buffer;
-  const globalBuffer = globalThis as { Buffer?: typeof BufferImpl };
-  if (!globalBuffer.Buffer) {
-    globalBuffer.Buffer = BufferImpl;
-  }
-  const { default: TransportWebHID } = await import('@ledgerhq/hw-transport-webhid');
-  const { default: Eth } = await import('@ledgerhq/hw-app-eth');
-  const transport = await TransportWebHID.create();
-  const eth = new Eth(transport) as unknown as LedgerEth;
-  const { address } = await eth.getAddress(LEDGER_ETH_PATH);
-  activeTransport = transport;
-  activeAccount = { address, path: LEDGER_ETH_PATH, transportKind: 'webhid' };
-  logger.info('Ledger connected', { address, transport: 'webhid' });
-  return activeAccount;
+  const { connectLedgerWebHid } = await import('./ledger-webhid');
+  const session = await connectLedgerWebHid(onPrompt);
+  const account: LedgerAccount = { address: session.ethAddress, path: LEDGER_ETH_PATH, transportKind: 'webhid', deviceName: session.deviceName };
+  setBleLedger(account, { signEthTx: session.signEthTx, disconnect: session.disconnect });
+  logger.info('Ledger connected', { transport: 'webhid' });
+  return account;
 }
 
 export async function disconnectLedger(): Promise<void> {
   try {
-    await activeTransport?.close?.();
+    await activeBle?.disconnect();
   } catch {
     // Device may already be unplugged.
   }
-  activeTransport = null;
+  activeBle = null;
   activeAccount = null;
 }
 
-export async function signAndBroadcastLedger(input: LedgerUnsignedTx): Promise<string> {
-  if (!activeTransport || !activeAccount) {
+export async function signAndBroadcastLedger(
+  input: LedgerUnsignedTx,
+  onPrompt?: (message: string | null) => void,
+): Promise<string> {
+  if (!activeBle || !activeAccount) {
     throw new Error('Connect a Ledger first.');
   }
   const provider = getProvider(input.chainId);
@@ -164,11 +161,9 @@ export async function signAndBroadcastLedger(input: LedgerUnsignedTx): Promise<s
     maxPriorityFeePerGas,
     gasLimit,
   });
-  const { default: Eth } = await import('@ledgerhq/hw-app-eth');
-  const eth = new Eth(activeTransport as never) as unknown as LedgerEth;
-  logger.info('Ledger sign', { chainId: input.chainId, to: input.to });
-  const signature = await eth.signTransaction(activeAccount.path, unsignedHex, null);
-  const raw = applyLedgerSignature(unsignedHex, signature);
+  logger.info('Ledger sign', { chainId: input.chainId, to: input.to, transport: activeAccount.transportKind });
+  // Device Management Kit (Bluetooth or WebHID); the signed tx is checked to recover to the Ledger address.
+  const raw = await (activeBle as LedgerBleSigner).signEthTx(unsignedHex, from, onPrompt);
   const response = await provider.broadcastTransaction(raw);
   return response.hash;
 }

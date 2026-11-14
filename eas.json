@@ -66,6 +66,26 @@
         "EXPO_PUBLIC_ONRAMP_URL": "https://pay.boredefi.com/api/onramp-session",
         "EXPO_PUBLIC_NATIVE_SWAP": "1"
       }
+    },
+    "ledger-test": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SOLANA": "1",
+        "EXPO_PUBLIC_BUY_CRYPTO": "1",
+        "EXPO_PUBLIC_ONRAMP_URL": "https://pay.boredefi.com/api/onramp-session",
+        "EXPO_PUBLIC_NATIVE_SWAP": "1",
+        "EXPO_PUBLIC_LEDGER_BLE": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "ledger-test-ios": {
+      "extends": "ledger-test",
+      "env": {
+        "EXPO_PUBLIC_LEDGER_BLE": "1",
+        "EXPO_PUBLIC_LEDGER_BLE_IOS": "1"
+      }
     }
   },
   "submit": {

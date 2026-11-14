@@ -8,6 +8,7 @@ import { Button } from '../components/Button';
 import { ConfirmSheet } from '../components/ConfirmSheet';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { Screen } from '../components/Screen';
+import { useLedger } from '../context/LedgerContext';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import type { MainStackParamList } from '../navigation';
@@ -25,6 +26,7 @@ import {
   maxSolSendable,
   planSolanaSend,
   signPlan,
+  signPlanExternal,
   simulatePlanUnsigned,
   type SolanaSendAsset,
   type SolanaSendPlan,
@@ -63,7 +65,11 @@ export function SolanaSendScreen() {
   const styles = useThemedStyles(sendStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const route = useRoute<RouteProp<MainStackParamList, 'SolanaSend'>>();
-  const { session, solanaAddress } = useWallet();
+  const { session, solanaAddress: walletSolanaAddress } = useWallet();
+  const ledger = useLedger();
+  // A connected Ledger with the Solana app open sends from the Ledger's Solana account (signed on the device).
+  const ledgerSolanaAddress = ledger.account?.solanaAddress ?? null;
+  const solanaAddress = ledgerSolanaAddress ?? walletSolanaAddress;
   const [portfolio, setPortfolio] = useState<SolanaPortfolio | null>(null);
   const [choiceKey, setChoiceKey] = useState<string>(route.params?.mint ?? 'SOL');
   const [to, setTo] = useState(route.params?.to ?? '');
@@ -209,7 +215,9 @@ export function SolanaSendScreen() {
         throw new Error('The send changed. Review it again.');
       }
       // Fresh blockhash at confirm time; simulation runs again inside broadcastAndConfirm.
-      const signed = await signPlan(session.mnemonic, solanaAddress, plan);
+      const signed = ledgerSolanaAddress
+        ? await signPlanExternal(solanaAddress, plan, ledger.signSolanaTx)
+        : await signPlan(session.mnemonic, solanaAddress, plan);
       const result = await broadcastAndConfirm(signed);
       setReview(false);
       setOutcome(result);
@@ -251,7 +259,10 @@ export function SolanaSendScreen() {
     : undefined;
 
   return (
-    <Screen title={`Send ${symbol}`} subtitle={SOLANA_CLUSTER === 'devnet' ? 'Solana devnet' : 'Solana'}>
+    <Screen
+      title={`Send ${symbol}`}
+      subtitle={`${SOLANA_CLUSTER === 'devnet' ? 'Solana devnet' : 'Solana'}${ledgerSolanaAddress ? ` · Ledger ${ledgerSolanaAddress.slice(0, 4)}…${ledgerSolanaAddress.slice(-4)}` : ''}`}
+    >
       <ErrorBanner message={error} />
       <ErrorBanner message={missingToken ? 'This request is for a token this wallet does not hold. Pick what to send.' : null} />
       <View style={styles.tokenRow}>
@@ -320,6 +331,7 @@ export function SolanaSendScreen() {
       <ConfirmSheet
         visible={review}
         title="Confirm Solana send"
+        notice={ledgerSolanaAddress ? ledger.prompt ?? 'Signs on your Ledger: confirm, then approve on the device.' : undefined}
         network={SOLANA_CLUSTER === 'devnet' ? 'Solana devnet' : 'Solana'}
         from={solanaAddress}
         to={to.trim()}

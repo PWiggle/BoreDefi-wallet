@@ -61,14 +61,19 @@ Home shows a live USD total (native balance × CoinGecko price, including `$0.00
 
 ### Ledger
 
-Attempted path:
+All transports use Ledger's free Device Management Kit (DMK) and signer kits (`@ledgerhq/device-management-kit`, `device-signer-kit-ethereum`, `device-signer-kit-solana`). The keys never leave the device; every signature is checked on the phone (EVM: recovers to the Ledger address; Solana: ed25519 verifies) before it is used.
 
 | Runtime | Transport | Status |
 | --- | --- | --- |
-| Chrome extension / Expo web | `@ledgerhq/hw-transport-webhid` + `@ledgerhq/hw-app-eth` | Implemented. Unlock the device, open the Ethereum app, confirm on hardware. Send / swap / bridge sign EIP-1559 txs at `44'/60'/0'/0/0`. |
-| Expo/React Native Android or iOS | USB HID or BLE | **Not shipped.** `@ledgerhq/react-native-hid` is unmaintained and is not wired for this Expo SDK 57 New Architecture prebuild. `@ledgerhq/react-native-hw-transport-ble` needs `react-native-ble-plx`, extra Bluetooth/location permissions, and a custom JSC that this project does not use. |
+| Chrome extension / Expo web | `@ledgerhq/device-transport-kit-web-hid` (USB) | Implemented. Send / swap / bridge sign EIP-1559 txs at `44'/60'/0'/0/0`. |
+| Android (Nano X) | `@ledgerhq/device-transport-kit-react-native-ble` + `react-native-ble-plx` | Test builds only: `EXPO_PUBLIC_LEDGER_BLE=1` (EAS profile `ledger-test`). |
+| iPhone (Nano X) | same | Hidden by default. Needs `EXPO_PUBLIC_LEDGER_BLE=1` **and** `EXPO_PUBLIC_LEDGER_BLE_IOS=1` (EAS profile `ledger-test-ios`). |
 
-The signing helpers (`buildUnsignedLedgerTx`, `applyLedgerSignature`) are shared and covered by unit tests. On a phone, **Settings → Ledger** explains the gap and points at the extension / Expo web WebHID path. Stake, NFTs, WalletConnect, and the in-app browser still use the software key when a Ledger is not connected.
+With the flags off, `app.config.js` and `react-native.config.js` leave the Bluetooth native module, its Android permissions and the iOS Bluetooth prompt out of the build, so store builds are unchanged. On Android 11 and older, BLE scanning needs location; it is declared only up to API 30.
+
+Bluetooth features (Settings → Ledger): pair / reconnect (remembers the device), ETH `44'/60'/0'/0/0` and Solana `44'/501'/0'` addresses (Ledger Live's first accounts), **Check address on Ledger** (show-on-device, the device's answer must match), test-sign a message (personal_sign and Solana off-chain message), a **watch-only** account (public addresses and balances saved on the phone, no secrets), and Forget. While connected, Send / Swap / Bridge and Solana Send sign on the Ledger. `ledgerSignEthTypedData` (EIP-712) is implemented and tested but not yet wired to WalletConnect requests.
+
+`npm run test:ledger-speculos` runs the same code against Ledger's real Ethereum and Solana apps in the Speculos emulator.
 
 ## Phase 3 protocol choices
 
