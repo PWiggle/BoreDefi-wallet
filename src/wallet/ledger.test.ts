@@ -16,7 +16,7 @@ import {
 test('detects no WebHID in Node and documents the native gap', () => {
   assert.equal(detectLedgerTransportKind(), 'unavailable');
   assert.match(ledgerGapMessage() ?? '', /WebHID/);
-  assert.match(LEDGER_NATIVE_GAP, /react-native-hw-transport-ble/);
+  assert.match(LEDGER_NATIVE_GAP, /Bluetooth/);
   assert.equal(LEDGER_ETH_PATH, "44'/60'/0'/0/0");
 });
 
