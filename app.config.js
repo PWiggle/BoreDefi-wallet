@@ -34,5 +34,11 @@ module.exports = ({ config }) => {
       ]),
     ];
   }
-  return { ...config, android, plugins };
+  let { name } = config;
+  if (process.env.BOREDEFI_SIDE_BY_SIDE === '1') {
+    // Local test APKs only: install next to the Play app without touching it (different package, own data).
+    android.package = `${android.package}.ledgertest`;
+    name = 'BoreDefi Ledger Test';
+  }
+  return { ...config, name, android, plugins };
 };

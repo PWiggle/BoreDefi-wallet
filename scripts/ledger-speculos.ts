@@ -11,7 +11,9 @@
  *  2. signs an EIP-1559 ETH transfer, presses the emulator buttons to approve, and checks the signed tx recovers,
  *  3. reads the Solana address on 44'/501'/0' and checks it against software derivation,
  *  4. signs a SOL transfer and verifies the ed25519 signature,
- *  5. rejects a transaction on the device and checks the wallet reports the rejection.
+ *  5. rejects a transaction on the device and checks the wallet reports the rejection,
+ *  6. shows the ETH and SOL addresses on the device screen (Check address on Ledger) and approves,
+ *  7. signs a personal_sign message (ETH) and a Solana off-chain message, verifying both signatures.
  */
 import assert from 'node:assert/strict';
 
@@ -25,9 +27,13 @@ import { buildUnsignedLedgerTx } from '../src/wallet/ledger';
 import {
   connectFirstLedger,
   ledgerEthAddress,
+  ledgerSignEthMessage,
   ledgerSignEthTx,
+  ledgerSignSolanaMessage,
   ledgerSignSolanaTx,
   ledgerSolanaAddress,
+  ledgerVerifyEthAddress,
+  ledgerVerifySolanaAddress,
   LEDGER_ETH_PATH,
   LEDGER_SOL_PATH,
   type DmkLike,
@@ -125,6 +131,20 @@ async function main() {
     assert.equal(tx.value, 10_000_000_000_000_000n);
     results.push(`ETH transfer signed on device, recovers to ${tx.from}; screens: ${screens.join(' → ')}`);
 
+    // Show-on-device address check
+    const verifyScreens: string[] = [];
+    const verifier = autoPress(ETH_URL, 'approve', verifyScreens);
+    await ledgerVerifyEthAddress(signer, address);
+    verifier.stop();
+    results.push(`ETH address shown on device and approved; screens: ${verifyScreens.join(' → ')}`);
+
+    // personal_sign
+    const msgScreens: string[] = [];
+    const msgPresser = autoPress(ETH_URL, 'approve', msgScreens);
+    const msgSig = await ledgerSignEthMessage(signer, 'BoreDefi Wallet Ledger test. This signature does not move funds.', address);
+    msgPresser.stop();
+    results.push(`ETH personal_sign on device, recovers to the Ledger address (${msgSig.slice(0, 12)}…); screens: ${msgScreens.join(' → ')}`);
+
     // Rejection path
     const rejectScreens: string[] = [];
     const rejecter = autoPress(ETH_URL, 'reject', rejectScreens);
@@ -152,6 +172,18 @@ async function main() {
     const signed = await ledgerSignSolanaTx(signer, wire, address, { onPrompt: (m) => m && screens.push(`[prompt] ${m}`) });
     presser.stop();
     results.push(`SOL transfer signed on device, ed25519 verified (${signed.signature.slice(0, 12)}…); screens: ${screens.join(' → ')}`);
+
+    const verifyScreens: string[] = [];
+    const verifier = autoPress(SOL_URL, 'approve', verifyScreens);
+    await ledgerVerifySolanaAddress(signer, address);
+    verifier.stop();
+    results.push(`SOL address shown on device and approved; screens: ${verifyScreens.join(' → ')}`);
+
+    const msgScreens: string[] = [];
+    const msgPresser = autoPress(SOL_URL, 'approve', msgScreens);
+    const msg = await ledgerSignSolanaMessage(signer, 'BoreDefi Wallet Ledger test. This signature does not move funds.', address);
+    msgPresser.stop();
+    results.push(`SOL off-chain message signed on device, ed25519 verified (${msg.signature.slice(0, 12)}…); screens: ${msgScreens.join(' → ')}`);
     await dmk.disconnect({ sessionId }).catch(() => undefined);
     dmk.close();
   }
