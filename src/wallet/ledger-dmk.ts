@@ -10,7 +10,7 @@
  * The seed never leaves the device; the wallet only ever sees public keys and signatures.
  */
 import { ed25519 } from '@noble/curves/ed25519';
-import { Transaction } from 'ethers';
+import { getBytes, Signature, toUtf8Bytes, Transaction, TypedDataEncoder, verifyMessage, verifyTypedData } from 'ethers';
 import type { Observable } from 'rxjs';
 
 import { applyLedgerSignature, hexNoPrefix, LEDGER_ETH_PATH } from './ledger';
@@ -55,6 +55,8 @@ export function ledgerPrompt(interaction: string | undefined, app: 'Ethereum' | 
       return 'Review the transaction on your Ledger, then approve.';
     case 'sign-personal-message':
       return 'Review the message on your Ledger, then approve.';
+    case 'sign-typed-data':
+      return 'Review the request on your Ledger, then approve.';
     case 'web3-checks-opt-in':
       return 'Choose a Web3 Checks option on your Ledger.';
     default:
@@ -137,44 +139,89 @@ export type DmkLike = {
   disconnect: (args: { sessionId: string }) => Promise<void>;
 };
 export type DiscoveredLedger = { id: string; name: string; deviceModel?: { model?: string; name?: string } };
+export type LedgerEthSignature = { r: string; s: string; v: number };
+export type LedgerTypedData = {
+  domain: Record<string, unknown>;
+  types: Record<string, Array<{ name: string; type: string }>>;
+  primaryType: string;
+  message: Record<string, unknown>;
+};
 export type EthSignerLike = {
   getAddress: (path: string, options?: { checkOnDevice?: boolean }) => DeviceActionLike<{ address: string; publicKey: string }>;
-  signTransaction: (path: string, tx: Uint8Array, options?: Record<string, unknown>) => DeviceActionLike<{ r: string; s: string; v: number }>;
+  signTransaction: (path: string, tx: Uint8Array, options?: Record<string, unknown>) => DeviceActionLike<LedgerEthSignature>;
+  signMessage?: (path: string, message: string | Uint8Array) => DeviceActionLike<LedgerEthSignature>;
+  signTypedData?: (path: string, typedData: LedgerTypedData) => DeviceActionLike<LedgerEthSignature>;
 };
 export type SolSignerLike = {
   getAddress: (path: string, options?: { checkOnDevice?: boolean }) => DeviceActionLike<string | Uint8Array>;
   signTransaction: (path: string, tx: Uint8Array, options?: Record<string, unknown>) => DeviceActionLike<Uint8Array | string>;
+  signMessage?: (path: string, message: string | Uint8Array) => DeviceActionLike<{ signature: string }>;
 };
 
-/** Scans until the first Ledger shows up (or timeout), then opens a session to it. */
+/**
+ * Scans until a Ledger shows up (or timeout), then opens a session to it. With `preferId` (Reconnect), waits up to
+ * `graceMs` for that exact device and otherwise takes the first other Ledger it saw (ids can change after re-pairing).
+ */
 export async function connectFirstLedger(
   dmk: DmkLike,
-  options: { timeoutMs?: number; pick?: (device: DiscoveredLedger) => boolean } = {},
+  options: { timeoutMs?: number; preferId?: string | null; graceMs?: number } = {},
 ): Promise<{ sessionId: string; device: DiscoveredLedger }> {
   const device = await new Promise<DiscoveredLedger>((resolve, reject) => {
     let sub: { unsubscribe: () => void } | null = null;
     let settled = false;
-    const timer = setTimeout(() => {
+    let fallback: DiscoveredLedger | null = null;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+    const done = (found: DiscoveredLedger) => {
+      if (settled) {
+        return;
+      }
       settled = true;
+      clearTimeout(timer);
+      if (graceTimer) {
+        clearTimeout(graceTimer);
+      }
+      queueMicrotask(() => sub?.unsubscribe());
+      void dmk.stopDiscovering().catch(() => undefined);
+      resolve(found);
+    };
+    const timer = setTimeout(() => {
+      if (fallback) {
+        done(fallback);
+        return;
+      }
+      settled = true;
+      if (graceTimer) {
+        clearTimeout(graceTimer);
+      }
       sub?.unsubscribe();
       void dmk.stopDiscovering().catch(() => undefined);
       reject(new Error('No Ledger found. Turn it on, unlock it, keep Bluetooth on, and stay close to the phone.'));
     }, options.timeoutMs ?? 30_000);
+    if (options.preferId) {
+      graceTimer = setTimeout(() => {
+        if (fallback) {
+          done(fallback);
+        }
+      }, options.graceMs ?? 10_000);
+    }
     sub = dmk.startDiscovering({}).subscribe({
       next: (found) => {
-        if (settled || (options.pick && !options.pick(found))) {
+        if (settled) {
           return;
         }
-        settled = true;
-        clearTimeout(timer);
-        queueMicrotask(() => sub?.unsubscribe());
-        void dmk.stopDiscovering().catch(() => undefined);
-        resolve(found);
+        if (!options.preferId || found.id === options.preferId) {
+          done(found);
+          return;
+        }
+        fallback = fallback ?? found;
       },
       error: (error) => {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
+          if (graceTimer) {
+            clearTimeout(graceTimer);
+          }
           reject(new Error(ledgerErrorMessage(error)));
         }
       },
@@ -279,3 +326,139 @@ export function hexToBytes(hex: string): Uint8Array {
   }
   return out;
 }
+
+/**
+ * Show-on-device verification: the Ledger displays its ETH address and the user approves only if it matches the
+ * one on the phone. The device's answer must also equal `expected`, so a swapped address on screen is caught.
+ */
+export async function ledgerVerifyEthAddress(
+  signer: EthSignerLike,
+  expected: string,
+  options: { path?: string; onPrompt?: (m: string | null) => void } = {},
+): Promise<string> {
+  const shown = await ledgerEthAddress(signer, { ...options, checkOnDevice: true });
+  if (shown.toLowerCase() !== expected.toLowerCase()) {
+    throw new Error('The Ledger returned a different address than the one saved in BoreDefi. Do not use it.');
+  }
+  return shown;
+}
+
+export async function ledgerVerifySolanaAddress(
+  signer: SolSignerLike,
+  expected: string,
+  options: { path?: string; onPrompt?: (m: string | null) => void } = {},
+): Promise<string> {
+  const shown = await ledgerSolanaAddress(signer, { ...options, checkOnDevice: true });
+  if (shown !== expected) {
+    throw new Error('The Ledger returned a different Solana address than the one saved in BoreDefi. Do not use it.');
+  }
+  return shown;
+}
+
+/** Ledger {r, s, v} → a 65-byte 0x signature (v = 27/28). Pure. */
+export function ledgerEthSignatureHex(signature: LedgerEthSignature): string {
+  const v = signature.v >= 27 ? signature.v : signature.v + 27;
+  return Signature.from({
+    r: `0x${hexNoPrefix(signature.r).padStart(64, '0')}`,
+    s: `0x${hexNoPrefix(signature.s).padStart(64, '0')}`,
+    v,
+  }).serialized;
+}
+
+/**
+ * personal_sign on the Ledger. `message` is UTF-8 text or 0x-hex bytes (as WalletConnect sends it). The signature
+ * must recover to `expectedAddress` before it is returned.
+ */
+export async function ledgerSignEthMessage(
+  signer: EthSignerLike,
+  message: string | Uint8Array,
+  expectedAddress: string,
+  options: { path?: string; onPrompt?: (m: string | null) => void } = {},
+): Promise<string> {
+  if (!signer.signMessage) {
+    throw new Error('This Ledger connection cannot sign messages.');
+  }
+  const bytes = typeof message === 'string' ? (/^0x([0-9a-f]{2})*$/i.test(message) ? getBytes(message) : toUtf8Bytes(message)) : message;
+  const raw = await awaitDeviceAction(signer.signMessage(options.path ?? LEDGER_ETH_PATH, bytes), {
+    onPrompt: options.onPrompt,
+    app: 'Ethereum',
+  });
+  const signature = ledgerEthSignatureHex(raw);
+  if (verifyMessage(bytes, signature).toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error('The Ledger signature does not match your Ledger address. Nothing was shared.');
+  }
+  return signature;
+}
+
+/** eth_signTypedData_v4 on the Ledger; the signature must recover to `expectedAddress`. */
+export async function ledgerSignEthTypedData(
+  signer: EthSignerLike,
+  typedData: LedgerTypedData,
+  expectedAddress: string,
+  options: { path?: string; onPrompt?: (m: string | null) => void } = {},
+): Promise<string> {
+  if (!signer.signTypedData) {
+    throw new Error('This Ledger connection cannot sign typed data.');
+  }
+  const raw = await awaitDeviceAction(signer.signTypedData(options.path ?? LEDGER_ETH_PATH, typedData), {
+    onPrompt: options.onPrompt,
+    app: 'Ethereum',
+  });
+  const signature = ledgerEthSignatureHex(raw);
+  const { EIP712Domain: _domain, ...types } = typedData.types;
+  void _domain;
+  // Hash check first so a malformed payload fails with a clear error rather than a recover mismatch.
+  TypedDataEncoder.hash(typedData.domain as never, types, typedData.message);
+  if (verifyTypedData(typedData.domain as never, types, typedData.message, signature).toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error('The Ledger signature does not match your Ledger address. Nothing was shared.');
+  }
+  return signature;
+}
+
+/**
+ * Parses the Solana signer kit's off-chain message envelope ([1][64-byte signature][signed message bytes]) and
+ * verifies the ed25519 signature against `address`. The signed bytes must end with the message the user asked for.
+ * Pure.
+ */
+export function verifyLedgerSolanaMessage(envelopeOrSignature: string, message: Uint8Array, address: string): { signature: string; signedBytes: Uint8Array } {
+  const bytes = decodeBase58(envelopeOrSignature);
+  const pub = decodeBase58(address);
+  let signature: Uint8Array;
+  let signedBytes: Uint8Array;
+  if (bytes.length === 64) {
+    signature = bytes;
+    signedBytes = message;
+  } else if (bytes.length > 65 && bytes[0] === 1) {
+    signature = bytes.slice(1, 65);
+    signedBytes = bytes.slice(65);
+    const tail = signedBytes.slice(signedBytes.length - message.length);
+    if (signedBytes.length < message.length || tail.some((b, i) => b !== message[i])) {
+      throw new Error('The Ledger signed a different message. Nothing was shared.');
+    }
+  } else {
+    throw new Error('The Ledger returned an unexpected Solana signature.');
+  }
+  if (!ed25519.verify(signature, signedBytes, pub)) {
+    throw new Error('The Ledger signature does not verify for your Ledger address. Nothing was shared.');
+  }
+  return { signature: encodeBase58(signature), signedBytes };
+}
+
+/** Solana off-chain message signing on the Ledger (the device shows the text). */
+export async function ledgerSignSolanaMessage(
+  signer: SolSignerLike,
+  message: string | Uint8Array,
+  address: string,
+  options: { path?: string; onPrompt?: (m: string | null) => void } = {},
+): Promise<{ signature: string; signedBytes: Uint8Array }> {
+  if (!signer.signMessage) {
+    throw new Error('This Ledger connection cannot sign Solana messages.');
+  }
+  const bytes = typeof message === 'string' ? toUtf8Bytes(message) : message;
+  const out = await awaitDeviceAction(signer.signMessage(options.path ?? LEDGER_SOL_PATH, bytes), {
+    onPrompt: options.onPrompt,
+    app: 'Solana',
+  });
+  return verifyLedgerSolanaMessage(out.signature, bytes, address);
+}
+

@@ -233,6 +233,22 @@ export async function signPlan(mnemonic: string, from: string, plan: SolanaSendP
   return { wire: serializeTransaction([sig], message), signature: signatureToId(sig), lastValidBlockHeight };
 }
 
+/**
+ * Same as signPlan, but the signature comes from a hardware signer (the Ledger). The signer sees the exact message
+ * bytes and must return a wire whose signature verifies for `from` (ledgerSignSolanaTx checks that).
+ */
+export async function signPlanExternal(
+  from: string,
+  plan: SolanaSendPlan,
+  signWire: (wire: Uint8Array) => Promise<{ wire: Uint8Array; signature: string }>,
+  rpc = solanaRpc(),
+): Promise<SignedSolanaTx> {
+  const { blockhash, lastValidBlockHeight } = await getLatestBlockhash(rpc);
+  const message = serializeMessage(compileMessage(from, plan.instructions, blockhash));
+  const signed = await signWire(serializeTransaction([new Uint8Array(64)], message));
+  return { wire: signed.wire, signature: signed.signature, lastValidBlockHeight };
+}
+
 /** Friendly text for the common simulation/preflight failures. */
 export function friendlySolanaError(err: unknown, logs: string[] = []): string {
   const text = `${typeof err === 'string' ? err : JSON.stringify(err ?? '')} ${logs.join(' ')}`;

@@ -4,10 +4,10 @@ import test from 'node:test';
 import { ed25519 } from '@noble/curves/ed25519';
 import { DeviceActionStatus, UserInteractionRequired } from '@ledgerhq/device-management-kit';
 import { Subject } from 'rxjs';
-import { Wallet } from 'ethers';
+import { Signature, toUtf8Bytes, TypedDataEncoder, Wallet } from 'ethers';
 
 import { buildUnsignedLedgerTx } from './ledger';
-import { ledgerBleFlag } from './ledger-ble';
+import { ledgerBleEnabledFor, ledgerBleFlag } from './ledger-ble';
 import {
   applyLedgerSolanaSignature,
   assembleLedgerEthTx,
@@ -17,8 +17,16 @@ import {
   hexToBytes,
   ledgerErrorMessage,
   ledgerPrompt,
+  ledgerEthSignatureHex,
+  ledgerSignEthMessage,
   ledgerSignEthTx,
+  ledgerSignEthTypedData,
+  ledgerSignSolanaMessage,
   ledgerSignSolanaTx,
+  ledgerVerifyEthAddress,
+  ledgerVerifySolanaAddress,
+  verifyLedgerSolanaMessage,
+  type LedgerTypedData,
   type DeviceActionStateLike,
   type DiscoveredLedger,
   type DmkLike,
@@ -97,7 +105,7 @@ test('awaitDeviceAction rejects on device error, stop, and timeout (cancelling t
   assert.equal(silent.cancelled, 1);
 });
 
-test('connectFirstLedger connects to the first matching device and stops scanning', async () => {
+test('connectFirstLedger prefers the remembered device and stops scanning', async () => {
   const found = new Subject<DiscoveredLedger>();
   let stopped = 0;
   let connectedTo = '';
@@ -112,8 +120,8 @@ test('connectFirstLedger connects to the first matching device and stops scannin
     },
     disconnect: async () => undefined,
   };
-  const pending = connectFirstLedger(dmk, { timeoutMs: 1000, pick: (d) => d.name.startsWith('Nano X') });
-  found.next({ id: 'other', name: 'Headphones' });
+  const pending = connectFirstLedger(dmk, { timeoutMs: 1000, preferId: 'nanox', graceMs: 500 });
+  found.next({ id: 'other', name: 'Nano X 9999' });
   found.next({ id: 'nanox', name: 'Nano X 1A2B' });
   const { sessionId, device } = await pending;
   assert.equal(sessionId, 'session-1');
@@ -258,4 +266,159 @@ test('hexToBytes and the BLE flag parse strictly', () => {
   assert.equal(ledgerBleFlag(' true '), true);
   assert.equal(ledgerBleFlag('0'), false);
   assert.equal(ledgerBleFlag(undefined), false);
+});
+
+test('connectFirstLedger falls back to another Ledger after the grace period', async () => {
+  const found = new Subject<DiscoveredLedger>();
+  const dmk: DmkLike = {
+    startDiscovering: () => found,
+    stopDiscovering: async () => undefined,
+    connect: async ({ device }) => `s-${device.id}`,
+    disconnect: async () => undefined,
+  };
+  const pending = connectFirstLedger(dmk, { timeoutMs: 1000, preferId: 'gone', graceMs: 20 });
+  found.next({ id: 'new-id', name: 'Nano X 1A2B' });
+  const { sessionId } = await pending;
+  assert.equal(sessionId, 's-new-id');
+});
+
+test('Ledger BLE is per platform: Android flag alone, iPhone needs both (hidden by default)', () => {
+  assert.equal(ledgerBleEnabledFor('android', '1', undefined), true);
+  assert.equal(ledgerBleEnabledFor('android', undefined, '1'), false);
+  assert.equal(ledgerBleEnabledFor('ios', '1', undefined), false);
+  assert.equal(ledgerBleEnabledFor('ios', '1', '1'), true);
+  assert.equal(ledgerBleEnabledFor('ios', undefined, '1'), false);
+  assert.equal(ledgerBleEnabledFor('web', '1', '1'), false);
+});
+
+function completing<T>(output: T) {
+  const a = action<T>();
+  queueMicrotask(() => a.subject.next({ status: DA_STATUS.Completed, output }));
+  return a.action;
+}
+
+test('show-on-device verification asks the device to display and refuses a different address', async () => {
+  const wallet = new Wallet(TEST_KEY);
+  let checked: boolean | undefined;
+  const signer: EthSignerLike = {
+    getAddress: (_path, options) => {
+      checked = options?.checkOnDevice;
+      return completing({ address: wallet.address, publicKey: '04' });
+    },
+    signTransaction: () => {
+      throw new Error('unused');
+    },
+  };
+  assert.equal(await ledgerVerifyEthAddress(signer, wallet.address.toLowerCase()), wallet.address);
+  assert.equal(checked, true);
+  await assert.rejects(ledgerVerifyEthAddress(signer, '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'), /different address/);
+
+  const sol: SolSignerLike = {
+    getAddress: () => completing(new Uint8Array(32).fill(3)),
+    signTransaction: () => {
+      throw new Error('unused');
+    },
+  };
+  const expected = encodeBase58(new Uint8Array(32).fill(3));
+  assert.equal(await ledgerVerifySolanaAddress(sol, expected), expected);
+  await assert.rejects(ledgerVerifySolanaAddress(sol, encodeBase58(new Uint8Array(32).fill(4))), /different Solana address/);
+});
+
+test('ledgerEthSignatureHex accepts y-parity or 27/28 v', () => {
+  const wallet = new Wallet(TEST_KEY);
+  const sig = wallet.signingKey.sign(`0x${'11'.repeat(32)}`);
+  const fromParity = ledgerEthSignatureHex({ r: sig.r.slice(2), s: sig.s.slice(2), v: sig.yParity });
+  const from27 = ledgerEthSignatureHex({ r: sig.r, s: sig.s, v: sig.v });
+  assert.equal(fromParity, sig.serialized);
+  assert.equal(from27, sig.serialized);
+});
+
+test('ledgerSignEthMessage (personal_sign) returns a signature that recovers to the Ledger address', async () => {
+  const wallet = new Wallet(TEST_KEY);
+  let sent: Uint8Array | string = '';
+  const signer: EthSignerLike = {
+    getAddress: () => {
+      throw new Error('unused');
+    },
+    signTransaction: () => {
+      throw new Error('unused');
+    },
+    signMessage: (_path, message) => {
+      sent = message;
+      const sig = Signature.from(wallet.signMessageSync(message));
+      return completing({ r: sig.r.slice(2), s: sig.s.slice(2), v: sig.v });
+    },
+  };
+  const out = await ledgerSignEthMessage(signer, 'hello ledger', wallet.address);
+  assert.deepEqual(sent, toUtf8Bytes('hello ledger'));
+  assert.equal(out, wallet.signMessageSync('hello ledger'));
+  // WalletConnect-style 0x hex is signed as bytes.
+  await ledgerSignEthMessage(signer, '0x68656c6c6f', wallet.address);
+  assert.deepEqual(sent, new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]));
+  await assert.rejects(ledgerSignEthMessage(signer, 'x', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'), /does not match/);
+});
+
+test('ledgerSignEthTypedData verifies the EIP-712 signature', async () => {
+  const wallet = new Wallet(TEST_KEY);
+  const typedData: LedgerTypedData = {
+    domain: { name: 'BoreDefi', version: '1', chainId: 1, verifyingContract: '0x000000000000000000000000000000000000dEaD' },
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+      ],
+      Mail: [{ name: 'contents', type: 'string' }],
+    },
+    primaryType: 'Mail',
+    message: { contents: 'gm' },
+  };
+  const signer: EthSignerLike = {
+    getAddress: () => {
+      throw new Error('unused');
+    },
+    signTransaction: () => {
+      throw new Error('unused');
+    },
+    signTypedData: () => {
+      const digest = TypedDataEncoder.hash(typedData.domain, { Mail: typedData.types.Mail! }, typedData.message);
+      const sig = wallet.signingKey.sign(digest);
+      return completing({ r: sig.r, s: sig.s, v: sig.yParity });
+    },
+  };
+  const out = await ledgerSignEthTypedData(signer, typedData, wallet.address);
+  assert.equal(Signature.from(out).serialized, out);
+  await assert.rejects(ledgerSignEthTypedData(signer, typedData, '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'), /does not match/);
+});
+
+test('Solana message signing: envelope or raw signature, verified over the signed bytes', async () => {
+  const secret = ed25519.utils.randomPrivateKey();
+  const pub = ed25519.getPublicKey(secret);
+  const address = encodeBase58(pub);
+  const message = toUtf8Bytes('hello solana');
+  // Off-chain message V0-style: some header + the message; the kit returns [1][sig][signed bytes].
+  const signedBytes = new Uint8Array([0xff, ...toUtf8Bytes('solana offchain'), 0, ...message]);
+  const sig = ed25519.sign(signedBytes, secret);
+  const envelope = encodeBase58(new Uint8Array([1, ...sig, ...signedBytes]));
+  assert.equal(verifyLedgerSolanaMessage(envelope, message, address).signature, encodeBase58(sig));
+  // Raw 64-byte signature over the message itself.
+  assert.equal(verifyLedgerSolanaMessage(encodeBase58(ed25519.sign(message, secret)), message, address).signature.length > 0, true);
+  // A different message in the envelope is refused.
+  assert.throws(() => verifyLedgerSolanaMessage(envelope, toUtf8Bytes('other'), address), /different message/);
+  // Wrong key is refused.
+  const other = encodeBase58(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
+  assert.throws(() => verifyLedgerSolanaMessage(envelope, message, other), /does not verify/);
+
+  const signer: SolSignerLike = {
+    getAddress: () => {
+      throw new Error('unused');
+    },
+    signTransaction: () => {
+      throw new Error('unused');
+    },
+    signMessage: () => completing({ signature: envelope }),
+  };
+  const out = await ledgerSignSolanaMessage(signer, 'hello solana', address);
+  assert.equal(out.signature, encodeBase58(sig));
 });
