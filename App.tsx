@@ -49,7 +49,6 @@ import { WalletConnectScreen } from './src/screens/WalletConnectScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { phoneWidth } from './src/theme';
 import { extractWalletConnectUri } from './src/wallet/wc';
-import { enableAppSwitcherProtectionAsync } from 'expo-screen-capture';
 
 const OnboardingStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
@@ -284,13 +283,11 @@ function ThemedApp() {
 }
 
 export default function App() {
-  useEffect(() => {
-    // iOS: blur the whole wallet in the app switcher, background snapshots, and interruptions.
-    // (Android gets the same from FLAG_SECURE on sensitive screens via useNoScreenCapture.)
-    if (Platform.OS === 'ios') {
-      enableAppSwitcherProtectionAsync(1).catch(() => undefined);
-    }
-  }, []);
+  // iOS app-switcher blur and screen-capture blocking are OFF in this build. expo-screen-capture 57.0.2
+  // re-parents the key window and adds a blur overlay on every willResignActive; the Face ID sheet
+  // triggers both, which flickered the unlock screen and could leave the PIN pad unresponsive on
+  // TestFlight build 30. Android keeps FLAG_SECURE, and the recovery-phrase screens keep their own
+  // usePreventScreenCapture. Turn this back on after the library fix ships.
   return (
     <WalletProvider>
       <ThemeProvider>

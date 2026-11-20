@@ -49,3 +49,20 @@ export async function withBiometricPrompt<T>(
     guard.end();
   }
 }
+
+/**
+ * True exactly once per cold start. The unlock screen auto-prompts Face ID with this, so a remount or
+ * re-lock can never start a prompt loop; the "Use biometrics" button stays available for a manual retry.
+ */
+export function createOnce(): { take: () => boolean } {
+  let used = false;
+  return {
+    take() {
+      if (used) {
+        return false;
+      }
+      used = true;
+      return true;
+    },
+  };
+}

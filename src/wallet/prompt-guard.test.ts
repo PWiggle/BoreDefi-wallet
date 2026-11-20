@@ -65,3 +65,27 @@ test('wiring: UnlockScreen cannot strand a full PIN pad or an unhandled rejectio
   assert.match(screen, /\.catch\(\(\) => \{[\s\S]*setPin\(''\)/);
   assert.match(screen, /try \{\s*result = await unlockWithBiometrics\(\);\s*\} catch/);
 });
+
+test('createOnce hands out exactly one automatic biometric prompt per cold start', async () => {
+  const { createOnce } = await import('./prompt-guard');
+  const once = createOnce();
+  assert.equal(once.take(), true);
+  assert.equal(once.take(), false);
+  assert.equal(once.take(), false);
+});
+
+test('wiring: Face ID auto-prompt is once per launch and only while active; PIN pad only locked by in-flight unlock or lockout', () => {
+  const screen = readFileSync(new URL('../screens/UnlockScreen.tsx', import.meta.url), 'utf8');
+  assert.match(screen, /AppState\.currentState !== 'active'/);
+  assert.match(screen, /autoBiometricPrompt\.take\(\)/);
+  assert.match(screen, /<PinPad value=\{pin\} onChange=\{setPin\} disabled=\{busy \|\| pinBackoffMs > 0\} \/>/);
+  // The manual button stays so a user can retry Face ID.
+  assert.match(screen, /label="Use biometrics"/);
+});
+
+test('wiring: iOS screen-capture re-parenting and the app-switcher blur are off in this build', () => {
+  const app = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(app, /enableAppSwitcherProtectionAsync/);
+  const hook = readFileSync(new URL('../components/useNoScreenCapture.ts', import.meta.url), 'utf8');
+  assert.match(hook, /Platform\.OS !== 'android'/);
+});

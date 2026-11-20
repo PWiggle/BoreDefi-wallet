@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Text } from 'react-native';
+import { AppState, Text } from 'react-native';
 
 import { Button } from '../components/Button';
 import { CoverScreen } from '../components/CoverScreen';
@@ -11,6 +11,10 @@ import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { formatLockWait, isValidPin } from '../wallet/pin';
 import { useNoScreenCapture } from '../components/useNoScreenCapture';
+import { createOnce } from '../wallet/prompt-guard';
+
+/** One automatic Face ID prompt per cold start; after that only the "Use biometrics" button. */
+const autoBiometricPrompt = createOnce();
 
 function unlockStyles({ type }: Theme) {
   return {
@@ -54,7 +58,10 @@ export function UnlockScreen() {
   };
 
   useEffect(() => {
-    if (stage !== 'pin' || !settings.biometricsEnabled) {
+    if (stage !== 'pin' || !settings.biometricsEnabled || AppState.currentState !== 'active') {
+      return;
+    }
+    if (!autoBiometricPrompt.take()) {
       return;
     }
     tryBiometrics();
