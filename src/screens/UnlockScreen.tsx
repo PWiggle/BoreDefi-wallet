@@ -37,7 +37,12 @@ export function UnlockScreen() {
 
   const tryBiometrics = async () => {
     setError(null);
-    const result = await unlockWithBiometrics();
+    let result: Awaited<ReturnType<typeof unlockWithBiometrics>> = 'cancelled';
+    try {
+      result = await unlockWithBiometrics();
+    } catch {
+      result = 'cancelled';
+    }
     if (result === 'cancelled') {
       setError('Biometric unlock was cancelled or failed. Use your PIN to decrypt the vault.');
     } else if (result === 'unavailable') {
@@ -70,6 +75,11 @@ export function UnlockScreen() {
             setError('Incorrect PIN.');
             setPin('');
           }
+        })
+        .catch(() => {
+          // A thrown error must not leave six dots on the pad with nothing happening.
+          setError('Could not unlock. Try your PIN again.');
+          setPin('');
         })
         .finally(() => {
           submitted.current = false;

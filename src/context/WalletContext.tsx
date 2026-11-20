@@ -14,6 +14,7 @@ import { logger } from '../logger';
 import type { AppearanceMode } from '../theme';
 import { autoLockMs, type AutoLockMode } from '../wallet/auto-lock';
 import { authenticateBiometrics, biometricAvailability } from '../wallet/biometrics';
+import { createPromptGuard, withBiometricPrompt } from '../wallet/prompt-guard';
 import { CHAINS, DEFAULT_CHAIN_ID, type ChainConfig, type ChainId } from '../wallet/chains';
 import {
   clearWalletCache,
@@ -126,6 +127,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const settingsRef = useRef(settings);
   const hiddenAtRef = useRef<number | null>(null);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promptGuardRef = useRef(createPromptGuard());
 
   settingsRef.current = settings;
 
@@ -216,6 +218,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handleAppHidden = useCallback(() => {
+    if (promptGuardRef.current.isSuppressed()) {
+      // The Face ID sheet itself makes iOS report the app as inactive. Not a real background.
+      return;
+    }
     const delay = autoLockMs(settingsRef.current.autoLock);
     hiddenAtRef.current = Date.now();
     clearLockTimer();
@@ -229,6 +235,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [clearLockTimer, lock]);
 
   const handleAppVisible = useCallback(() => {
+    if (promptGuardRef.current.isSuppressed()) {
+      return;
+    }
     const delay = autoLockMs(settingsRef.current.autoLock);
     const hiddenAt = hiddenAtRef.current;
     hiddenAtRef.current = null;
@@ -377,10 +386,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!legacy) {
         return;
       }
-      await clearLegacyBiometricDek();
       if (!settingsRef.current.biometricsEnabled) {
+        await clearLegacyBiometricDek();
         return;
       }
+      // saveBiometricDek deletes the old ungated key once the gated copy is stored; if that fails,
+      // disableBiometrics deletes it. Either way the vault still opens with the PIN.
       const saved = await storeGatedDek(dek ?? legacy, 'Keep biometric unlock on');
       if (!saved) {
         await disableBiometrics();
@@ -460,14 +471,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
       await notePinSuccess();
-      await migrateLegacyDekAfterPin(opened.dek);
+      try {
+        await migrateLegacyDekAfterPin(opened.dek);
+      } catch (error) {
+        // Moving the biometric key is best effort. It must never block a correct PIN.
+        logger.warn('Biometric key migration failed', { message: error instanceof Error ? error.message : 'unknown' });
+      }
       await persistSession(opened);
       return true;
     },
     [assertPinAvailable, checkPinAndMigrate, migrateLegacyDekAfterPin, notePinFailure, notePinSuccess, persistSession],
   );
 
-  const unlockWithBiometrics = useCallback(async (): Promise<BiometricUnlockResult> => {
+  const runBiometricUnlock = useCallback(async (): Promise<BiometricUnlockResult> => {
     if (!settingsRef.current.biometricsEnabled) {
       return 'unavailable';
     }
@@ -500,8 +516,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return 'cancelled';
       }
       const opened = tryOpenVaultWithDek(vault, legacy);
-      await clearLegacyBiometricDek();
       if (!opened) {
+        // disableBiometrics also deletes the old ungated key.
         await disableBiometrics();
         return 'unavailable';
       }
@@ -515,6 +531,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await disableBiometrics();
     return 'unavailable';
   }, [disableBiometrics, persistSession, storeGatedDek]);
+
+  /**
+   * Biometric unlock never throws and never lets the Face ID sheet trigger the auto-lock: any error reads
+   * as 'cancelled' so the PIN pad stays usable.
+   */
+  const unlockWithBiometrics = useCallback(
+    (): Promise<BiometricUnlockResult> =>
+      withBiometricPrompt<BiometricUnlockResult>(promptGuardRef.current, runBiometricUnlock, 'cancelled'),
+    [runBiometricUnlock],
+  );
 
   const setSelectedChain = useCallback(
     async (chainId: ChainId) => {
