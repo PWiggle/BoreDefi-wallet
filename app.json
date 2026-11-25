@@ -23,7 +23,7 @@
       "bundleIdentifier": "com.boredefi.wallet",
       "buildNumber": "24",
       "infoPlist": {
-        "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code.",
+        "NSCameraUsageDescription": "Scan a recipient address or WalletConnect QR code, and take a photo if Stripe asks for an identity check when you buy crypto.",
         "NSFaceIDUsageDescription": "Unlock BoreDefi Wallet with Face ID.",
         "UIStatusBarHidden": true,
         "UIViewControllerBasedStatusBarAppearance": false
@@ -83,12 +83,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Scan a recipient address or WalletConnect QR code.",
+          "cameraPermission": "Scan a recipient address or WalletConnect QR code, and take a photo if Stripe asks for an identity check when you buy crypto.",
           "recordAudioAndroid": false,
           "microphonePermission": false
         }
       ],
       "./plugins/withHiddenSplashStatusBar",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": false,
+          "includeOnramp": true
+        }
+      ],
+      "./plugins/withOnrampNative",
       [
         "expo-splash-screen",
         {
@@ -108,10 +116,11 @@
             "useLegacyPackaging": false,
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "extraProguardRules": "-keep class com.facebook.hermes.unicode.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keep class expo.modules.** { *; }\n-keep class com.swmansion.rnscreens.** { *; }\n-keep class com.swmansion.gesturehandler.** { *; }\n-keep class com.reactnativecommunity.asyncstorage.** { *; }\n-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.netinfo.** { *; }\n-keep class com.shopify.reactnative.skia.** { *; }\n-dontwarn org.bouncycastle.**\n-dontwarn org.conscrypt.**\n-dontwarn org.slf4j.**\n-dontwarn java.awt.**\n-dontwarn javax.swing.**\n-keep class com.sun.jna.** { *; }\n-keepclassmembers class * extends com.sun.jna.** { *; }\n-keepclassmembers class com.sun.jna.Pointer { long peer; }\n-keep class uniffi.** { *; }\n-keep class com.walletconnect.** { *; }\n-keep class com.reown.** { *; }"
+            "extraProguardRules": "-keep class com.facebook.hermes.unicode.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keep class expo.modules.** { *; }\n-keep class com.swmansion.rnscreens.** { *; }\n-keep class com.swmansion.gesturehandler.** { *; }\n-keep class com.reactnativecommunity.asyncstorage.** { *; }\n-keep class com.horcrux.svg.** { *; }\n-keep class com.reactnativecommunity.netinfo.** { *; }\n-keep class com.shopify.reactnative.skia.** { *; }\n-keep class com.stripe.** { *; }\n-dontwarn com.stripe.**\n-dontwarn org.bouncycastle.**\n-dontwarn org.conscrypt.**\n-dontwarn org.slf4j.**\n-dontwarn java.awt.**\n-dontwarn javax.swing.**\n-keep class com.sun.jna.** { *; }\n-keepclassmembers class * extends com.sun.jna.** { *; }\n-keepclassmembers class com.sun.jna.Pointer { long peer; }\n-keep class uniffi.** { *; }\n-keep class com.walletconnect.** { *; }\n-keep class com.reown.** { *; }"
           },
           "ios": {
-            "deploymentTarget": "16.4"
+            "deploymentTarget": "16.4",
+            "useFrameworks": "dynamic"
           }
         }
       ]

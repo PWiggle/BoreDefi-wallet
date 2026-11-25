@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '../components/Button';
@@ -8,11 +8,20 @@ import { Screen } from '../components/Screen';
 import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { ONRAMP_APP_TOKEN, ONRAMP_ENDPOINT, ONRAMP_VERCEL_BYPASS, STRIPE_BUY_AVAILABLE } from '../wallet/onramp/config';
+import {
+  STRIPE_TEST_PUBLISHABLE_KEY,
+  embeddedOfferCurrency,
+  embeddedOfferNetwork,
+  embeddedOnrampEndpoint,
+  embeddedOnrampPlatform,
+  isEmbeddedOnrampOffer,
+} from '../wallet/onramp/embedded';
 import { openStripeHostedOnramp, openTransakHostedWidget } from '../wallet/onramp/open';
 import { assetChoices, offersForAsset, offersForWallet, initialOffer, type OnrampOffer } from '../wallet/onramp/offers';
 import { buildOnrampSessionRequest, postOnrampSession } from '../wallet/onramp/request';
 import { TRANSAK_BUY_AVAILABLE, TRANSAK_WIDGET_ENDPOINT, buildTransakWidgetRequest, postTransakWidgetUrl } from '../wallet/onramp/transak';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
+import { EmbeddedOnramp } from './EmbeddedOnramp';
 
 type BuyProvider = 'stripe' | 'transak';
 
@@ -61,6 +70,19 @@ export function BuyScreen() {
   });
   const providerReady = provider === 'stripe' ? STRIPE_BUY_AVAILABLE : TRANSAK_BUY_AVAILABLE;
   const canStart = Boolean(built.ok && providerReady);
+  const embeddedEndpoint = embeddedOnrampEndpoint(ONRAMP_ENDPOINT);
+  const embeddedCurrency = embeddedOfferCurrency(offer);
+  const embeddedNetwork = embeddedOfferNetwork(offer);
+  const inApp = Boolean(
+    provider === 'stripe' &&
+      embeddedOnrampPlatform(Platform.OS) &&
+      STRIPE_TEST_PUBLISHABLE_KEY &&
+      embeddedEndpoint &&
+      isEmbeddedOnrampOffer(offer.id) &&
+      embeddedCurrency &&
+      embeddedNetwork &&
+      built.ok,
+  );
 
   const selectAsset = (asset: string) => {
     const next = offersForAsset(offers, asset);
@@ -169,7 +191,7 @@ export function BuyScreen() {
       subtitle="Card to crypto"
       footer={
         <Button
-          label={usingTransak ? 'Continue with Transak' : 'Continue with Stripe'}
+          label={usingTransak ? 'Continue with Transak' : inApp ? 'Continue in browser' : 'Continue with Stripe'}
           onPress={start}
           loading={busy}
           disabled={busy || !canStart}
@@ -268,10 +290,25 @@ export function BuyScreen() {
             : 'Only this public address is sent. Your recovery phrase and private keys stay on this device. Stripe locks the address so the purchase cannot be redirected.'}
         </Text>
       </View>
+      {inApp && STRIPE_TEST_PUBLISHABLE_KEY && embeddedEndpoint && embeddedCurrency && embeddedNetwork && built.ok ? (
+        <EmbeddedOnramp
+          publishableKey={STRIPE_TEST_PUBLISHABLE_KEY}
+          endpoint={embeddedEndpoint}
+          appToken={ONRAMP_APP_TOKEN}
+          vercelBypass={ONRAMP_VERCEL_BYPASS}
+          currency={embeddedCurrency}
+          network={embeddedNetwork}
+          walletAddress={built.body.wallet_address}
+          assetLabel={offer.asset}
+          networkLabel={offer.networkLabel}
+        />
+      ) : null}
       <Text style={styles.meta}>
         {usingTransak
           ? 'Checkout opens in the secure browser tab Transak uses for card payments. When you come back, pull to refresh. Crypto arrives on-chain after Transak finishes. Nothing is charged by BoreDefi.'
-          : 'Checkout opens in the secure browser tab Stripe uses for card payments. When you come back, pull to refresh. Crypto arrives on-chain after Stripe finishes. Nothing is charged by BoreDefi.'}
+          : inApp
+            ? 'In-app checkout is the Stripe native flow. Continue in browser opens the hosted Stripe page if the in-app module is unavailable. Nothing is charged by BoreDefi.'
+            : 'Checkout opens in the secure browser tab Stripe uses for card payments. When you come back, pull to refresh. Crypto arrives on-chain after Stripe finishes. Nothing is charged by BoreDefi.'}
       </Text>
       {!STRIPE_BUY_AVAILABLE && !usingTransak ? (
         <Text style={styles.meta}>This build has no onramp endpoint yet. Set EXPO_PUBLIC_ONRAMP_URL to the test server and rebuild.</Text>
