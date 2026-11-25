@@ -92,9 +92,36 @@ export function assertSecretForMode(mode: OnrampMode, value: string | undefined)
 export function redactSecrets(value: string): string {
   return value
     .replace(/[sr]k_(test|live)_[A-Za-z0-9_]+/gi, '[redacted]')
+    .replace(/pk_(test|live)_[A-Za-z0-9_]+/gi, '[redacted]')
+    .replace(/liwltoken_[A-Za-z0-9_]+/gi, '[redacted]')
+    .replace(/liwlrefresh_[A-Za-z0-9_]+/gi, '[redacted]')
+    .replace(/cos_[A-Za-z0-9]+_secret_[A-Za-z0-9_]+/gi, '[redacted]')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 300);
+}
+
+/**
+ * Test mode prefers STRIPE_SECRET_KEY_TEST. If that is unset, STRIPE_SECRET_KEY is
+ * used only when it is an sk_test_ key. A live key in STRIPE_SECRET_KEY is ignored.
+ */
+export function testSecretFromEnv(source: {
+  STRIPE_SECRET_KEY_TEST?: string;
+  STRIPE_SECRET_KEY?: string;
+}): string | undefined {
+  const named = normalizedKey(source.STRIPE_SECRET_KEY_TEST);
+  if (named) {
+    return named;
+  }
+  const alias = normalizedKey(source.STRIPE_SECRET_KEY);
+  const lower = alias.toLowerCase();
+  if (!alias.startsWith('sk_test_') || alias.length < 'sk_test_'.length + 8) {
+    return undefined;
+  }
+  if (lower.includes('sk_live') || lower.includes('rk_live')) {
+    return undefined;
+  }
+  return alias;
 }
 
 export type StripeOnrampInput = {

@@ -6,6 +6,7 @@ import {
   createStripeOnrampSession,
   onrampMode,
   OnrampRefused,
+  testSecretFromEnv,
   type CreatedOnrampSession,
   type OnrampMode,
   type StripeOnrampInput,
@@ -16,6 +17,8 @@ export type OnrampServerEnv = {
   stripeSecretKey: string | undefined;
   allowedOrigins: string | undefined;
   appToken: string | undefined;
+  /** Link OAuth client id for the native embedded onramp. Not a secret key. */
+  linkOauthClientId?: string;
 };
 
 export type RateLimiter = {
@@ -39,9 +42,10 @@ export function envFromProcess(source: { [key: string]: string | undefined } = p
   return {
     mode,
     // Live mode never reads the test key, and test mode never reads the live key.
-    stripeSecretKey: mode === 'live' ? source.STRIPE_SECRET_KEY_LIVE : source.STRIPE_SECRET_KEY_TEST,
+    stripeSecretKey: mode === 'live' ? source.STRIPE_SECRET_KEY_LIVE : testSecretFromEnv(source),
     allowedOrigins: source.ONRAMP_ALLOWED_ORIGINS,
     appToken: source.ONRAMP_APP_TOKEN,
+    linkOauthClientId: source.STRIPE_LINK_OAUTH_CLIENT_ID?.trim() || undefined,
   };
 }
 

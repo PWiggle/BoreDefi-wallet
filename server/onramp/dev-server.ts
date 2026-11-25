@@ -8,6 +8,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import { handleEmbeddedOnrampRequest } from './embedded-handler';
 import { envFromProcess, handleOnrampRequest } from './handler';
 import { onrampMode } from './stripe';
 
@@ -44,7 +45,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     headers: headerBag(req),
     body: hasBody ? new TextDecoder().decode(bytes) : undefined,
   });
-  const response = await handleOnrampRequest(request, envFromProcess());
+  const path = new URL(url).pathname;
+  const response =
+    path === '/api/onramp-embedded'
+      ? await handleEmbeddedOnrampRequest(request, envFromProcess())
+      : await handleOnrampRequest(request, envFromProcess());
   res.statusCode = response.status;
   response.headers.forEach((value, key) => {
     res.setHeader(key, value);
@@ -61,5 +66,7 @@ createServer((req, res) => {
     res.end(JSON.stringify({ error: 'Could not start the Stripe onramp.' }));
   });
 }).listen(port, host, () => {
-  console.log(`BoreDefi onramp ${onrampMode(process.env.ONRAMP_MODE)} server on http://${host}:${port}/api/onramp-session`);
+  console.log(
+    `BoreDefi onramp ${onrampMode(process.env.ONRAMP_MODE)} server on http://${host}:${port}/api/onramp-session and /api/onramp-embedded`,
+  );
 });

@@ -25,6 +25,21 @@
         "buildType": "apk"
       }
     },
+    "onramp-preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SOLANA": "1",
+        "EXPO_PUBLIC_BUY_CRYPTO": "1",
+        "EXPO_PUBLIC_NATIVE_SWAP": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "distribution": "store",
+        "resourceClass": "default"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "ios": {
