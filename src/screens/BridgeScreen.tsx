@@ -29,6 +29,7 @@ import { checkPreflight, estimateFeeWei, GAS_UNITS, preflightLine } from '../wal
 import { fetchBalance, fetchMaxFeePerGas } from '../wallet/rpc';
 import { balanceKeyFor, initialSpendView, spendBanner, spendViewReducer } from '../wallet/spend-view';
 import { bridgeQuoteKey, canReviewSwap, checkSwapPrice, swapBalanceGate, type PriceCheck } from '../wallet/swap-guard';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function otherChainId(current: ChainId): ChainId {
   return CHAIN_LIST.find((chain) => chain.id !== current)?.id ?? current;
@@ -55,6 +56,7 @@ function bridgeStyles({ colors, card, chip, field, spacing }: Theme) {
 }
 
 export function BridgeScreen() {
+  useNoScreenCapture('bridge');
   const { colors } = useTheme();
   const styles = useThemedStyles(bridgeStyles);
   const { session, selectedChain, setSelectedChain } = useWallet();

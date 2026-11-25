@@ -1,5 +1,4 @@
 import { Text, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 
 import { Button } from '../components/Button';
@@ -10,6 +9,7 @@ import { buildReceiveUri } from '../wallet/qr';
 import { SOLANA_ENABLED } from '../wallet/solana/config';
 import { useNavigation } from '@react-navigation/native';
 import type { MainNavigation } from '../navigation';
+import { copyWithAutoClear } from '../wallet/clipboard';
 
 function receiveStyles({ colors, type, card, radius, spacing }: Theme) {
   return {
@@ -47,7 +47,7 @@ export function ReceiveScreen() {
         Only send {selectedChain.symbol} on {selectedChain.name} to this address. Sending from another
         network can lose funds.
       </Text>
-      <Button label="Copy address" onPress={() => Clipboard.setStringAsync(session.address)} />
+      <Button label="Copy address" onPress={() => copyWithAutoClear(session.address)} />
       {SOLANA_ENABLED ? (
         <Button label="Receive on Solana instead" variant="secondary" onPress={() => navigation.navigate('SolanaReceive')} />
       ) : null}

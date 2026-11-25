@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
 
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
@@ -12,6 +11,7 @@ import { fetchMarketDetails, indexMarketsById, usdValueFromUnits, type MarketCoi
 import { SOLANA_CLUSTER } from '../wallet/solana/config';
 import { fetchSolanaPortfolio, solanaGeckoIds, type SolanaPortfolio } from '../wallet/solana/portfolio';
 import { SOL_DECIMALS, SOL_GECKO_ID } from '../wallet/solana/tokens';
+import { copyWithAutoClear } from '../wallet/clipboard';
 
 function solStyles({ colors, card, radius, spacing, type }: Theme) {
   return {
@@ -92,7 +92,7 @@ export function SolanaHomeSection() {
         </Text>
         <Pressable
           onPress={async () => {
-            await Clipboard.setStringAsync(solanaAddress);
+            await copyWithAutoClear(solanaAddress);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}

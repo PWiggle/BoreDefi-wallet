@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
 
 import { AssetRow } from '../components/AssetRow';
 import { ChainPicker } from '../components/ChainPicker';
@@ -34,6 +33,7 @@ import { fetchTokenBalance } from '../wallet/swap';
 import { type TokenConfig } from '../wallet/tokens';
 import { useGas } from '../components/useGas';
 import { GasSummary } from './GasScreen';
+import { copyWithAutoClear } from '../wallet/clipboard';
 
 type TokenRow = {
   token: TokenConfig;
@@ -193,7 +193,7 @@ export function HomeScreen() {
   }
 
   const copy = async () => {
-    await Clipboard.setStringAsync(session.address);
+    await copyWithAutoClear(session.address);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

@@ -29,6 +29,7 @@ import {
 } from '../wallet/solana/jupiter';
 import { fetchSolanaPortfolio, type SolanaPortfolio } from '../wallet/solana/portfolio';
 import { knownSolanaTokens, SOL_DECIMALS, SOL_GECKO_ID } from '../wallet/solana/tokens';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 type Choice = { mint: string; symbol: string; decimals: number; geckoId?: string; balance: bigint | null };
 
@@ -57,6 +58,7 @@ function styles({ colors, card, chip, field, spacing, type }: Theme) {
 
 /** Native Solana swap: Jupiter Ultra (Mevvy's server adds the 0.5% referral fee), signed by this wallet. */
 export function SolanaSwapScreen() {
+  useNoScreenCapture('solana-swap');
   const { colors } = useTheme();
   const s = useThemedStyles(styles);
   const route = useRoute<RouteProp<MainStackParamList, 'SolanaSwap'>>();

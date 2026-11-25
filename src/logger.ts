@@ -23,7 +23,21 @@ export function redactValue(value: unknown): unknown {
   return value;
 }
 
-function write(level: 'info' | 'warn' | 'error', message: string, extra?: unknown) {
+function isDev(): boolean {
+  return typeof __DEV__ !== 'undefined' && Boolean(__DEV__);
+}
+
+/**
+ * Release builds: info and warn are dropped, and errors print the message only (never the extra
+ * object, even redacted). Dev builds print everything, redacted.
+ */
+export function write(level: 'info' | 'warn' | 'error', message: string, extra?: unknown, dev = isDev()) {
+  if (!dev) {
+    if (level === 'error') {
+      console.error(message);
+    }
+    return;
+  }
   const payload = extra === undefined ? '' : redactValue(extra);
   if (level === 'error') {
     console.error(message, payload);
@@ -33,9 +47,7 @@ function write(level: 'info' | 'warn' | 'error', message: string, extra?: unknow
     console.warn(message, payload);
     return;
   }
-  if (__DEV__) {
-    console.log(message, payload);
-  }
+  console.log(message, payload);
 }
 
 export const logger = {

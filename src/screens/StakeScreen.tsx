@@ -29,6 +29,7 @@ import {
   type WithdrawalRequest,
 } from '../wallet/stake';
 import { fetchTokenBalance } from '../wallet/swap';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function safeAmount(value: string, decimals: number): bigint {
   try {
@@ -61,6 +62,7 @@ function stakeStyles({ colors, card, chip, field, spacing }: Theme) {
 }
 
 export function StakeScreen() {
+  useNoScreenCapture('stake');
   const { colors } = useTheme();
   const styles = useThemedStyles(stakeStyles);
   const route = useRoute<RouteProp<MainStackParamList, 'Stake'>>();

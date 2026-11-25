@@ -10,6 +10,7 @@ import { useTheme, useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import { biometricAvailability } from '../wallet/biometrics';
 import { isValidPin } from '../wallet/pin';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function setPinStyles({ colors, spacing }: Theme) {
   return {
@@ -32,6 +33,7 @@ function setPinStyles({ colors, spacing }: Theme) {
 }
 
 export function SetPinScreen() {
+  useNoScreenCapture('set-pin');
   const { colors } = useTheme();
   const styles = useThemedStyles(setPinStyles);
   const { finalizeSetup, cancelOnboarding, biometricsReady } = useWallet();

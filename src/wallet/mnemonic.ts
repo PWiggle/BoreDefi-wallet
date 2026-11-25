@@ -67,6 +67,18 @@ export async function walletFromMnemonic(phrase: string): Promise<HDNodeWallet> 
   return wallet;
 }
 
+/**
+ * Drop every cached derived wallet (and the phrase used as its map key). Called on lock and reset,
+ * like clearSolanaKeyCache. JS strings cannot be zeroed, so dropping the references is the best we can do.
+ */
+export function clearWalletCache(): void {
+  walletCache.clear();
+}
+
+export function walletCacheSize(): number {
+  return walletCache.size;
+}
+
 export async function deriveAddress(phrase: string): Promise<string> {
   return (await walletFromMnemonic(phrase)).address;
 }

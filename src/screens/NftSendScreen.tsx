@@ -29,6 +29,7 @@ import { loadProtectedPolicy, saveProtectedPolicy } from '../wallet/storage';
 import { protectedAssetFor, protectedBadgeLabel } from '../wallet/yuga-allowlist';
 import { addressPoisoningCheck } from '../wallet/security/address-poisoning';
 import { loadKnownAddresses, rememberKnownAddresses } from '../wallet/storage';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 const STANDARDS: NftStandard[] = ['ERC-721', 'ERC-1155'];
 
@@ -57,6 +58,7 @@ const NFT_SEND_IFACE = new Interface([
 ]);
 
 export function NftSendScreen() {
+  useNoScreenCapture('nft-send');
   const { colors } = useTheme();
   const styles = useThemedStyles(nftSendStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();

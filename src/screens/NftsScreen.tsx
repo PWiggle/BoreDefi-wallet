@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '../components/Button';
 import { ChainPicker } from '../components/ChainPicker';
@@ -37,6 +36,7 @@ import {
   saveHiddenNfts,
   saveRevealedNfts,
 } from '../wallet/storage';
+import { copyWithAutoClear } from '../wallet/clipboard';
 
 /** Protected collections only show content-addressed IPFS images (resolved from tokenURI when needed); see useNftImage. */
 function NftImage({ item, style }: { item: NftItem; style?: Parameters<typeof SafeNftImage>[0]['style'] }) {
@@ -255,7 +255,7 @@ export function NftsScreen() {
   }
 
   const copyContract = async (contract: string) => {
-    await Clipboard.setStringAsync(checksumAddress(contract) ?? contract);
+    await copyWithAutoClear(checksumAddress(contract) ?? contract);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

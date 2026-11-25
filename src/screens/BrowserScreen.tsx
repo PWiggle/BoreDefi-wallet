@@ -29,8 +29,10 @@ import {
   dappHost,
   dappOrigin,
   DEFAULT_BROWSER_URL,
+  INSECURE_HTTP_NOTICE,
   normalizeDappUrl,
   urlBarAfterNavigation,
+  webViewSchemePolicy,
 } from '../wallet/dapps';
 import { checkPhishing, refreshPhishingList } from '../wallet/security/phishing';
 import { claimHandoff, walletLinkSource, walletStoreUrl, type HandoffTarget } from '../wallet/wc-source';
@@ -61,6 +63,7 @@ import { handleWalletConnectRequest } from '../wallet/wc-sign';
 import type { ProtectedVerdict } from '../wallet/protected-guard';
 import { estimateNetworkFee, formatNetworkFee } from '../wallet/network-fee';
 import { reviewDappRequest } from '../wallet/request-review';
+import { describeSignRequest } from '../wallet/sign-preview';
 import type { TxPreview } from '../wallet/tx-simulate';
 
 /**
@@ -320,6 +323,12 @@ export function BrowserScreen() {
         resolve(id, isConnected ? [session.address] : []);
         return;
       }
+      if ((kind === 'connect' || kind === 'sign') && origin && !origin.startsWith('https://')) {
+        // Never connect or sign for a page that isn't https: its content could have been changed in transit.
+        setError('This page is not using a secure https:// connection, so BoreDefi will not connect or sign for it.');
+        resolve(id, null, 'BoreDefi only connects to https:// pages.');
+        return;
+      }
       if (kind === 'local') {
         if (method === 'eth_chainId') {
           resolve(id, hex);
@@ -431,9 +440,16 @@ export function BrowserScreen() {
           }
         }
         const risk = inspectDappApproval(method, params);
+        // What is actually being signed (message text, typed-data fields, call data), same as WalletConnect.
+        const signPreview = describeSignRequest(method, params, selectedChain.id);
         const networkFee = isSend && preview.gasUsed ? await estimateNetworkFee(selectedChain.id, preview.gasUsed) : null;
+        const danger = Boolean(risk?.danger) || Boolean(signPreview?.danger);
         const approved = clearance !== null || await requestConfirm({
-          title: risk?.danger ? 'Danger: collection-wide approval' : 'Approve request',
+          title: risk?.danger
+            ? 'Danger: collection-wide approval'
+            : isSend
+              ? 'Approve transaction'
+              : 'Sign message',
           network: selectedChain.name,
           from: tx?.from ?? session.address,
           to: isSend ? tx?.to : undefined,
@@ -441,19 +457,20 @@ export function BrowserScreen() {
             ? risk.summary
             : isSend
               ? txAmount(tx?.value, selectedChain.symbol) ?? method
-              : method,
+              : signPreview?.summary || method,
           fee: isSend ? (networkFee ? formatNetworkFee(networkFee) : 'Network gas (quoted at sign)') : 'None (signature only)',
           preview,
           extra: [
+            ...(signPreview?.rows ?? []),
             { label: 'Site', value: site },
             { label: 'Method', value: method },
             ...(risk?.operator ? [{ label: 'Operator', value: risk.operator }] : []),
             ...(risk?.token ? [{ label: 'Token / collection', value: risk.token }] : []),
           ],
-          warnings: risk?.warnings,
-          danger: Boolean(risk?.danger),
+          warnings: [...(risk?.warnings ?? []), ...(signPreview?.warnings ?? [])],
+          danger,
           mode: 'hold',
-          confirmLabel: risk?.danger ? 'Hold to approve anyway' : 'Hold to sign',
+          confirmLabel: danger ? 'Hold to approve anyway' : 'Hold to sign',
           cancelLabel: 'Reject',
         });
         if (!approved) {
@@ -558,6 +575,27 @@ export function BrowserScreen() {
   const intercept = (request: WebViewNavigation) => {
     const target = request.url || '';
     if (handleAppLink(target)) {
+      return false;
+    }
+    // Only https pages (http is upgraded at the top level); no top-level data:/blob:/javascript: pages.
+    const isTopFrame = (request as { isTopFrame?: boolean }).isTopFrame !== false;
+    const schemePolicy = webViewSchemePolicy(target, isTopFrame);
+    if (schemePolicy.action === 'block') {
+      if (isTopFrame) {
+        setNotice(schemePolicy.reason);
+      }
+      return false;
+    }
+    if (schemePolicy.action === 'upgrade') {
+      const upgradeVerdict = checkPhishing(schemePolicy.url);
+      if (upgradeVerdict.blocked) {
+        setError(`Blocked: ${upgradeVerdict.reason} Your wallet was not connected.`);
+        return false;
+      }
+      setNotice(INSECURE_HTTP_NOTICE);
+      setUrl(schemePolicy.url);
+      setDraft(schemePolicy.url);
+      setPageUrl(schemePolicy.url);
       return false;
     }
     const verdict = checkPhishing(target);

@@ -283,6 +283,11 @@ function ThemedApp() {
 }
 
 export default function App() {
+  // iOS app-switcher blur and screen-capture blocking are OFF in this build. expo-screen-capture 57.0.2
+  // re-parents the key window and adds a blur overlay on every willResignActive; the Face ID sheet
+  // triggers both, which flickered the unlock screen and could leave the PIN pad unresponsive on
+  // TestFlight build 30. Android keeps FLAG_SECURE, and the recovery-phrase screens keep their own
+  // usePreventScreenCapture. Turn this back on after the library fix ships.
   return (
     <WalletProvider>
       <ThemeProvider>

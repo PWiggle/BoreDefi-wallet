@@ -7,6 +7,7 @@ import type { TxPreview } from '../wallet/tx-simulate';
 import { Button } from './Button';
 import { TxPreviewCard } from './TxPreviewCard';
 import { WarningBanner } from './WarningBanner';
+import { useNoScreenCapture } from './useNoScreenCapture';
 
 export type ConfirmRow = {
   label: string;
@@ -177,6 +178,7 @@ export function ConfirmSheet({
   onConfirm,
   onCancel,
 }: Props) {
+  useNoScreenCapture('confirm-sheet', visible);
   const styles = useThemedStyles(confirmStyles);
   const danger = variant === 'danger';
   const rejectLabel = cancelLabel ?? (danger ? 'Reject' : 'Cancel');

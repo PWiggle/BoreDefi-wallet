@@ -105,7 +105,7 @@ export function SettingsScreen() {
           <Text style={styles.label}>Biometric unlock</Text>
           <Text style={styles.help}>
             {biometricsReady
-              ? 'After a PIN unlock, native biometrics can unwrap the vault key from SecureStore. The PIN is never stored.'
+              ? "The vault key is locked behind your phone's fingerprint or Face ID by the operating system. If your biometrics change, it turns off and you use your PIN. The PIN itself is never stored."
               : 'No biometrics enrolled on this device. Use your PIN to decrypt the vault.'}
           </Text>
         </View>

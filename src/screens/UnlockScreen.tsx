@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Text } from 'react-native';
+import { AppState, Text } from 'react-native';
 
 import { Button } from '../components/Button';
 import { CoverScreen } from '../components/CoverScreen';
@@ -9,7 +9,12 @@ import { SecuringWallet } from '../components/SecuringWallet';
 import { Screen } from '../components/Screen';
 import { useThemedStyles, type Theme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
-import { isValidPin } from '../wallet/pin';
+import { formatLockWait, isValidPin } from '../wallet/pin';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
+import { createOnce } from '../wallet/prompt-guard';
+
+/** One automatic Face ID prompt per cold start; after that only the "Use biometrics" button. */
+const autoBiometricPrompt = createOnce();
 
 function unlockStyles({ type }: Theme) {
   return {
@@ -25,6 +30,7 @@ function unlockStyles({ type }: Theme) {
 }
 
 export function UnlockScreen() {
+  useNoScreenCapture('unlock');
   const styles = useThemedStyles(unlockStyles);
   const { unlockWithPin, unlockWithBiometrics, settings, pinBackoffMs } = useWallet();
   const [stage, setStage] = useState<'cover' | 'pin'>('cover');
@@ -35,14 +41,27 @@ export function UnlockScreen() {
 
   const tryBiometrics = async () => {
     setError(null);
-    const ok = await unlockWithBiometrics();
-    if (!ok) {
+    let result: Awaited<ReturnType<typeof unlockWithBiometrics>> = 'cancelled';
+    try {
+      result = await unlockWithBiometrics();
+    } catch {
+      result = 'cancelled';
+    }
+    if (result === 'cancelled') {
       setError('Biometric unlock was cancelled or failed. Use your PIN to decrypt the vault.');
+    } else if (result === 'unavailable') {
+      setError(
+        'Biometric unlock is off because your fingerprints or face settings changed, or it is unavailable. ' +
+          'Unlock with your PIN, then turn biometrics back on in Settings.',
+      );
     }
   };
 
   useEffect(() => {
-    if (stage !== 'pin' || !settings.biometricsEnabled) {
+    if (stage !== 'pin' || !settings.biometricsEnabled || AppState.currentState !== 'active') {
+      return;
+    }
+    if (!autoBiometricPrompt.take()) {
       return;
     }
     tryBiometrics();
@@ -63,6 +82,11 @@ export function UnlockScreen() {
             setError('Incorrect PIN.');
             setPin('');
           }
+        })
+        .catch(() => {
+          // A thrown error must not leave six dots on the pad with nothing happening.
+          setError('Could not unlock. Try your PIN again.');
+          setPin('');
         })
         .finally(() => {
           submitted.current = false;
@@ -88,7 +112,9 @@ export function UnlockScreen() {
     >
       <Text style={styles.hint}>Enter your PIN to decrypt keys into memory on this device.</Text>
       {pinBackoffMs > 0 ? (
-        <Text style={styles.wait}>Too many attempts. Wait {Math.ceil(pinBackoffMs / 1000)}s.</Text>
+        <Text style={styles.wait}>
+          Too many wrong PINs. Try again in {formatLockWait(pinBackoffMs)}. Each wrong PIN makes the wait longer.
+        </Text>
       ) : null}
       <ErrorBanner message={error} />
       {busy ? <SecuringWallet /> : null}

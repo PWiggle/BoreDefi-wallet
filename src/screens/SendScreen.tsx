@@ -36,6 +36,7 @@ import type { TxPreview } from '../wallet/tx-simulate';
 import { networkFeeLabel, useNetworkFee } from '../components/useNetworkFee';
 import { addressPoisoningCheck } from '../wallet/security/address-poisoning';
 import { loadKnownAddresses, rememberKnownAddresses } from '../wallet/storage';
+import { useNoScreenCapture } from '../components/useNoScreenCapture';
 
 function sendStyles({ colors, field, radius, spacing, type }: Theme) {
   return {
@@ -62,6 +63,7 @@ function sendStyles({ colors, field, radius, spacing, type }: Theme) {
 }
 
 export function SendScreen() {
+  useNoScreenCapture('send');
   const { colors } = useTheme();
   const styles = useThemedStyles(sendStyles);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
