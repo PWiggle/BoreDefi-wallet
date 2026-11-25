@@ -120,7 +120,8 @@
           },
           "ios": {
             "deploymentTarget": "16.4",
-            "useFrameworks": "dynamic"
+            "useFrameworks": "dynamic",
+            "buildReactNativeFromSource": true
           }
         }
       ]
